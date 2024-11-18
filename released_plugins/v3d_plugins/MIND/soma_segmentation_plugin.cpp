@@ -200,28 +200,69 @@ void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
     c = PARA.channel;
   }
 
-  // main neuron reconstruction code
-
   //// THIS IS WHERE THE DEVELOPERS SHOULD ADD THEIR OWN NEURON TRACING CODE
 
-  // Output
-  NeuronTree nt;
-  QString swc_name = PARA.inimg_file + "_soma_segmentation.swc";
-  nt.name = "soma_segmentation";
-  writeSWC_file(swc_name.toStdString().c_str(), nt);
+  // get current window, image, and landmarks
+  v3dhandle curwin = callback.currentImageWindow();
+  Image4DSimple *p4DImage = callback.getImage(curwin);
+  LandmarkList landmarkList = callback.getLandmark(curwin);
 
-  if (!bmenu) {
-    if (data1d) {
-      delete[] data1d;
-      data1d = 0;
-    }
+  // reset ROI
+  ROIList roiList = callback.getROI(curwin);
+  for (int j = 0; j < 3; j++) {
+    roiList[j].clear();
   }
 
-  v3d_msg(
-      QString(
-          "Now you can drag and drop the generated swc fle [%1] into Vaa3D.")
-          .arg(swc_name.toStdString().c_str()),
-      bmenu);
+  // get 1st landmark
+  LocationSimple lm = landmarkList[0];
+  float x, y, z;
+  float radius;
+  x = lm.x;
+  y = lm.y;
+  z = lm.z;
+  radius = lm.radius;
+
+  v3d_msg(QString("Landmark: x=%1, y=%2, z=%3, radius=%4")
+              .arg(x)
+              .arg(y)
+              .arg(z)
+              .arg(radius),
+          bmenu);
+
+  // set ROI
+  // ROIList being a QList<QPolygon>, and QPolygon being a QVector<QPoint>,
+  // we represent the x, y, and z planes as polygons with 4 points each to 
+  // form a cube with the landmark at the center
+  float x_min = x - radius * 2.0f;
+  float x_max = x + radius * 2.0f;
+  float y_min = y - radius * 2.0f;
+  float y_max = y + radius * 2.0f;
+  float z_min = z - radius * 2.0f;
+  float z_max = z + radius * 2.0f;
+  // x-y plane
+  roiList[0] << QPoint(x_min, y_min);
+  roiList[0] << QPoint(x_max, y_min);
+  roiList[0] << QPoint(x_max, y_max);
+  roiList[0] << QPoint(x_min, y_max);
+  // z-y plane
+  roiList[1] << QPoint(z_min, y_min);
+  roiList[1] << QPoint(z_max, y_min);
+  roiList[1] << QPoint(z_max, y_max);
+  roiList[1] << QPoint(z_min, y_max);
+  // x-z plane
+  roiList[2] << QPoint(x_min, z_min);
+  roiList[2] << QPoint(x_max, z_min);
+  roiList[2] << QPoint(x_max, z_max);
+  roiList[2] << QPoint(x_min, z_max);
+
+  if (callback.setROI(curwin, roiList)) {
+    callback.updateImageWindow(curwin);
+  } else {
+    qDebug() << "error: failed to set ROI";
+    return;
+  }
+
+  callback.openROI3DWindow(curwin);
 
   return;
 }
