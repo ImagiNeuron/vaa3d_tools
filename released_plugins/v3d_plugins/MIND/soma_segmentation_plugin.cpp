@@ -230,20 +230,26 @@ void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
           bmenu);
 
   // set ROI
+  // ROIList being a QList<QPolygon>, and QPolygon being a QVector<QPoint>,
+  // we represent the x, y, and z planes as polygons with 4 points each to 
+  // form a cube with the landmark at the center
   float x_min = x - radius * 2.0f;
   float x_max = x + radius * 2.0f;
   float y_min = y - radius * 2.0f;
   float y_max = y + radius * 2.0f;
   float z_min = z - radius * 2.0f;
   float z_max = z + radius * 2.0f;
+  // x-y plane
   roiList[0] << QPoint(x_min, y_min);
   roiList[0] << QPoint(x_max, y_min);
   roiList[0] << QPoint(x_max, y_max);
   roiList[0] << QPoint(x_min, y_max);
+  // z-y plane
   roiList[1] << QPoint(z_min, y_min);
   roiList[1] << QPoint(z_max, y_min);
   roiList[1] << QPoint(z_max, y_max);
   roiList[1] << QPoint(z_min, y_max);
+  // x-z plane
   roiList[2] << QPoint(x_min, z_min);
   roiList[2] << QPoint(x_max, z_min);
   roiList[2] << QPoint(x_max, z_max);
