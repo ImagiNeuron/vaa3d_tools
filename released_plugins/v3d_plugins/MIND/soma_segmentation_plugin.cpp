@@ -214,6 +214,10 @@ void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
   }
 
   // get 1st landmark
+  if (landmarkList.size() < 1) {
+    qDebug() << "error: no landmark found";
+    return;
+  }
   LocationSimple lm = landmarkList[0];
   float x, y, z;
   float radius;
@@ -222,12 +226,22 @@ void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
   z = lm.z;
   radius = lm.radius;
 
-  v3d_msg(QString("Landmark: x=%1, y=%2, z=%3, radius=%4")
-              .arg(x)
-              .arg(y)
-              .arg(z)
-              .arg(radius),
-          bmenu);
+  // Landmark info and ask for desired z thickness
+  bool ok;
+  float z_thickness = QInputDialog::getDouble(
+      parent, "Z Thickness",
+      QString("Landmark: x=%1, y=%2, z=%3, radius=%4\n\nEnter z thickness:")
+          .arg(x)
+          .arg(y)
+          .arg(z)
+          .arg(radius),
+      1.0,   // default value
+      0.1,   // min value
+      10.0,  // max value
+      1,     // decimals
+      &ok    // ok flag
+  );
+  if (!ok) return;
 
   // set ROI
   // ROIList being a QList<QPolygon>, and QPolygon being a QVector<QPoint>,
@@ -263,6 +277,16 @@ void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
   }
 
   callback.openROI3DWindow(curwin);
+
+  // Update landmark and set z thickness
+  View3DControl *v3dlocalcontrol = callback.getLocalView3DControl(curwin);
+  if (v3dlocalcontrol) {
+    v3dlocalcontrol->updateLandmark();
+    v3dlocalcontrol->setThickness(z_thickness);
+  } else {
+    qDebug() << "error: failed to update 3D viewer";
+    return;
+  }
 
   return;
 }
