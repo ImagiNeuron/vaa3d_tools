@@ -13,6 +13,7 @@
 #include <QMessageBox>
 #include <vector>
 
+#include "ResolutionDialog.h"
 #include "basic_surf_objs.h"
 #include "v3d_message.h"
 
@@ -207,6 +208,12 @@ void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
   Image4DSimple *p4DImage = callback.getImage(curwin);
   LandmarkList landmarkList = callback.getLandmark(curwin);
 
+  // check if image is valid
+  if (!p4DImage) {
+    qDebug() << "error: invalid image";
+    return;
+  }
+
   // reset ROI
   ROIList roiList = callback.getROI(curwin);
   for (int j = 0; j < 3; j++) {
@@ -226,26 +233,27 @@ void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
   z = lm.z;
   radius = lm.radius;
 
-  // Landmark info and ask for desired z thickness
-  bool ok;
-  float z_thickness = QInputDialog::getDouble(
-      parent, "Z Thickness",
-      QString("Landmark: x=%1, y=%2, z=%3, radius=%4\n\nEnter z thickness:")
-          .arg(x)
-          .arg(y)
-          .arg(z)
-          .arg(radius),
-      1.0,   // default value
-      0.1,   // min value
-      10.0,  // max value
-      1,     // decimals
-      &ok    // ok flag
-  );
-  if (!ok) return;
+  // Landmark info and ask for desired resolution of a image pixel along the 3
+  // axes for isotropic correction
+  double rez[3];
+  ResolutionDialog dialog(x, y, z, radius, parent);
+  if (dialog.exec() == QDialog::Accepted) {
+    rez[0] = dialog.getXResolution();
+    rez[1] = dialog.getYResolution();
+    rez[2] = dialog.getZResolution();
+  } else {
+    qDebug() << "error: failed to get resolution";
+    return;
+  }
+
+  // Set resolution of the image
+  p4DImage->setRezX(rez[0]);
+  p4DImage->setRezY(rez[1]);
+  p4DImage->setRezZ(rez[2]);
 
   // set ROI
   // ROIList being a QList<QPolygon>, and QPolygon being a QVector<QPoint>,
-  // we represent the x, y, and z planes as polygons with 4 points each to 
+  // we represent the x, y, and z planes as polygons with 4 points each to
   // form a cube with the landmark at the center
   float x_min = x - radius * 2.0f;
   float x_max = x + radius * 2.0f;
@@ -278,11 +286,10 @@ void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
 
   callback.openROI3DWindow(curwin);
 
-  // Update landmark and set z thickness
+  // Update landmark
   View3DControl *v3dlocalcontrol = callback.getLocalView3DControl(curwin);
   if (v3dlocalcontrol) {
     v3dlocalcontrol->updateLandmark();
-    v3dlocalcontrol->setThickness(z_thickness);
   } else {
     qDebug() << "error: failed to update 3D viewer";
     return;
