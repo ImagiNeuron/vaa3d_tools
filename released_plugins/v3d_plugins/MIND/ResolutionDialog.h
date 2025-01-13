@@ -17,18 +17,27 @@
 #include <QLabel>
 #include <QVBoxLayout>
 
+#include "basic_4dimage.h"
+
 class ResolutionDialog : public QDialog {
   Q_OBJECT
 
  public:
-  ResolutionDialog(float x, float y, float z, float radius,
+  ResolutionDialog(double x, double y, double z, double radius,
                    QWidget *parent = nullptr);
 
   double getXResolution() const;
   double getYResolution() const;
   double getZResolution() const;
 
+  void setResolutionOfImage(Image4DSimple *p4DImage);
+
  private:
+  double xResolution;
+  double yResolution;
+  double zResolution;
+  double radius;
+  QWidget *parent;
   QDoubleSpinBox *xSpinBox;
   QDoubleSpinBox *ySpinBox;
   QDoubleSpinBox *zSpinBox;

@@ -1,8 +1,13 @@
 #include "ResolutionDialog.h"
 
-ResolutionDialog::ResolutionDialog(float x, float y, float z, float radius,
+ResolutionDialog::ResolutionDialog(double x, double y, double z, double radius,
                                    QWidget *parent)
-    : QDialog(parent) {
+    : QDialog(parent),
+      xResolution(x),
+      yResolution(y),
+      zResolution(z),
+      radius(radius),
+      parent(parent) {
   QFormLayout *formLayout = new QFormLayout;
 
   QLabel *landmarkLabel = new QLabel(
@@ -56,3 +61,22 @@ double ResolutionDialog::getXResolution() const { return xSpinBox->value(); }
 double ResolutionDialog::getYResolution() const { return ySpinBox->value(); }
 
 double ResolutionDialog::getZResolution() const { return zSpinBox->value(); }
+
+void ResolutionDialog::setResolutionOfImage(Image4DSimple *p4DImage) {
+  // Landmark info and ask for desired resolution of a image pixel along the 3
+  // axes for isotropic correction
+  double rez[3];
+  if (exec() == QDialog::Accepted) {
+    rez[0] = getXResolution();
+    rez[1] = getYResolution();
+    rez[2] = getZResolution();
+  } else {
+    qDebug() << "error: failed to get resolution";
+    return;
+  }
+
+  // Set resolution of the image
+  p4DImage->setRezX(rez[0]);
+  p4DImage->setRezY(rez[1]);
+  p4DImage->setRezZ(rez[2]);
+}

@@ -234,22 +234,9 @@ void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
   radius = lm.radius;
 
   // Landmark info and ask for desired resolution of a image pixel along the 3
-  // axes for isotropic correction
-  double rez[3];
+  // axes for isotropic correction and set resolution of the image
   ResolutionDialog dialog(x, y, z, radius, parent);
-  if (dialog.exec() == QDialog::Accepted) {
-    rez[0] = dialog.getXResolution();
-    rez[1] = dialog.getYResolution();
-    rez[2] = dialog.getZResolution();
-  } else {
-    qDebug() << "error: failed to get resolution";
-    return;
-  }
-
-  // Set resolution of the image
-  p4DImage->setRezX(rez[0]);
-  p4DImage->setRezY(rez[1]);
-  p4DImage->setRezZ(rez[2]);
+  dialog.setResolutionOfImage(p4DImage);
 
   // set ROI
   // ROIList being a QList<QPolygon>, and QPolygon being a QVector<QPoint>,
