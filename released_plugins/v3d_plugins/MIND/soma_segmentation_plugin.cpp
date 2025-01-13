@@ -27,6 +27,9 @@ struct input_PARA {
 void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
                          input_PARA &PARA, bool bmenu);
 
+void setRegionOfInterest(V3DPluginCallback2 &callback, v3dhandle &curwin,
+                         float x, float y, float z, float radius);
+
 /**
  * @brief Menu option under the MIND plugins
  */
@@ -124,6 +127,59 @@ bool SomaSegmentation::dofunc(const QString &func_name,
   return true;
 }
 
+void setRegionOfInterest(V3DPluginCallback2 &callback, v3dhandle &curwin,
+                         float x, float y, float z, float radius) {
+  // reset ROI
+  ROIList roiList = callback.getROI(curwin);
+  for (int j = 0; j < 3; j++) {
+    roiList[j].clear();
+  }
+
+  // set ROI
+  // ROIList being a QList<QPolygon>, and QPolygon being a QVector<QPoint>,
+  // we represent the x, y, and z planes as polygons with 4 points each to
+  // form a cube with the landmark at the center
+  float x_min = x - radius * 2.0f;
+  float x_max = x + radius * 2.0f;
+  float y_min = y - radius * 2.0f;
+  float y_max = y + radius * 2.0f;
+  float z_min = z - radius * 2.0f;
+  float z_max = z + radius * 2.0f;
+  // x-y plane
+  roiList[0] << QPoint(x_min, y_min);
+  roiList[0] << QPoint(x_max, y_min);
+  roiList[0] << QPoint(x_max, y_max);
+  roiList[0] << QPoint(x_min, y_max);
+  // z-y plane
+  roiList[1] << QPoint(z_min, y_min);
+  roiList[1] << QPoint(z_max, y_min);
+  roiList[1] << QPoint(z_max, y_max);
+  roiList[1] << QPoint(z_min, y_max);
+  // x-z plane
+  roiList[2] << QPoint(x_min, z_min);
+  roiList[2] << QPoint(x_max, z_min);
+  roiList[2] << QPoint(x_max, z_max);
+  roiList[2] << QPoint(x_min, z_max);
+
+  if (callback.setROI(curwin, roiList)) {
+    callback.updateImageWindow(curwin);
+  } else {
+    qDebug() << "error: failed to set ROI";
+    return;
+  }
+
+  callback.openROI3DWindow(curwin);
+
+  // Update landmark
+  View3DControl *v3dlocalcontrol = callback.getLocalView3DControl(curwin);
+  if (v3dlocalcontrol) {
+    v3dlocalcontrol->updateLandmark();
+  } else {
+    qDebug() << "error: failed to update 3D viewer";
+    return;
+  }
+}
+
 /**
  * @brief Function to reconstruct somas
  *
@@ -214,12 +270,6 @@ void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
     return;
   }
 
-  // reset ROI
-  ROIList roiList = callback.getROI(curwin);
-  for (int j = 0; j < 3; j++) {
-    roiList[j].clear();
-  }
-
   // get 1st landmark
   if (landmarkList.size() < 1) {
     qDebug() << "error: no landmark found";
@@ -238,49 +288,8 @@ void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
   ResolutionDialog dialog(x, y, z, radius, parent);
   dialog.setResolutionOfImage(p4DImage);
 
-  // set ROI
-  // ROIList being a QList<QPolygon>, and QPolygon being a QVector<QPoint>,
-  // we represent the x, y, and z planes as polygons with 4 points each to
-  // form a cube with the landmark at the center
-  float x_min = x - radius * 2.0f;
-  float x_max = x + radius * 2.0f;
-  float y_min = y - radius * 2.0f;
-  float y_max = y + radius * 2.0f;
-  float z_min = z - radius * 2.0f;
-  float z_max = z + radius * 2.0f;
-  // x-y plane
-  roiList[0] << QPoint(x_min, y_min);
-  roiList[0] << QPoint(x_max, y_min);
-  roiList[0] << QPoint(x_max, y_max);
-  roiList[0] << QPoint(x_min, y_max);
-  // z-y plane
-  roiList[1] << QPoint(z_min, y_min);
-  roiList[1] << QPoint(z_max, y_min);
-  roiList[1] << QPoint(z_max, y_max);
-  roiList[1] << QPoint(z_min, y_max);
-  // x-z plane
-  roiList[2] << QPoint(x_min, z_min);
-  roiList[2] << QPoint(x_max, z_min);
-  roiList[2] << QPoint(x_max, z_max);
-  roiList[2] << QPoint(x_min, z_max);
-
-  if (callback.setROI(curwin, roiList)) {
-    callback.updateImageWindow(curwin);
-  } else {
-    qDebug() << "error: failed to set ROI";
-    return;
-  }
-
-  callback.openROI3DWindow(curwin);
-
-  // Update landmark
-  View3DControl *v3dlocalcontrol = callback.getLocalView3DControl(curwin);
-  if (v3dlocalcontrol) {
-    v3dlocalcontrol->updateLandmark();
-  } else {
-    qDebug() << "error: failed to update 3D viewer";
-    return;
-  }
+  // Set the ROI
+  setRegionOfInterest(callback, curwin, x, y, z, radius);
 
   return;
 }
