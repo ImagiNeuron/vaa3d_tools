@@ -1,24 +1,13 @@
 #include "ResolutionDialog.h"
 
-ResolutionDialog::ResolutionDialog(double x, double y, double z, double radius,
-                                   QWidget *parent)
-    : QDialog(parent),
-      xResolution(x),
-      yResolution(y),
-      zResolution(z),
-      radius(radius),
-      parent(parent) {
+ResolutionDialog::ResolutionDialog(QWidget *parent)
+    : QDialog(parent), parent(parent) {
   QFormLayout *formLayout = new QFormLayout;
 
-  QLabel *landmarkLabel = new QLabel(
-      QString("Landmark: x=%1, y=%2, z=%3, radius=%4\n\n"
-              "Enter resolutions of the image pixel along the 3 axes:")
-          .arg(x)
-          .arg(y)
-          .arg(z)
-          .arg(radius),
+  QLabel *helpDescriptionLabel = new QLabel(
+      QString("Enter resolutions of the image voxel in µm along the 3 axes:"),
       this);
-  formLayout->addRow(landmarkLabel);
+  formLayout->addRow(helpDescriptionLabel);
 
   xSpinBox = new QDoubleSpinBox(this);
   ySpinBox = new QDoubleSpinBox(this);

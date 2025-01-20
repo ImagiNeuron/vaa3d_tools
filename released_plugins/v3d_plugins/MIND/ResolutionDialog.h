@@ -23,8 +23,7 @@ class ResolutionDialog : public QDialog {
   Q_OBJECT
 
  public:
-  ResolutionDialog(double x, double y, double z, double radius,
-                   QWidget *parent = nullptr);
+  ResolutionDialog(QWidget *parent = nullptr);
 
   double getXResolution() const;
   double getYResolution() const;
@@ -36,7 +35,6 @@ class ResolutionDialog : public QDialog {
   double xResolution;
   double yResolution;
   double zResolution;
-  double radius;
   QWidget *parent;
   QDoubleSpinBox *xSpinBox;
   QDoubleSpinBox *ySpinBox;

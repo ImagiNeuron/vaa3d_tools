@@ -283,9 +283,9 @@ void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
   z = lm.z;
   radius = lm.radius;
 
-  // Landmark info and ask for desired resolution of a image pixel along the 3
+  // Ask for desired resolution of a image pixel along the 3
   // axes for isotropic correction and set resolution of the image
-  ResolutionDialog dialog(x, y, z, radius, parent);
+  ResolutionDialog dialog(parent);
   dialog.setResolutionOfImage(p4DImage);
 
   // Set the ROI
