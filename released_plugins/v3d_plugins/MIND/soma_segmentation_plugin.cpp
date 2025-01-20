@@ -1,60 +1,113 @@
 /* soma_segmentation_plugin.cpp
- * This plugin allows the segmentation of individual somas with 3D flooding
- * algorithms. It generates ground truth data to train machine learning
- * algorithms for automatic soma segmnentation in the brain
+ * A plugin for seeded soma segmentation using 3D watershed.
  *
  * 2024-11-16 : by ImagiNeuron: Shidan Javaheri, Siger Ma, Athmane Benarous and
  * Thibaut Baguette (McGill University)
  */
 
 #include "soma_segmentation_plugin.h"
-
 #include <QInputDialog>
 #include <QMessageBox>
 #include <vector>
-#include <queue>
 #include <cmath>
+#include <algorithm> // For std::sort and std::nth_element
+#include <queue>
+#include <cstring> // For memcpy
 
 #include "basic_surf_objs.h"
 #include "v3d_message.h"
 
 using namespace std;
 
+/**************************************
+ * My4DImage implementations
+ **************************************/
+My4DImage::My4DImage()
+    : data(nullptr), xdim(0), ydim(0), zdim(0), cdim(0)
+{
+}
+
+My4DImage::My4DImage(const My4DImage &other)
+    : xdim(other.xdim), ydim(other.ydim), zdim(other.zdim), cdim(other.cdim)
+{
+  V3DLONG totalSize = xdim * ydim * zdim * cdim;
+  if (other.data && totalSize > 0)
+  {
+    data = new unsigned char[totalSize];
+    memcpy(data, other.data, totalSize);
+  }
+  else
+  {
+    data = nullptr;
+  }
+}
+
+My4DImage &My4DImage::operator=(const My4DImage &other)
+{
+  if (this != &other)
+  {
+    delete[] data;
+    xdim = other.xdim;
+    ydim = other.ydim;
+    zdim = other.zdim;
+    cdim = other.cdim;
+
+    V3DLONG totalSize = xdim * ydim * zdim * cdim;
+    if (other.data && totalSize > 0)
+    {
+      data = new unsigned char[totalSize];
+      memcpy(data, other.data, totalSize);
+    }
+    else
+    {
+      data = nullptr;
+    }
+  }
+  return *this;
+}
+
+My4DImage::~My4DImage()
+{
+  delete[] data;
+}
+
+/**************************************
+ * Internal struct to store params
+ **************************************/
 struct input_PARA
 {
   QString inimg_file;
   V3DLONG channel;
 };
 
-void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
-                         input_PARA &PARA, bool bmenu);
+/**************************************
+ * Forward declaration of main
+ **************************************/
+void reconstruction_func(V3DPluginCallback2 &callback,
+                         QWidget *parent,
+                         input_PARA &PARA,
+                         bool bmenu);
 
-/**
- * @brief Menu option under the MIND plugins
- */
+/**************************************
+ * Plugin Interface Methods
+ **************************************/
 QStringList SomaSegmentation::menulist() const
 {
-  return QStringList() << tr("soma_segmentation") << tr("about");
+  return QStringList()
+         << tr("soma_segmentation")
+         << tr("about");
 }
 
-/**
- * @brief Function list for the soma segmentation plugin
- */
 QStringList SomaSegmentation::funclist() const
 {
-  return QStringList() << tr("segment_somas") << tr("help");
+  return QStringList()
+         << tr("segment_somas")
+         << tr("help");
 }
 
-/**
- * @brief Display a description about the soma segmentation plugin and what it
- * does
- *
- * @param menu_name - the name of the menu being described
- * @param callback - the V3D plugin callback interface
- * @param parent - the parent interface
- */
 void SomaSegmentation::domenu(const QString &menu_name,
-                              V3DPluginCallback2 &callback, QWidget *parent)
+                              V3DPluginCallback2 &callback,
+                              QWidget *parent)
 {
   if (menu_name == tr("soma_segmentation"))
   {
@@ -64,112 +117,84 @@ void SomaSegmentation::domenu(const QString &menu_name,
   }
   else
   {
-    v3d_msg(tr(
-        "This plugin allows the segmentation of individual somas with 3D "
-        "flooding algorithms. It generates ground truth data to train machine "
-        "learning algorithms for automatic soma segmnentation in the brain. "
-        "Developed by ImagiNeuron: Shidan Javaheri, Siger Ma, Athmane Benarous "
-        "and Thibaut Baguette, 2024-11-16"));
+    v3d_msg(tr("Soma segmentation plugin using 3D watershed.\n"
+               "Developed by ImagiNeuron, 2024-11-16"));
   }
 }
 
-/**
- * @brief Function to segment somas
- *
- * Describe how function works here
- *
- * @param func_name - the name of the function
- * @param input - the input arguments
- * @param output - the output arguments
- * @param callback - the V3D plugin callback interface
- * @param parent - the parent interface
- * @return true if the function was successful, false otherwise
- */
 bool SomaSegmentation::dofunc(const QString &func_name,
                               const V3DPluginArgList &input,
                               V3DPluginArgList &output,
-                              V3DPluginCallback2 &callback, QWidget *parent)
+                              V3DPluginCallback2 &callback,
+                              QWidget *parent)
 {
   if (func_name == tr("segment_somas"))
   {
     bool bmenu = false;
     input_PARA PARA;
 
-    vector<char *> *pinfiles =
-        (input.size() >= 1) ? (vector<char *> *)input[0].p : 0;
-    vector<char *> *pparas =
-        (input.size() >= 2) ? (vector<char *> *)input[1].p : 0;
+    vector<char *> *pinfiles = (input.size() >= 1) ? (vector<char *> *)input[0].p : 0;
+    vector<char *> *pparas = (input.size() >= 2) ? (vector<char *> *)input[1].p : 0;
     vector<char *> infiles = (pinfiles != 0) ? *pinfiles : vector<char *>();
     vector<char *> paras = (pparas != 0) ? *pparas : vector<char *>();
 
     if (infiles.empty())
     {
-      fprintf(stderr, "Need input image. \n");
+      fprintf(stderr, "Need input image.\n");
       return false;
     }
     else
+    {
       PARA.inimg_file = infiles[0];
+    }
+
     int k = 0;
     PARA.channel = (paras.size() >= k + 1) ? atoi(paras[k]) : 1;
     k++;
+
     reconstruction_func(callback, parent, PARA, bmenu);
   }
   else if (func_name == tr("help"))
   {
-    ////HERE IS WHERE THE DEVELOPERS SHOULD UPDATE THE USAGE OF THE PLUGIN
-
-    printf("**** Usage of soma_segmentation tracing **** \n");
-    printf(
-        "vaa3d -x soma_segmentation -f segment_somas -i <inimg_file> -p "
-        "<channel> <other parameters>\n");
-    printf("inimg_file       The input image\n");
-    printf(
-        "channel          Data channel for tracing. Start from 1 (default "
-        "1).\n");
-
-    printf(
-        "outswc_file      Will be named automatically based on the input image "
-        "file name, so you don't have to specify it.\n\n");
+    printf("**** Usage of soma_segmentation (3D watershed) ****\n");
+    printf("vaa3d -x soma_segmentation -f segment_somas -i <inimg_file> -p <channel>\n");
   }
   else
+  {
     return false;
-
+  }
   return true;
 }
 
-/**
- * @brief Function to reconstruct somas
- *
- * Describe how function works here
- *
- * @param callback - the V3D plugin callback interface
- * @param parent - the parent interface
- * @param PARA - the input parameters
- * @param bmenu - whether the function is being called from the menu
- */
-void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
-                         input_PARA &PARA, bool bmenu)
+/**************************************
+ * The main function
+ **************************************/
+void reconstruction_func(V3DPluginCallback2 &callback,
+                         QWidget *parent,
+                         input_PARA &PARA,
+                         bool bmenu)
 {
+  /*************************************
+   * 1) Load Image
+   *************************************/
   unsigned char *data1d = 0;
   V3DLONG N, M, P, sc, c;
   V3DLONG in_sz[4];
+
   if (bmenu)
   {
+    // From the current Vaa3D window
     v3dhandle curwin = callback.currentImageWindow();
     if (!curwin)
     {
-      QMessageBox::information(
-          0, "", "You don't have any image open in the main window.");
+      QMessageBox::information(0, "", "No image open in the main window.");
       return;
     }
 
     Image4DSimple *p4DImage = callback.getImage(curwin);
-
     if (!p4DImage)
     {
-      QMessageBox::information(0, "",
-                               "The image pointer is invalid. Ensure your data "
-                               "is valid and try again!");
+      QMessageBox::information(0, "", "Invalid image pointer.");
       return;
     }
 
@@ -180,7 +205,6 @@ void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
     sc = p4DImage->getCDim();
 
     bool ok1;
-
     if (sc == 1)
     {
       c = 1;
@@ -188,10 +212,10 @@ void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
     }
     else
     {
-      c = QInputDialog::getInt(parent, "Channel", "Enter channel NO:", 1, 1, sc,
-                               1, &ok1);
+      c = QInputDialog::getInt(parent, "Channel",
+                               "Enter channel NO:",
+                               1, 1, sc, 1, &ok1);
     }
-
     if (!ok1)
       return;
 
@@ -204,19 +228,19 @@ void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
   }
   else
   {
+    // Command-line input
     int datatype = 0;
     if (!simple_loadimage_wrapper(callback,
-                                  PARA.inimg_file.toStdString().c_str(), data1d,
-                                  in_sz, datatype))
+                                  PARA.inimg_file.toStdString().c_str(),
+                                  data1d, in_sz, datatype))
     {
-      fprintf(stderr,
-              "Error happens in reading the subject file [%s]. Exit. \n",
+      fprintf(stderr, "Error loading file [%s].\n",
               PARA.inimg_file.toStdString().c_str());
       return;
     }
     if (PARA.channel < 1 || PARA.channel > in_sz[3])
     {
-      fprintf(stderr, "Invalid channel number. \n");
+      fprintf(stderr, "Invalid channel number.\n");
       return;
     }
     N = in_sz[0];
@@ -226,417 +250,870 @@ void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
     c = PARA.channel;
   }
 
-  //// THIS IS WHERE THE DEVELOPERS SHOULD ADD THEIR OWN NEURON TRACING CODE
+  if (!data1d)
+  {
+    v3d_msg("No valid image data!", bmenu);
+    return;
+  }
 
-  // get current window, image, and landmarks
+  if (sc > 1)
+  {
+    v3d_msg("For grayscale, ignoring additional channels");
+    sc = 1;
+    c = 1;
+  }
+
+  /*************************************
+   * 2) Preprocessing (Median + Gaussian)
+   *************************************/
+  {
+    // Extract the desired channel
+    V3DLONG totalSize = N * M * P;
+    unsigned char *channelData = new unsigned char[totalSize];
+    {
+      // Usually channels are sequential. Copy channel c-1.
+      unsigned char *cptr = data1d + (c - 1) * (N * M * P);
+      memcpy(channelData, cptr, totalSize);
+    }
+
+    // 2.1) Median Filter
+    unsigned char *medianData = new unsigned char[totalSize];
+    applyMedianFilter(channelData, medianData, N, M, P, /*windowSize=*/3);
+    delete[] channelData;
+
+    // 2.2) Gaussian Filter
+    unsigned char *gaussData = new unsigned char[totalSize];
+    applyGaussianFilter(medianData, gaussData, N, M, P, /*sigma=*/1.0f);
+    delete[] medianData;
+
+    // Now data1d points to the new, single-channel preprocessed data
+    data1d = gaussData;
+  }
+
+  /*************************************
+   * 3) For each landmark, do watershed
+   *************************************/
   v3dhandle curwin = callback.currentImageWindow();
-
-  // Add null checks for curwin
-  if (!curwin)
+  LandmarkList landmarkList;
+  if (bmenu && curwin)
   {
-    v3d_msg("No image window is currently open.", bmenu);
-    return;
+    landmarkList = callback.getLandmark(curwin);
+  }
+  else
+  {
+    // In command-line or no open window, user must supply landmarks some other way
+    // For now, if none, we just exit.
   }
 
-  Image4DSimple *p4DImage = callback.getImage(curwin);
-  if (!p4DImage)
-  {
-    v3d_msg("Invalid image pointer.", bmenu);
-    return;
-  }
-
-  LandmarkList landmarkList = callback.getLandmark(curwin);
-
-  // Check if landmarkList is empty
   if (landmarkList.isEmpty())
   {
-    v3d_msg("No landmarks defined. Please define at least one landmark.", bmenu);
+    v3d_msg("No landmarks found. Please specify at least one landmark.", bmenu);
+    delete[] data1d;
     return;
   }
 
-  // reset ROI
-  ROIList roiList = callback.getROI(curwin);
-  for (int j = 0; j < 3; j++)
+  // Prepare a global label volume (16-bit) to store watershed results
+  V3DLONG totalSize = N * M * P;
+  unsigned short *labelVolume = new unsigned short[totalSize];
+  memset(labelVolume, 0, totalSize * sizeof(unsigned short));
+
+  // For printing
+  int somaIndex = 1;
+
+  for (int i = 0; i < landmarkList.size(); i++)
   {
-    roiList[j].clear();
-  }
+    LocationSimple lm = landmarkList[i];
+    float x = lm.x;
+    float y = lm.y;
+    float z = lm.z;
+    float r = lm.radius > 0 ? lm.radius : 5.0f;
 
-  // get 1st landmark
-  LocationSimple lm = landmarkList[0];
-  float x, y, z;
-  float radius;
-  x = lm.x;
-  y = lm.y;
-  z = lm.z;
-  radius = lm.radius;
+    // bounding box
+    int x1 = std::max(0, (int)floor(x - r));
+    int x2 = std::min((int)N - 1, (int)ceil(x + r));
+    int y1 = std::max(0, (int)floor(y - r));
+    int y2 = std::min((int)M - 1, (int)ceil(y + r));
+    int z1 = std::max(0, (int)floor(z - r));
+    int z2 = std::min((int)P - 1, (int)ceil(z + r));
 
-  v3d_msg(QString("Landmark: x=%1, y=%2, z=%3, radius=%4")
-              .arg(x)
-              .arg(y)
-              .arg(z)
-              .arg(radius),
-          bmenu);
+    int sx = x2 - x1 + 1;
+    int sy = y2 - y1 + 1;
+    int sz = z2 - z1 + 1;
 
-  // set ROI
-  // ROIList being a QList<QPolygon>, and QPolygon being a QVector<QPoint>,
-  // we represent the x, y, and z planes as polygons with 4 points each to
-  // form a cube with the landmark at the center
-  float x_min = x - radius * 2.0f;
-  float x_max = x + radius * 2.0f;
-  float y_min = y - radius * 2.0f;
-  float y_max = y + radius * 2.0f;
-  float z_min = z - radius * 2.0f;
-  float z_max = z + radius * 2.0f;
-  // x-y plane
-  roiList[0] << QPoint(x_min, y_min);
-  roiList[0] << QPoint(x_max, y_min);
-  roiList[0] << QPoint(x_max, y_max);
-  roiList[0] << QPoint(x_min, y_max);
-  // z-y plane
-  roiList[1] << QPoint(z_min, y_min);
-  roiList[1] << QPoint(z_max, y_min);
-  roiList[1] << QPoint(z_max, y_max);
-  roiList[1] << QPoint(z_min, y_max);
-  // x-z plane
-  roiList[2] << QPoint(x_min, z_min);
-  roiList[2] << QPoint(x_max, z_min);
-  roiList[2] << QPoint(x_max, z_max);
-  roiList[2] << QPoint(x_min, z_max);
+    // Extract subvolume
+    unsigned char *subvol = new unsigned char[sx * sy * sz];
+    extractSubvolume(data1d, subvol, N, M, P, x1, x2, y1, y2, z1, z2);
 
-  if (callback.setROI(curwin, roiList))
-  {
-    callback.updateImageWindow(curwin);
-  }
-  else
-  {
-    qDebug() << "error: failed to set ROI";
-    return;
-  }
+    // Compute Otsu threshold
+    int otsuValue = computeOtsuThreshold(subvol, sx * sy * sz);
 
-  callback.openROI3DWindow(curwin);
-
-  // Perform flood fill on all landmarks
-  QList<MyMarker> myMarkerList;
-
-  // Convert LandmarkList to QList<MyMarker>
-  for (const auto &lm : landmarkList)
-  {
-    MyMarker marker;
-    marker.x = lm.x;
-    marker.y = lm.y;
-    marker.z = lm.z;
-    marker.radius = lm.radius;
-    myMarkerList.append(marker);
-  }
-
-  QList<My4DImage *> floodedImages;
-  int threshold_value = 25; // Increased base threshold
-
-  for (const auto &marker : myMarkerList)
-  {
-    // Create a deep copy of the image data
-    My4DImage *myImage = new My4DImage();
-    myImage->xdim = p4DImage->getXDim();
-    myImage->ydim = p4DImage->getYDim();
-    myImage->zdim = p4DImage->getZDim();
-    myImage->cdim = 1; // Assuming single channel for processing
-
-    V3DLONG totalSize = myImage->xdim * myImage->ydim * myImage->zdim * myImage->cdim;
-    myImage->data = new unsigned char[totalSize];
-
-    // Copy the data of the selected channel
-    unsigned char *channelData = p4DImage->getRawDataAtChannel(c - 1);
-    if (!channelData)
+    for (int idx = 0; idx < sx * sy * sz; idx++)
     {
-      v3d_msg("Failed to get image data for the specified channel.", bmenu);
-      delete myImage;
-      continue;
-    }
-    memcpy(myImage->data, channelData, totalSize);
-
-    // Declare variables to hold edges
-    int min_x, max_x, min_y, max_y, min_z, max_z;
-
-    // Perform flood fill and get edges
-    My4DImage *flooded = performFloodFill(myImage, marker, threshold_value, min_x, max_x, min_y, max_y, min_z, max_z);
-    delete myImage; // Safe to delete since we have copied the data
-
-    // Check if flood fill was successful
-    if (flooded)
-    {
-      floodedImages.append(flooded);
-
-      // Print edges of the detected soma
-      printf("Detected Soma Edges:\n");
-      printf("X: [%d, %d]\n", min_x, max_x);
-      printf("Y: [%d, %d]\n", min_y, max_y);
-      printf("Z: [%d, %d]\n", min_z, max_z);
-    }
-    else
-    {
-      printf("Flood fill failed for marker at (%f, %f, %f).\n", marker.x, marker.y, marker.z);
-    }
-  }
-
-  My4DImage *finalFloodedImage = mergeFloodedImages(floodedImages);
-
-  // Instead of saving the flooded image, print its details
-  if (finalFloodedImage)
-  {
-    printf("Final Flooded Image Details:\n");
-    printf("Dimensions: %ld x %ld x %ld x %ld\n",
-           finalFloodedImage->xdim,
-           finalFloodedImage->ydim,
-           finalFloodedImage->zdim,
-           finalFloodedImage->cdim);
-    // Optionally, print a summary of the data
-    size_t flooded_voxels = 0;
-    for (V3DLONG idx = 0; idx < finalFloodedImage->xdim * finalFloodedImage->ydim * finalFloodedImage->zdim * finalFloodedImage->cdim; ++idx)
-    {
-      if (finalFloodedImage->data[idx] == 255)
-        flooded_voxels++;
-    }
-    printf("Number of Flooded Voxels: %zu\n", flooded_voxels);
-  }
-  else
-  {
-    printf("No flooded image generated.\n");
-  }
-
-  // Clean up
-  for (auto img : floodedImages)
-    delete img;
-  delete finalFloodedImage;
-
-  v3d_msg("Flood fill completed. Flooded image details printed to console.", bmenu);
-
-  return;
-}
-
-My4DImage *performFloodFill(const My4DImage *image, const MyMarker &marker, int threshold, int &min_x, int &max_x, int &min_y, int &max_y, int &min_z, int &max_z)
-{
-  if (!image || !image->data)
-    return nullptr;
-
-  V3DLONG xdim = image->xdim;
-  V3DLONG ydim = image->ydim;
-  V3DLONG zdim = image->zdim;
-  V3DLONG cdim = image->cdim;
-
-  if (cdim < 1)
-    return nullptr;
-
-  My4DImage *floodedImage = new My4DImage(*image);
-  unsigned char *floodData = floodedImage->data;
-
-  int x0 = static_cast<int>(std::round(marker.x));
-  int y0 = static_cast<int>(std::round(marker.y));
-  int z0 = static_cast<int>(std::round(marker.z));
-
-  if (x0 < 0 || x0 >= xdim || y0 < 0 || y0 >= ydim || z0 < 0 || z0 >= zdim)
-  {
-    delete floodedImage;
-    return nullptr;
-  }
-
-  int seedIdx = z0 * ydim * xdim + y0 * xdim + x0;
-  unsigned char seedValue = floodData[seedIdx];
-
-  int neighborhood = 5;
-  double localMean = 0;
-  double localMax = 0;
-  double localMin = 255;
-  int count = 0;
-
-  for (int dz = -neighborhood; dz <= neighborhood; dz++)
-  {
-    for (int dy = -neighborhood; dy <= neighborhood; dy++)
-    {
-      for (int dx = -neighborhood; dx <= neighborhood; dx++)
+      if (subvol[idx] < otsuValue)
       {
-        int nx = x0 + dx;
-        int ny = y0 + dy;
-        int nz = z0 + dz;
+        subvol[idx] = 0;
+      }
+    }
 
-        if (nx >= 0 && nx < xdim && ny >= 0 && ny < ydim && nz >= 0 && nz < zdim)
+    // 2) Morphological opening to remove small noise or bridging artifacts
+    morphologicalOpen3D(subvol, sx, sy, sz);
+
+    // Run 3D watershed
+    unsigned short *wsLabels = new unsigned short[sx * sy * sz];
+    memset(wsLabels, 0, sx * sy * sz * sizeof(unsigned short));
+    applyWatershedVS(subvol, wsLabels, sx, sy, sz);
+
+    // Copy watershed result to global label volume
+    V3DLONG voxelCount = 0;
+    int somaMinX = x2, somaMaxX = x1;
+    int somaMinY = y2, somaMaxY = y1;
+    int somaMinZ = z2, somaMaxZ = z1;
+
+    for (int zz = 0; zz < sz; zz++)
+    {
+      for (int yy = 0; yy < sy; yy++)
+      {
+        for (int xx = 0; xx < sx; xx++)
         {
-          unsigned char val = floodData[nz * ydim * xdim + ny * xdim + nx];
-          localMean += val;
-          localMax = std::max(localMax, (double)val);
-          localMin = std::min(localMin, (double)val);
-          count++;
+          V3DLONG idxSub = (V3DLONG)zz * (sx * sy) + yy * sx + xx;
+          unsigned short labelVal = wsLabels[idxSub];
+          if (labelVal > 0)
+          {
+            V3DLONG gx = x1 + xx;
+            V3DLONG gy = y1 + yy;
+            V3DLONG gz = z1 + zz;
+            V3DLONG idxGlobal = gz * (N * M) + gy * N + gx;
+            labelVolume[idxGlobal] = somaIndex; // simple approach
+
+            // track bounding box
+            if (gx < somaMinX)
+              somaMinX = gx;
+            if (gx > somaMaxX)
+              somaMaxX = gx;
+            if (gy < somaMinY)
+              somaMinY = gy;
+            if (gy > somaMaxY)
+              somaMaxY = gy;
+            if (gz < somaMinZ)
+              somaMinZ = gz;
+            if (gz > somaMaxZ)
+              somaMaxZ = gz;
+
+            voxelCount++;
+          }
         }
       }
     }
+
+    // Print bounding box info
+    printf("\nSoma #%d at landmark (%.1f, %.1f, %.1f, r=%.1f):\n", somaIndex, x, y, z, r);
+    printf("   X range: [%d, %d]\n", somaMinX, somaMaxX);
+    printf("   Y range: [%d, %d]\n", somaMinY, somaMaxY);
+    printf("   Z range: [%d, %d]\n", somaMinZ, somaMaxZ);
+    printf("   Volume (# of voxels): %lld\n", (long long)voxelCount);
+
+    delete[] subvol;
+    delete[] wsLabels;
+    somaIndex++;
   }
-  localMean /= count;
 
-  printf("Local statistics: mean=%.2f, min=%.2f, max=%.2f\n", localMean, localMin, localMax);
-
-  double dynamicThreshold = std::max(threshold, static_cast<int>(marker.radius * 0.8));
-  int lowerThreshold = std::max(0, static_cast<int>(localMin - dynamicThreshold));
-  int upperThreshold = std::min(255, static_cast<int>(localMax + dynamicThreshold));
-
-  printf("Thresholds: lower=%d, upper=%d, dynamic=%.2f\n", lowerThreshold, upperThreshold, dynamicThreshold);
-
-  size_t maxRegionSize = static_cast<size_t>(4.0 / 3.0 * M_PI * pow(marker.radius * 3, 3));
-  size_t minRegionSize = 5;
-
-  std::vector<bool> visited(xdim * ydim * zdim, false);
-
-  std::queue<V3DLONG> q;
-  q.push(seedIdx);
-  visited[seedIdx] = true;
-
-  int directions[6][3] = {
-      {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
-
-  min_x = x0;
-  max_x = x0;
-  min_y = y0;
-  max_y = y0;
-  min_z = z0;
-  max_z = z0;
-
-  size_t regionSize = 0;
-
-  while (!q.empty())
+  // Create a new image to show or save, I will use this later for visualization
   {
-    V3DLONG current = q.front();
-    q.pop();
+    My4DImage *labeledResult = new My4DImage();
+    labeledResult->xdim = N;
+    labeledResult->ydim = M;
+    labeledResult->zdim = P;
+    labeledResult->cdim = 1;
+    labeledResult->data = new unsigned char[totalSize];
 
-    int cz = current / (xdim * ydim);
-    int cy = (current % (xdim * ydim)) / xdim;
-    int cx = current % xdim;
-
-    double distance = std::sqrt(pow(cx - x0, 2) + pow(cy - y0, 2) + pow(cz - z0, 2));
-    if (distance > marker.radius * 4)
-      continue;
-
-    for (int i = 0; i < 6; ++i)
+    // Convert 16-bit labels to 8-bit (clamp).
+    for (V3DLONG i = 0; i < totalSize; i++)
     {
-      int nx = cx + directions[i][0];
-      int ny = cy + directions[i][1];
-      int nz = cz + directions[i][2];
+      unsigned short val = labelVolume[i];
+      labeledResult->data[i] = (val > 255) ? 255 : (unsigned char)(val);
+    }
 
-      if (nx < 0 || nx >= xdim || ny < 0 || ny >= ydim || nz < 0 || nz >= zdim)
-        continue;
+    printf("\nFinal labeled image (clamped to 8-bit) is ready.\n");
 
-      V3DLONG neighborIdx = nz * ydim * xdim + ny * xdim + nx;
+    delete labeledResult;
+  }
 
-      if (!visited[neighborIdx])
+  delete[] labelVolume;
+  delete[] data1d;
+
+  v3d_msg("3D watershed segmentation complete.", bmenu);
+}
+
+/*************************************
+ *        MEDIAN FILTER
+ *************************************/
+void applyMedianFilter(const unsigned char *inputData,
+                       unsigned char *outputData,
+                       V3DLONG N, V3DLONG M, V3DLONG P,
+                       int windowSize)
+{
+  int halfWindow = windowSize / 2;
+  vector<unsigned char> window;
+  window.reserve(windowSize * windowSize * windowSize);
+
+  for (V3DLONG z = 0; z < P; z++)
+  {
+    for (V3DLONG y = 0; y < M; y++)
+    {
+      for (V3DLONG x = 0; x < N; x++)
       {
-        unsigned char neighborValue = floodData[neighborIdx];
-
-        double gradient = std::abs(static_cast<double>(neighborValue) - floodData[current]);
-
-        if (neighborValue >= lowerThreshold &&
-            neighborValue <= upperThreshold &&
-            gradient < dynamicThreshold * 2)
+        window.clear();
+        for (int dz = -halfWindow; dz <= halfWindow; dz++)
         {
-
-          q.push(neighborIdx);
-          visited[neighborIdx] = true;
-          floodData[neighborIdx] = 255;
-
-          if (nx < min_x)
-            min_x = nx;
-          if (nx > max_x)
-            max_x = nx;
-          if (ny < min_y)
-            min_y = ny;
-          if (ny > max_y)
-            max_y = ny;
-          if (nz < min_z)
-            min_z = nz;
-          if (nz > max_z)
-            max_z = nz;
-
-          regionSize++;
-          if (regionSize > maxRegionSize)
+          for (int dy = -halfWindow; dy <= halfWindow; dy++)
           {
-            printf("Region size exceeded for marker at (%f, %f, %f). Size: %zu, Max: %zu\n",
-                   marker.x, marker.y, marker.z, regionSize, maxRegionSize);
-            continue;
+            for (int dx = -halfWindow; dx <= halfWindow; dx++)
+            {
+              V3DLONG nx = x + dx;
+              V3DLONG ny = y + dy;
+              V3DLONG nz = z + dz;
+              if (nx >= 0 && nx < N && ny >= 0 && ny < M && nz >= 0 && nz < P)
+              {
+                V3DLONG idx = nz * (M * N) + ny * N + nx;
+                window.push_back(inputData[idx]);
+              }
+            }
+          }
+        }
+        // find median
+        std::nth_element(window.begin(),
+                         window.begin() + window.size() / 2,
+                         window.end());
+        unsigned char medVal = window[window.size() / 2];
+        V3DLONG outIdx = z * (M * N) + y * N + x;
+        outputData[outIdx] = medVal;
+      }
+    }
+  }
+}
+
+/*************************************
+ *        GAUSSIAN FILTER
+ *************************************/
+void applyGaussianFilter(const unsigned char *inputData,
+                         unsigned char *outputData,
+                         V3DLONG N, V3DLONG M, V3DLONG P,
+                         float sigma)
+{
+  // For simplicity, use a fixed kernel size 5x5x5
+  int windowSize = 5;
+  int halfWindow = windowSize / 2;
+
+  // build kernel
+  vector<float> kernel(windowSize * windowSize * windowSize);
+  float sumKernel = 0.0f;
+  int idx = 0;
+  for (int dz = -halfWindow; dz <= halfWindow; dz++)
+  {
+    for (int dy = -halfWindow; dy <= halfWindow; dy++)
+    {
+      for (int dx = -halfWindow; dx <= halfWindow; dx++)
+      {
+        float val = expf(-(dx * dx + dy * dy + dz * dz) / (2 * sigma * sigma));
+        kernel[idx++] = val;
+        sumKernel += val;
+      }
+    }
+  }
+  // normalize
+  for (size_t i = 0; i < kernel.size(); i++)
+    kernel[i] /= sumKernel;
+
+  // convolve
+  for (V3DLONG z = 0; z < P; z++)
+  {
+    for (V3DLONG y = 0; y < M; y++)
+    {
+      for (V3DLONG x = 0; x < N; x++)
+      {
+        float accum = 0.0f;
+        idx = 0;
+        for (int dz = -halfWindow; dz <= halfWindow; dz++)
+        {
+          for (int dy = -halfWindow; dy <= halfWindow; dy++)
+          {
+            for (int dx = -halfWindow; dx <= halfWindow; dx++)
+            {
+              V3DLONG nx = x + dx;
+              V3DLONG ny = y + dy;
+              V3DLONG nz = z + dz;
+              if (nx >= 0 && nx < N && ny >= 0 && ny < M && nz >= 0 && nz < P)
+              {
+                V3DLONG inIdx = nz * (M * N) + ny * N + nx;
+                accum += inputData[inIdx] * kernel[idx];
+              }
+              idx++;
+            }
+          }
+        }
+        V3DLONG outIdx = z * (M * N) + y * N + x;
+        outputData[outIdx] = (unsigned char)(accum + 0.5f);
+      }
+    }
+  }
+}
+
+/*************************************
+ *     EXTRACT SUBVOLUME
+ *************************************/
+void extractSubvolume(const unsigned char *inData,
+                      unsigned char *outData,
+                      V3DLONG N, V3DLONG M, V3DLONG P,
+                      int x1, int x2,
+                      int y1, int y2,
+                      int z1, int z2)
+{
+  int sx = x2 - x1 + 1;
+  int sy = y2 - y1 + 1;
+  int sz = z2 - z1 + 1;
+
+  for (int zz = z1; zz <= z2; zz++)
+  {
+    for (int yy = y1; yy <= y2; yy++)
+    {
+      for (int xx = x1; xx <= x2; xx++)
+      {
+        V3DLONG gx = zz * (N * M) + yy * N + xx;
+        int subz = zz - z1;
+        int suby = yy - y1;
+        int subx = xx - x1;
+        V3DLONG lx = subz * (sx * sy) + suby * sx + subx;
+        outData[lx] = inData[gx];
+      }
+    }
+  }
+}
+
+/*************************************************
+ * 3D Watershed (Vincent & Soille) Implementation
+ *   - "watershed_vs" & "remove_watershed_lines"
+ *************************************************/
+#define INIT -1
+#define MASK -2
+#define WSHED 0
+#define FICTITIOUS -1
+
+static void remove_watershed_lines(float *&label_data,
+                                   const V3DLONG *sz,
+                                   const V3DLONG ndims)
+{
+  V3DLONG num_elements = 1;
+  for (int i = 0; i < ndims; i++)
+    num_elements *= sz[i];
+
+  // Prepare arrays
+  float *tmp_data = new float[num_elements];
+  V3DLONG *pix_idx = new V3DLONG[num_elements];
+  // Binarize label_data: 1 for region, 0 for lines
+  for (V3DLONG i = 0; i < num_elements; i++)
+  {
+    if (label_data[i] == 1)
+      tmp_data[i] = 0; // watershed line
+    else if (label_data[i] > 1)
+      tmp_data[i] = 1; // region
+    else
+      tmp_data[i] = 0; // region=1, ws=1 => 0 means line
+  }
+
+  // run distance transform to find nearest region pixel
+  dt3d_binary(tmp_data, pix_idx, sz, 0);
+
+  // Re-assign watershed lines to one of the regions
+  float *copy_data = new float[num_elements];
+  memcpy(copy_data, label_data, num_elements * sizeof(float));
+
+  for (V3DLONG i = 0; i < num_elements; i++)
+  {
+    if (copy_data[i] == 0) // was watershed line
+    {
+      label_data[i] = copy_data[pix_idx[i]]; // adopt label
+    }
+  }
+
+  // Decrement all labels by 1 (so background becomes 0)
+  for (V3DLONG i = 0; i < num_elements; i++)
+    label_data[i] = label_data[i] - 1;
+
+  delete[] tmp_data;
+  delete[] pix_idx;
+  delete[] copy_data;
+}
+
+// Internal BFS queue
+template <class T>
+class SimpleQueue
+{
+public:
+  queue<T> q;
+  void put(const T &val) { q.push(val); }
+  T get()
+  {
+    T frontval = q.front();
+    q.pop();
+    return frontval;
+  }
+  bool empty() const { return q.empty(); }
+};
+
+// We define a minimal "6-connected" neighbor approach
+static const int NB_6[6][3] = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
+
+// A helper to do sorting with a separate index array
+static void sort2(V3DLONG n, float *data, float *idx)
+{
+  struct Info
+  {
+    float val;
+    float ind;
+  };
+  vector<Info> all(n);
+  for (V3DLONG i = 0; i < n; i++)
+  {
+    all[i].val = data[i + 1];
+    all[i].ind = idx[i + 1];
+  }
+  std::sort(all.begin(), all.end(), [](const Info &a, const Info &b)
+            { return (a.val < b.val); });
+  for (V3DLONG i = 0; i < n; i++)
+  {
+    data[i + 1] = all[i].val;
+    idx[i + 1] = all[i].ind;
+  }
+}
+
+// The main watershed
+template <class T>
+void compute_watershed(T *indata,
+                       float *sortidx,
+                       V3DLONG num_elements,
+                       const V3DLONG *sz,
+                       float *&label_data)
+{
+  // label_data must be uninitialized
+  for (V3DLONG i = 0; i < num_elements; i++)
+    label_data[i] = INIT;
+
+  V3DLONG current_label = 0;
+  V3DLONG *dist = new V3DLONG[num_elements];
+  memset(dist, 0, num_elements * sizeof(V3DLONG));
+
+  SimpleQueue<V3DLONG> pixelQueue;
+  V3DLONG count = 0;
+
+  while (count < num_elements)
+  {
+    // group pixels with same intensity
+    V3DLONG k1 = count;
+    float current_level = indata[(V3DLONG)sortidx[k1]];
+    V3DLONG k2 = k1;
+    while ((k2 + 1 < num_elements) &&
+           (indata[(V3DLONG)sortidx[k2 + 1]] == current_level))
+    {
+      k2++;
+    }
+
+    // mask all pixels with value == current_level
+    for (V3DLONG k = k1; k <= k2; k++)
+    {
+      V3DLONG p = (V3DLONG)sortidx[k];
+      label_data[p] = MASK;
+
+      // check neighbors that are labeled or WSHED
+      // if so, dist[p] = 1, queue put(p)
+      // minimal 6-connect
+      V3DLONG z = p / (sz[0] * sz[1]);
+      V3DLONG r = p % (sz[0] * sz[1]);
+      V3DLONG y = r / sz[0];
+      V3DLONG x = r % sz[0];
+
+      for (int ni = 0; ni < 6; ni++)
+      {
+        V3DLONG nx = x + NB_6[ni][0];
+        V3DLONG ny = y + NB_6[ni][1];
+        V3DLONG nz = z + NB_6[ni][2];
+        if (nx < 0 || nx >= sz[0] ||
+            ny < 0 || ny >= sz[1] ||
+            nz < 0 || nz >= sz[2])
+          continue;
+        V3DLONG q = nz * (sz[0] * sz[1]) + ny * sz[0] + nx;
+
+        if ((label_data[q] > 0) || (label_data[q] == WSHED))
+        {
+          dist[p] = 1;
+          pixelQueue.put(p);
+          break;
+        }
+      }
+      count++;
+    }
+
+    V3DLONG current_distance = 1;
+    pixelQueue.put(FICTITIOUS);
+
+    while (true)
+    {
+      V3DLONG p = pixelQueue.get();
+      if (p == FICTITIOUS)
+      {
+        if (pixelQueue.empty())
+        {
+          break;
+        }
+        else
+        {
+          pixelQueue.put(FICTITIOUS);
+          current_distance++;
+          p = pixelQueue.get();
+        }
+      }
+
+      // find neighbors with the closest distance
+      V3DLONG z = p / (sz[0] * sz[1]);
+      V3DLONG r = p % (sz[0] * sz[1]);
+      V3DLONG y = r / sz[0];
+      V3DLONG x = r % sz[0];
+
+      V3DLONG closest_dist = 999999;
+      V3DLONG closest_label_val = 0;
+      bool unique_label = true;
+
+      // check neighbors
+      for (int ni = 0; ni < 6; ni++)
+      {
+        V3DLONG nx = x + NB_6[ni][0];
+        V3DLONG ny = y + NB_6[ni][1];
+        V3DLONG nz = z + NB_6[ni][2];
+        if (nx < 0 || nx >= sz[0] ||
+            ny < 0 || ny >= sz[1] ||
+            nz < 0 || nz >= sz[2])
+          continue;
+        V3DLONG q = nz * (sz[0] * sz[1]) + ny * sz[0] + nx;
+
+        if ((label_data[q] > 0) || (label_data[q] == WSHED))
+        {
+          if (dist[q] < closest_dist)
+          {
+            closest_dist = dist[q];
+            if (label_data[q] > 0)
+              closest_label_val = (V3DLONG)label_data[q];
+          }
+          else if (dist[q] == closest_dist)
+          {
+            if (label_data[q] > 0 && (closest_label_val > 0) &&
+                (label_data[q] != closest_label_val))
+            {
+              unique_label = false;
+            }
+            if (label_data[q] > 0)
+              closest_label_val = (V3DLONG)label_data[q];
+          }
+        }
+        else if ((label_data[q] == MASK) && (dist[q] == 0))
+        {
+          dist[q] = current_distance + 1;
+          pixelQueue.put(q);
+        }
+      }
+
+      // label p
+      if ((closest_dist < current_distance) && (closest_label_val > 0))
+      {
+        if (unique_label && (label_data[p] == MASK || label_data[p] == WSHED))
+        {
+          label_data[p] = (float)closest_label_val;
+        }
+        else if (!unique_label || (label_data[p] != closest_label_val))
+        {
+          label_data[p] = WSHED;
+        }
+      }
+      else if (label_data[p] == MASK)
+      {
+        label_data[p] = WSHED;
+      }
+    }
+
+    // detect new minima at current_level
+    for (V3DLONG k = k1; k <= k2; k++)
+    {
+      V3DLONG p = (V3DLONG)sortidx[k];
+      dist[p] = 0;
+      if (label_data[p] == MASK)
+      {
+        current_label++;
+        SimpleQueue<V3DLONG> Q2;
+        Q2.put(p);
+        label_data[p] = (float)current_label;
+        while (!Q2.empty())
+        {
+          V3DLONG q = Q2.get();
+          // minimal 6-connect
+          V3DLONG zq = q / (sz[0] * sz[1]);
+          V3DLONG rq = q % (sz[0] * sz[1]);
+          V3DLONG yq = rq / sz[0];
+          V3DLONG xq = rq % sz[0];
+
+          for (int ni = 0; ni < 6; ni++)
+          {
+            V3DLONG nx = xq + NB_6[ni][0];
+            V3DLONG ny = yq + NB_6[ni][1];
+            V3DLONG nz = zq + NB_6[ni][2];
+            if (nx < 0 || nx >= sz[0] || ny < 0 || ny >= sz[1] || nz < 0 || nz >= sz[2])
+              continue;
+            V3DLONG rr = nz * (sz[0] * sz[1]) + ny * sz[0] + nx;
+
+            if (label_data[rr] == MASK)
+            {
+              Q2.put(rr);
+              label_data[rr] = (float)current_label;
+            }
           }
         }
       }
     }
   }
 
-  if (regionSize < minRegionSize)
-  {
-    printf("Region too small: %zu voxels (minimum: %zu)\n", regionSize, minRegionSize);
-    delete floodedImage;
-    return nullptr;
-  }
-
-  printf("Successfully flooded region with %zu voxels\n", regionSize);
-  return floodedImage;
+  delete[] dist;
 }
 
-My4DImage *mergeFloodedImages(const QList<My4DImage *> &floodedImages)
+// The main driver for watershed + remove lines
+template <class T>
+void watershed_vs(T *indata, float *&label_data,
+                  const V3DLONG *sz, V3DLONG ndims, V3DLONG conn_code)
 {
-  if (floodedImages.isEmpty())
-    return nullptr;
+  // Prepare
+  V3DLONG num_elements = 1;
+  for (int i = 0; i < ndims; i++)
+    num_elements *= sz[i];
 
-  My4DImage *mergedImage = new My4DImage(*floodedImages[0]);
+  label_data = new float[num_elements];
+  // We must sort intensities
+  float *sortidx = new float[num_elements + 1];
+  float *valdata = new float[num_elements + 1];
 
-  for (int i = 1; i < floodedImages.size(); ++i)
+  // fill [1..num_elements] for sorting
+  valdata[0] = -999;
+  sortidx[0] = -999;
+  for (V3DLONG i = 0; i < num_elements; i++)
   {
-    for (V3DLONG idx = 0; idx < mergedImage->xdim * mergedImage->ydim * mergedImage->zdim * mergedImage->cdim; ++idx)
+    valdata[i + 1] = (float)indata[i];
+    sortidx[i + 1] = (float)i;
+  }
+
+  // sort
+  sort2(num_elements, valdata, sortidx);
+
+  // run watershed
+  compute_watershed(indata, sortidx, num_elements, sz, label_data);
+
+  // remove lines
+  remove_watershed_lines(label_data, sz, ndims);
+
+  delete[] sortidx;
+  delete[] valdata;
+}
+
+/**************************************
+ *  applyWatershedVS()
+ *   - wrap the snippet for subvolume
+ **************************************/
+void applyWatershedVS(const unsigned char *subvol,
+                      unsigned short *labelOut,
+                      int sx, int sy, int sz)
+{
+  // The snippet operates on float output
+  float *label_f = nullptr;
+  V3DLONG dims[3];
+  dims[0] = sx;
+  dims[1] = sy;
+  dims[2] = sz;
+
+  // Run watershed
+  watershed_vs(subvol, label_f, dims, /*ndims=*/3, /*conn_code=*/6);
+
+  // We then convert label_f to 16-bit for returning
+  V3DLONG totalSz = (V3DLONG)sx * sy * sz;
+  for (V3DLONG i = 0; i < totalSz; i++)
+  {
+    float val = label_f[i];
+    // we clamp to [0, 65535]
+    if (val < 0)
+      val = 0;
+    if (val > 65535)
+      val = 65535;
+    labelOut[i] = (unsigned short)(val + 0.5f);
+  }
+  delete[] label_f;
+}
+
+/*********************************************************
+ * Minimal BFS-based 3D distance transform for watershed line removal
+ *   - pix_index[i] gets index of the nearest "object" voxel
+ *********************************************************/
+void dt3d_binary(const float *inData,
+                 V3DLONG *pix_index,
+                 const V3DLONG *sz,
+                 float threshVal)
+{
+  // multi-source BFS:
+  //   inData[i] > threshVal => source (object)
+  //   inData[i] <= threshVal => background
+  // For each background, find nearest object via BFS
+  V3DLONG Nx = sz[0], Ny = sz[1], Nz = sz[2];
+  V3DLONG numel = Nx * Ny * Nz;
+  // arrays
+  vector<int> dist(numel, INT_MAX);
+  // pix_index[i] will store the index of nearest object voxel
+  // We'll push all "object" voxels in a queue with dist=0
+  queue<V3DLONG> Q;
+
+  // Initialize
+  for (V3DLONG i = 0; i < numel; i++)
+  {
+    if (inData[i] > threshVal)
     {
-      mergedImage->data[idx] |= floodedImages[i]->data[idx];
+      dist[i] = 0;
+      pix_index[i] = i; // nearest to itself
+      Q.push(i);
     }
   }
 
-  return mergedImage;
-}
-
-// Ensure libtiff is linked correctly
-
-My4DImage::My4DImage() : data(nullptr), xdim(0), ydim(0), zdim(0), cdim(0) {}
-
-My4DImage::My4DImage(const My4DImage &other)
-    : xdim(other.xdim), ydim(other.ydim), zdim(other.zdim), cdim(other.cdim)
-{
-  if (other.data)
+  // BFS
+  while (!Q.empty())
   {
-    data = new unsigned char[xdim * ydim * zdim * cdim];
-    std::copy(other.data, other.data + xdim * ydim * zdim * cdim, data);
-  }
-  else
-  {
-    data = nullptr;
-  }
-}
+    V3DLONG curr = Q.front();
+    Q.pop();
+    V3DLONG z = curr / (Nx * Ny);
+    V3DLONG r = curr % (Nx * Ny);
+    V3DLONG y = r / Nx;
+    V3DLONG x = r % Nx;
 
-My4DImage::~My4DImage()
-{
-  delete[] data;
-}
-
-My4DImage &My4DImage::operator=(const My4DImage &other)
-{
-  if (this != &other)
-  {
-    delete[] data; // Free existing data
-
-    xdim = other.xdim;
-    ydim = other.ydim;
-    zdim = other.zdim;
-    cdim = other.cdim;
-
-    if (other.data)
+    // 6 neighbors
+    for (int i = 0; i < 6; i++)
     {
-      V3DLONG totalSize = xdim * ydim * zdim * cdim;
-      data = new unsigned char[totalSize];
-      std::copy(other.data, other.data + totalSize, data);
-    }
-    else
-    {
-      data = nullptr;
+      int nx = x + NB_6[i][0];
+      int ny = y + NB_6[i][1];
+      int nz = z + NB_6[i][2];
+      if (nx < 0 || nx >= Nx || ny < 0 || ny >= Ny || nz < 0 || nz >= Nz)
+        continue;
+      V3DLONG idx = nz * (Nx * Ny) + ny * Nx + nx;
+      if (dist[idx] > dist[curr] + 1)
+      {
+        dist[idx] = dist[curr] + 1;
+        pix_index[idx] = pix_index[curr]; // inherits the same nearest object
+        Q.push(idx);
+      }
     }
   }
-  return *this;
+}
+
+// Simple 3D morphological opening (erosion + dilation) with a 3x3x3 neighborhood
+static void morphologicalOpen3D(unsigned char *vol, int sx, int sy, int sz)
+{
+  // Erode
+  unsigned char *eroded = new unsigned char[sx * sy * sz];
+  memset(eroded, 0, sx * sy * sz);
+  for (int z = 1; z < sz - 1; z++)
+  {
+    for (int y = 1; y < sy - 1; y++)
+    {
+      for (int x = 1; x < sx - 1; x++)
+      {
+        int idx = z * sx * sy + y * sx + x;
+        unsigned char minVal = 255;
+        for (int dz = -1; dz <= 1; dz++)
+        {
+          for (int dy = -1; dy <= 1; dy++)
+          {
+            for (int dx_ = -1; dx_ <= 1; dx_++)
+            {
+              int nx = x + dx_;
+              int ny = y + dy;
+              int nz = z + dz;
+              int nidx = nz * sx * sy + ny * sx + nx;
+              if (vol[nidx] < minVal)
+                minVal = vol[nidx];
+            }
+          }
+        }
+        eroded[idx] = minVal;
+      }
+    }
+  }
+  // Dilate
+  for (int z = 1; z < sz - 1; z++)
+  {
+    for (int y = 1; y < sy - 1; y++)
+    {
+      for (int x = 1; x < sx - 1; x++)
+      {
+        int idx = z * sx * sy + y * sx + x;
+        unsigned char maxVal = 0;
+        for (int dz = -1; dz <= 1; dz++)
+        {
+          for (int dy = -1; dy <= 1; dy++)
+          {
+            for (int dx_ = -1; dx_ <= 1; dx_++)
+            {
+              int nx = x + dx_;
+              int ny = y + dy;
+              int nz = z + dz;
+              int nidx = nz * sx * sy + ny * sx + nx;
+              if (eroded[nidx] > maxVal)
+                maxVal = eroded[nidx];
+            }
+          }
+        }
+        vol[idx] = maxVal; // final opened volume
+      }
+    }
+  }
+  delete[] eroded;
+}
+
+static int computeOtsuThreshold(const unsigned char *data, int length)
+{
+  // Compute histogram
+  int hist[256];
+  memset(hist, 0, sizeof(hist));
+  for (int i = 0; i < length; i++)
+    hist[data[i]]++;
+
+  // Calculate total number of pixels
+  int total = length;
+
+  float sum = 0.0f;
+  for (int t = 0; t < 256; t++)
+    sum += t * hist[t];
+
+  float sumB = 0.0f;
+  int wB = 0;
+  int wF = 0;
+  float varMax = 0.0f;
+  int threshold = 0;
+
+  for (int t = 0; t < 256; t++)
+  {
+    wB += hist[t];
+    if (wB == 0)
+      continue;
+    wF = total - wB;
+    if (wF == 0)
+      break;
+    sumB += (float)(t * hist[t]);
+    float mB = sumB / wB;
+    float mF = (sum - sumB) / wF;
+    float varBetween = (float)wB * (float)wF * (mB - mF) * (mB - mF);
+    if (varBetween > varMax)
+    {
+      varMax = varBetween;
+      threshold = t;
+    }
+  }
+  return threshold;
 }
