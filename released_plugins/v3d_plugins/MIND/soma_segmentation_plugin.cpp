@@ -16,6 +16,7 @@
 
 #include "basic_surf_objs.h"
 #include "v3d_message.h"
+#include "../../v3d/compute_win_pca_wp.h"
 
 using namespace std;
 
@@ -434,6 +435,27 @@ void reconstruction_func(V3DPluginCallback2 &callback,
     }
 
     printf("\nFinal labeled image (clamped to 8-bit) is ready.\n");
+
+    /************************************************************************
+     * 4) Post-processing and Analysis
+     ************************************************************************/
+
+    // Apply PCA on the labeled result
+    double pc1, pc2, pc3;
+    double vec1[3], vec2[3], vec3[3];
+    compute_win3d_pca_eigVec(labeledResult->data, N, M, P, N/2, M/2, P/2, N/4, M/4, P/4, pc1, pc2, pc3, vec1, vec2, vec3);
+
+    // Print PCA results
+    printf("PCA Eigenvalues:\n");
+    printf("  pc1: %f\n", pc1);
+    printf("  pc2: %f\n", pc2);
+    printf("  pc3: %f\n", pc3);
+
+    // Print PCA eigenvectors
+    printf("Orientation of the principal axes (eigenvectors):\n");
+    printf("  Eigenvector 1: [%f, %f, %f]\n", vec1[0], vec1[1], vec1[2]);
+    printf("  Eigenvector 2: [%f, %f, %f]\n", vec2[0], vec2[1], vec2[2]);
+    printf("  Eigenvector 3: [%f, %f, %f]\n", vec3[0], vec3[1], vec3[2]);
 
     delete labeledResult;
   }
