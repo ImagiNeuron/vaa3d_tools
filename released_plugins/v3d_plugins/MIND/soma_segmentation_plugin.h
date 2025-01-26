@@ -82,4 +82,8 @@ static void morphologicalOpen3D(unsigned char *vol, int sx, int sy, int sz);
 // Compute Otsu threshold
 static int computeOtsuThreshold(const unsigned char *data, int length);
 
+// PCA Analysis
+void analyzeSomaPCA(unsigned char *labeledData, V3DLONG N, V3DLONG M, V3DLONG P,
+                    const LocationSimple &lm, int somaIndex);
+
 #endif  // __SOMA_SEGMENTATION_PLUGIN_H__

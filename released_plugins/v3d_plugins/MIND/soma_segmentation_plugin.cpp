@@ -369,45 +369,10 @@ void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
 
     printf("\nFinal labeled image (clamped to 8-bit) is ready.\n");
 
-    /************************************************************************
-     * 4) Post-processing and Analysis
-     ************************************************************************/
-
-    // Apply PCA on the labeled result
-    double pc1, pc2, pc3;
-    double vec1[3], vec2[3], vec3[3];
-
-    // Create 3D array wrapper for the data
-    unsigned char ***img3d = new unsigned char **[P];
-    for (V3DLONG k = 0; k < P; k++) {
-      img3d[k] = new unsigned char *[M];
-      for (V3DLONG j = 0; j < M; j++) {
-        img3d[k][j] = labeledResult->data + (k * M * N + j * N);
-      }
+    // Apply PCA analysis to each soma
+    for (int i = 0; i < landmarkList.size(); i++) {
+      analyzeSomaPCA(labeledResult->data, N, M, P, landmarkList[i], i + 1);
     }
-
-    // Call PCA with 3D array wrapper
-    compute_cube_win3d_pca_eigVec(img3d, N, M, P, N / 2, M / 2, P / 2, N / 4,
-                                  M / 4, P / 4, pc1, pc2, pc3, vec1, vec2,
-                                  vec3);
-
-    // Cleanup 3D array wrapper
-    for (V3DLONG k = 0; k < P; k++) {
-      delete[] img3d[k];
-    }
-    delete[] img3d;
-
-    // Print PCA results
-    printf("PCA Eigenvalues:\n");
-    printf("  pc1: %f\n", pc1);
-    printf("  pc2: %f\n", pc2);
-    printf("  pc3: %f\n", pc3);
-
-    // Print PCA eigenvectors
-    printf("Orientation of the principal axes (eigenvectors):\n");
-    printf("  Eigenvector 1: [%f, %f, %f]\n", vec1[0], vec1[1], vec1[2]);
-    printf("  Eigenvector 2: [%f, %f, %f]\n", vec2[0], vec2[1], vec2[2]);
-    printf("  Eigenvector 3: [%f, %f, %f]\n", vec3[0], vec3[1], vec3[2]);
 
     delete labeledResult;
   }
@@ -975,4 +940,52 @@ static int computeOtsuThreshold(const unsigned char *data, int length) {
     }
   }
   return threshold;
+}
+
+void analyzeSomaPCA(unsigned char *labeledData, V3DLONG N, V3DLONG M, V3DLONG P,
+                    const LocationSimple &lm, int somaIndex) {
+  // Extract soma info
+  float x = lm.x;
+  float y = lm.y;
+  float z = lm.z;
+  float r = lm.radius > 0 ? lm.radius : 5.0f;
+
+  // Create 3D array wrapper for the data
+  unsigned char ***img3d = new unsigned char **[P];
+  for (V3DLONG k = 0; k < P; k++) {
+    img3d[k] = new unsigned char *[M];
+    for (V3DLONG j = 0; j < M; j++) {
+      img3d[k][j] = labeledData + (k * M * N + j * N);
+    }
+  }
+
+  // Analyze each soma with appropriate window size
+  double pc1, pc2, pc3;
+  double vec1[3], vec2[3], vec3[3];
+
+  // Use sphere window type (1) and window size based on soma radius
+  if (compute_sphere_win3d_pca_eigVec(
+          img3d, N, M, P, x, y, z,  // Center on soma
+          2 * r, 2 * r, 2 * r,      // Window size based on radius
+          pc1, pc2, pc3, vec1, vec2, vec3)) {
+    // Print results for this soma
+    printf("\nSoma #%d PCA Results:\n", somaIndex);
+    printf("  Center: (%.1f, %.1f, %.1f)\n", x, y, z);
+    printf("  Eigenvalues:\n");
+    printf("    pc1: %f\n", pc1);
+    printf("    pc2: %f\n", pc2);
+    printf("    pc3: %f\n", pc3);
+    printf("  Principal axes:\n");
+    printf("    v1: [%f, %f, %f]\n", vec1[0], vec1[1], vec1[2]);
+    printf("    v2: [%f, %f, %f]\n", vec2[0], vec2[1], vec2[2]);
+    printf("    v3: [%f, %f, %f]\n\n\n", vec3[0], vec3[1], vec3[2]);
+  } else {
+    printf("\nSoma #%d PCA failed.\n", somaIndex);
+  }
+
+  // Cleanup 3D array wrapper
+  for (V3DLONG k = 0; k < P; k++) {
+    delete[] img3d[k];
+  }
+  delete[] img3d;
 }

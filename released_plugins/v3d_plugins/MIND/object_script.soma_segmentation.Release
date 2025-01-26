@@ -13,15 +13,6 @@ release/newmatex.o
 release/bandmat.o
 release/submat.o
 release/myexcept.o
-release/cholesky.o
 release/evalue.o
-release/fft.o
-release/hholder.o
-release/jacobi.o
-release/newfft.o
 release/sort.o
-release/svd.o
-release/nm_misc.o
-release/newmatrm.o
-release/newmat9.o
 release/moc_soma_segmentation_plugin.o
