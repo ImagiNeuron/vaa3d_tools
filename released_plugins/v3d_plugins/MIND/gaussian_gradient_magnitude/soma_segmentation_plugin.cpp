@@ -11,8 +11,6 @@
  * 2024-11-16 : by ImagiNeuron: Shidan Javaheri, Siger Ma, Athmane Benarous and
  * Thibaut Baguette (McGill University)
  * 2025-02-01 : Updated by Athmane for marker–controlled watershed segmentation.
- * 2025-02-XX : Optimized by [Your Name] to reduce memory consumption and CPU
- * time.
  */
 
 #include "soma_segmentation_plugin.h"

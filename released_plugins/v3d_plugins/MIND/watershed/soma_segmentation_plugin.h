@@ -82,12 +82,4 @@ static void morphologicalOpen3D(unsigned char *vol, int sx, int sy, int sz);
 // Compute Otsu threshold
 static int computeOtsuThreshold(const unsigned char *data, int length);
 
-// Main reconstruction function (invoked from menu or command-line)
-struct input_PARA {
-  QString inimg_file;
-  V3DLONG channel;
-};
-void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
-                         input_PARA &PARA, bool bmenu);
-
 #endif  // __SOMA_SEGMENTATION_PLUGIN_H__
