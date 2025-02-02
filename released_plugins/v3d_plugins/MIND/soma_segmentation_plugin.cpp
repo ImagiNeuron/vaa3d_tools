@@ -317,12 +317,8 @@ My4DImage *mergeFloodedImages(const QList<My4DImage *> &floodedImages) {
 
 ////////////////////////////////////////////////////////////////////////
 // Main reconstruction function (invoked from menu or command-line)
-struct input_PARA {
-  QString inimg_file;
-  V3DLONG channel;
-};
-void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
-                         input_PARA &PARA, bool bmenu) {
+My4DImage *reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
+                               input_PARA &PARA, bool bmenu) {
   unsigned char *data1d = 0;
   V3DLONG N, M, P, sc, c;
   V3DLONG in_sz[4];
@@ -331,14 +327,14 @@ void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
     if (!curwin) {
       QMessageBox::information(
           0, "", "You don't have any image open in the main window.");
-      return;
+      return nullptr;
     }
     Image4DSimple *p4DImage = callback.getImage(curwin);
     if (!p4DImage) {
       QMessageBox::information(0, "",
                                "The image pointer is invalid. Ensure your data "
                                "is valid and try again!");
-      return;
+      return nullptr;
     }
     data1d = p4DImage->getRawData();
     N = p4DImage->getXDim();
@@ -352,7 +348,7 @@ void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
     } else
       c = QInputDialog::getInt(parent, "Channel", "Enter channel NO:", 1, 1, sc,
                                1, &ok1);
-    if (!ok1) return;
+    if (!ok1) return nullptr;
     in_sz[0] = N;
     in_sz[1] = M;
     in_sz[2] = P;
@@ -365,11 +361,11 @@ void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
                                   in_sz, datatype)) {
       fprintf(stderr, "Error reading file [%s].\n",
               PARA.inimg_file.toStdString().c_str());
-      return;
+      return nullptr;
     }
     if (PARA.channel < 1 || PARA.channel > in_sz[3]) {
       fprintf(stderr, "Invalid channel number.\n");
-      return;
+      return nullptr;
     }
     N = in_sz[0];
     M = in_sz[1];
@@ -381,18 +377,18 @@ void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
   v3dhandle curwin = callback.currentImageWindow();
   if (!curwin) {
     v3d_msg("No image window is currently open.", bmenu);
-    return;
+    return nullptr;
   }
   Image4DSimple *p4DImage = callback.getImage(curwin);
   if (!p4DImage) {
     v3d_msg("Invalid image pointer.", bmenu);
-    return;
+    return nullptr;
   }
   LandmarkList landmarkList = callback.getLandmark(curwin);
   if (landmarkList.isEmpty()) {
     v3d_msg("No landmarks defined. Please define at least one landmark.",
             bmenu);
-    return;
+    return nullptr;
   }
 
   // Prompt user for intensity difference threshold (relative to the seed
@@ -402,13 +398,13 @@ void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
       QInputDialog::getInt(parent, "Intensity Difference Threshold",
                            "Enter allowed difference from seed intensity:", 20,
                            0, 255, 1, &okIntensity);
-  if (!okIntensity) return;
+  if (!okIntensity) return nullptr;
   // Prompt user for gradient threshold.
   bool okGrad = false;
   int gradThreshold = QInputDialog::getInt(
       parent, "Gradient Threshold",
       "Enter maximum allowed gradient magnitude:", 20, 0, 255, 1, &okGrad);
-  if (!okGrad) return;
+  if (!okGrad) return nullptr;
 
   // Convert the LandmarkList to a QList of MyMarker objects.
   QList<MyMarker> myMarkerList;
@@ -453,7 +449,7 @@ void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
   if (!channelData) {
     v3d_msg("Failed to get image data for the specified channel.", bmenu);
     delete channelImage;
-    return;
+    return nullptr;
   }
   memcpy(channelImage->data, channelData, totalSize * sizeof(unsigned char));
 
@@ -464,7 +460,7 @@ void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
   if (!smoothedImage) {
     v3d_msg("Gaussian smoothing failed.", bmenu);
     delete globalSegImage;
-    return;
+    return nullptr;
   }
 
   My4DImage *gradMag = computeGradientMagnitude(smoothedImage);
@@ -472,7 +468,7 @@ void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
     v3d_msg("Gradient magnitude computation failed.", bmenu);
     delete smoothedImage;
     delete globalSegImage;
-    return;
+    return nullptr;
   }
 
   // (4) For each landmark, perform flood fill using the preprocessed images and
@@ -531,8 +527,7 @@ void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
   //   v3d_msg("Binary segmented image saved.", bmenu);
   // }
 
-  delete globalSegImage;
-  return;
+  return globalSegImage;
 }
 
 ////////////////////////////////////////////////////////////////////////
