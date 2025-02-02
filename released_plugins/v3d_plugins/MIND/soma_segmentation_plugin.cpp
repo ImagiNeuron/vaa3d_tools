@@ -26,11 +26,13 @@ struct input_PARA {
 void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
                          input_PARA &PARA, bool bmenu);
 
+void overlay_func(V3DPluginCallback2 &callback, QWidget *parent);
+
 /**
  * @brief Menu option under the MIND plugins
  */
 QStringList SomaSegmentation::menulist() const {
-  return QStringList() << tr("soma_segmentation") << tr("about");
+  return QStringList() << tr("soma_segmentation") << tr("overlay") << tr("save") << tr("about");
 }
 
 /**
@@ -54,7 +56,19 @@ void SomaSegmentation::domenu(const QString &menu_name,
     bool bmenu = true;
     input_PARA PARA;
     reconstruction_func(callback, parent, PARA, bmenu);
-
+  } else if (menu_name == tr("overlay")) {
+    overlay_func(callback, parent);
+  } else if (menu_name == tr("save")) {
+    v3dhandle curwin = callback.currentImageWindow();
+    Image4DSimple *p4DImage = callback.getImage(curwin);
+    if (p4DImage->convert_to_UINT8()) {
+      printf("Image dimensions: %d x %d x %d x %d x %d\n", p4DImage->getXDim(),
+             p4DImage->getYDim(), p4DImage->getZDim(), p4DImage->getCDim(), p4DImage->getTDim());
+      callback.saveImage(p4DImage, "soma_segmentation_overlay.tif");
+      printf("Image saved!\n");
+    } else {
+      printf("Error converting image to 8-bit\n");
+    }
   } else {
     v3d_msg(tr(
         "This plugin allows the segmentation of individual somas with 3D "
@@ -121,6 +135,33 @@ bool SomaSegmentation::dofunc(const QString &func_name,
     return false;
 
   return true;
+}
+
+void overlay_func(V3DPluginCallback2 &callback, QWidget *parent) {
+  v3dhandle curwin = callback.currentImageWindow();
+
+  Image4DSimple *p4DImage = callback.getImage(curwin);
+  printf("Image dimensions: %d x %d x %d x %d x %d\n", p4DImage->getXDim(),
+         p4DImage->getYDim(), p4DImage->getZDim(), p4DImage->getCDim(), p4DImage->getTDim());
+
+  // add second channel to image
+  unsigned char *data = p4DImage->getRawData();
+  unsigned char *newData = new unsigned char[p4DImage->getTotalBytes() * 2];
+
+  printf("Loading overlay image\n");
+
+  Image4DSimple *overlay = callback.loadImage("soma_segmentation_overlay.tif");
+
+  printf("Allocated new data, size: %d\n", p4DImage->getTotalBytes() * 2);
+  memcpy(newData, data, p4DImage->getTotalBytes());
+  memcpy(newData + p4DImage->getTotalBytes(), overlay->getRawData(), overlay->getTotalBytes());
+  printf("Copied data\n");
+  Image4DSimple *newImage = new Image4DSimple;
+  newImage->setData(newData, p4DImage->getXDim(), p4DImage->getYDim(), p4DImage->getZDim(), p4DImage->getCDim() * 2, p4DImage->getDatatype());
+  printf("Set data\n");
+
+  callback.setImage(curwin, newImage);
+  printf("Updated image window\n");
 }
 
 /**
