@@ -72,15 +72,20 @@ struct input_PARA {
 void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
                          input_PARA &PARA, bool bmenu);
 
+void pca_func(V3DPluginCallback2 &callback, QWidget *parent, input_PARA &PARA,
+              bool bmenu);
+
 /**************************************
  * Plugin Interface Methods
  **************************************/
 QStringList SomaSegmentation::menulist() const {
-  return QStringList() << tr("soma_segmentation") << tr("about");
+  return QStringList() << tr("soma_segmentation") << tr("PCA analysis")
+                       << tr("about");
 }
 
 QStringList SomaSegmentation::funclist() const {
-  return QStringList() << tr("segment_somas") << tr("help");
+  return QStringList() << tr("segment_somas") << tr("PCA analysis")
+                       << tr("help");
 }
 
 void SomaSegmentation::domenu(const QString &menu_name,
@@ -89,6 +94,10 @@ void SomaSegmentation::domenu(const QString &menu_name,
     bool bmenu = true;
     input_PARA PARA;
     reconstruction_func(callback, parent, PARA, bmenu);
+  } else if (menu_name == tr("PCA analysis")) {
+    bool bmenu = true;
+    input_PARA PARA;
+    pca_func(callback, parent, PARA, bmenu);
   } else {
     v3d_msg(
         tr("Soma segmentation plugin using 3D watershed.\n"
@@ -123,6 +132,29 @@ bool SomaSegmentation::dofunc(const QString &func_name,
     k++;
 
     reconstruction_func(callback, parent, PARA, bmenu);
+  } else if (func_name == tr("PCA analysis")) {
+    bool bmenu = false;
+    input_PARA PARA;
+
+    vector<char *> *pinfiles =
+        (input.size() >= 1) ? (vector<char *> *)input[0].p : 0;
+    vector<char *> *pparas =
+        (input.size() >= 2) ? (vector<char *> *)input[1].p : 0;
+    vector<char *> infiles = (pinfiles != 0) ? *pinfiles : vector<char *>();
+    vector<char *> paras = (pparas != 0) ? *pparas : vector<char *>();
+
+    if (infiles.empty()) {
+      fprintf(stderr, "Need input image.\n");
+      return false;
+    } else {
+      PARA.inimg_file = infiles[0];
+    }
+
+    int k = 0;
+    PARA.channel = (paras.size() >= k + 1) ? atoi(paras[k]) : 1;
+    k++;
+
+    pca_func(callback, parent, PARA, bmenu);
   } else if (func_name == tr("help")) {
     printf("**** Usage of soma_segmentation (3D watershed) ****\n");
     printf(
@@ -381,6 +413,109 @@ void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
   delete[] data1d;
 
   v3d_msg("3D watershed segmentation complete.", bmenu);
+}
+
+/**************************************
+ * PCA analysis for each soma
+ **************************************/
+void pca_func(V3DPluginCallback2 &callback, QWidget *parent, input_PARA &PARA,
+              bool bmenu) {
+  /*************************************
+   * Load Image
+   *************************************/
+  unsigned char *data1d = 0;
+  V3DLONG N, M, P, sc, c;
+  V3DLONG in_sz[4];
+
+  if (bmenu) {
+    // From the current Vaa3D window
+    v3dhandle curwin = callback.currentImageWindow();
+    if (!curwin) {
+      QMessageBox::information(0, "", "No image open in the main window.");
+      return;
+    }
+
+    Image4DSimple *p4DImage = callback.getImage(curwin);
+    if (!p4DImage) {
+      QMessageBox::information(0, "", "Invalid image pointer.");
+      return;
+    }
+
+    data1d = p4DImage->getRawData();
+    N = p4DImage->getXDim();
+    M = p4DImage->getYDim();
+    P = p4DImage->getZDim();
+    sc = p4DImage->getCDim();
+
+    bool ok1;
+    if (sc == 1) {
+      c = 1;
+      ok1 = true;
+    } else {
+      c = QInputDialog::getInt(parent, "Channel", "Enter channel NO:", 1, 1, sc,
+                               1, &ok1);
+    }
+    if (!ok1) return;
+
+    in_sz[0] = N;
+    in_sz[1] = M;
+    in_sz[2] = P;
+    in_sz[3] = sc;
+
+    PARA.inimg_file = p4DImage->getFileName();
+  } else {
+    // Command-line input
+    int datatype = 0;
+    if (!simple_loadimage_wrapper(callback,
+                                  PARA.inimg_file.toStdString().c_str(), data1d,
+                                  in_sz, datatype)) {
+      fprintf(stderr, "Error loading file [%s].\n",
+              PARA.inimg_file.toStdString().c_str());
+      return;
+    }
+    if (PARA.channel < 1 || PARA.channel > in_sz[3]) {
+      fprintf(stderr, "Invalid channel number.\n");
+      return;
+    }
+    N = in_sz[0];
+    M = in_sz[1];
+    P = in_sz[2];
+    sc = in_sz[3];
+    c = PARA.channel;
+  }
+
+  if (!data1d) {
+    v3d_msg("No valid image data!", bmenu);
+    return;
+  }
+
+  if (sc > 1) {
+    v3d_msg("For grayscale, ignoring additional channels");
+    sc = 1;
+    c = 1;
+  }
+
+  /*************************************
+   * For each landmark, do PCA
+   *************************************/
+  v3dhandle curwin = callback.currentImageWindow();
+  LandmarkList landmarkList;
+  if (bmenu && curwin) {
+    landmarkList = callback.getLandmark(curwin);
+  } else {
+    // In command-line or no open window, user must supply landmarks some other
+    // way For now, if none, we just exit.
+  }
+
+  if (landmarkList.isEmpty()) {
+    v3d_msg("No landmarks found. Please specify at least one landmark.", bmenu);
+    delete[] data1d;
+    return;
+  }
+
+  for (int i = 0; i < landmarkList.size(); i++) {
+    analyzeSomaPCA(data1d, N, M, P, landmarkList[i], i + 1);
+  }
 }
 
 /*************************************
