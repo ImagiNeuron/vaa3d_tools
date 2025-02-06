@@ -2310,7 +2310,7 @@ class cellSegmentation : public QObject, public V3DPluginInterface2_1 {
         // (_V3DPluginCallback2_currentCallback.getImageName(v3dhandleList_current[i]).contains(name_result))
         //{
         //_V3DPluginCallback2_currentCallback.setLandmark(v3dhandleList_current[i],
-        //this->class_segmentationMain1.LandmarkList_exemplar);
+        // this->class_segmentationMain1.LandmarkList_exemplar);
         //_V3DPluginCallback2_currentCallback.updateImageWindow(v3dhandleList_current[i]);
         //}
         /*if
