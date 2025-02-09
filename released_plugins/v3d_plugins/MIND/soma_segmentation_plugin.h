@@ -12,6 +12,8 @@
 
 #include <QtGui>
 
+#include "cellSegmentation_plugin.h"
+
 // A basic structure for a marker
 struct MyMarker {
   float x, y, z;

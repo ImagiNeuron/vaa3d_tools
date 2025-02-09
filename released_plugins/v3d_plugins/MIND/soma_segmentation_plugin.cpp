@@ -534,7 +534,7 @@ My4DImage *reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
 // Standard Vaa3D plugin interface implementations
 
 QStringList SomaSegmentation::menulist() const {
-  return QStringList() << tr("soma_segmentation") << tr("about");
+  return QStringList() << tr("soma_segmentation") << tr("cellsegmentation") << tr("about");
 }
 
 QStringList SomaSegmentation::funclist() const {
@@ -547,6 +547,9 @@ void SomaSegmentation::domenu(const QString &menu_name,
     bool bmenu = true;
     input_PARA PARA;
     reconstruction_func(callback, parent, PARA, bmenu);
+  } else if (menu_name == tr("cellsegmentation")) {
+    cellSegmentation cellseg;
+    cellseg.interface_run(callback, parent);
   } else {
     v3d_msg(tr("This plugin segments individual somas using a 3D "
                "region-growing algorithm "
