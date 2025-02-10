@@ -10,7 +10,9 @@
 
 #include <v3d_interface.h>
 
+#include <QFileDialog>  // Add this include
 #include <QtGui>
+#include <fstream>  // Add this for file output
 
 // A basic structure for a marker
 struct MyMarker {
@@ -85,5 +87,13 @@ static int computeOtsuThreshold(const unsigned char *data, int length);
 // PCA Analysis
 void analyzeSomaPCA(unsigned char *labeledData, V3DLONG N, V3DLONG M, V3DLONG P,
                     const LocationSimple &lm, int somaIndex);
+
+// Save PCA results to CSV
+void savePCAResultsToCSV(
+    const QString &filename, int somaIndex, const LocationSimple &lm,
+    double pc1, double pc2, double pc3, const double *vec1, const double *vec2,
+    const double *vec3, double x_center, double y_center, double z_center,
+    QWidget *parent = nullptr,
+    bool *saveEnabled = nullptr);  // Add save flag parameter
 
 #endif  // __SOMA_SEGMENTATION_PLUGIN_H__

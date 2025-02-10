@@ -7,11 +7,13 @@
 
 #include "soma_segmentation_plugin.h"
 
+#include <QApplication>  // Add this include
 #include <QInputDialog>
 #include <QMessageBox>
 #include <algorithm>  // For std::sort and std::nth_element
 #include <cmath>
 #include <cstring>  // For memcpy
+#include <fstream>  // For CSV output
 #include <queue>
 #include <vector>
 
@@ -1077,6 +1079,82 @@ static int computeOtsuThreshold(const unsigned char *data, int length) {
   return threshold;
 }
 
+void savePCAResultsToCSV(const QString &filename, int somaIndex,
+                         const LocationSimple &lm, double pc1, double pc2,
+                         double pc3, const double *vec1, const double *vec2,
+                         const double *vec3, double x_center, double y_center,
+                         double z_center, QWidget *parent, bool *saveEnabled) {
+  static bool shouldSave = true;  // Default to true
+  static QString actualFilename = filename;
+
+  // Ask user if they want to save only for the first soma
+  if (somaIndex == 1) {
+    QMessageBox::StandardButton reply;
+    reply = QMessageBox::question(
+        parent, "Save Results",
+        "Would you like to save the PCA results to a CSV file?",
+        QMessageBox::Yes | QMessageBox::No);
+
+    shouldSave = (reply == QMessageBox::Yes);
+    if (saveEnabled) *saveEnabled = shouldSave;
+
+    if (shouldSave) {
+      QString suggestedName = QFileInfo(filename).fileName();
+      actualFilename = QFileDialog::getSaveFileName(
+          parent, "Save PCA Results", suggestedName, "CSV Files (*.csv)");
+      if (actualFilename.isEmpty()) {
+        printf("Save cancelled by user.\n");
+        shouldSave = false;
+        if (saveEnabled) *saveEnabled = false;
+        return;
+      }
+
+      // Ensure it has .csv extension
+      if (!actualFilename.endsWith(".csv", Qt::CaseInsensitive)) {
+        actualFilename += ".csv";
+      }
+
+      bool fileExists = QFile::exists(actualFilename);
+      if (fileExists) {
+        // Remove and replace existing file
+        if (QFile::remove(actualFilename)) {
+          printf("Existing file removed: %s\n", actualFilename.toStdString().c_str());
+        } else {
+          printf("Failed to remove existing file: %s\n", actualFilename.toStdString().c_str());
+          shouldSave = false;
+          if (saveEnabled) *saveEnabled = false;
+          return;
+        }
+      }
+
+      // Write header if new file
+      std::ofstream outFile(actualFilename.toStdString().c_str(), std::ios::app);
+      outFile << "SomaID,X,Y,Z,Radius,CenterMassX,CenterMassY,CenterMassZ,"
+              << "PC1,PC2,PC3,"
+              << "Vec1_X,Vec1_Y,Vec1_Z,"
+              << "Vec2_X,Vec2_Y,Vec2_Z,"
+              << "Vec3_X,Vec3_Y,Vec3_Z\n";
+      outFile.close();
+    } else {
+      return;  // User chose not to save
+    }
+  }
+
+  if (!shouldSave) return;  // Skip if user chose not to save
+
+  std::ofstream outFile(actualFilename.toStdString().c_str(), std::ios::app);
+
+  // Write data
+  outFile << somaIndex << "," << lm.x << "," << lm.y << "," << lm.z << ","
+          << lm.radius << "," << x_center << "," << y_center << "," << z_center
+          << "," << pc1 << "," << pc2 << "," << pc3 << "," << vec1[0] << ","
+          << vec1[1] << "," << vec1[2] << "," << vec2[0] << "," << vec2[1]
+          << "," << vec2[2] << "," << vec3[0] << "," << vec3[1] << ","
+          << vec3[2] << "\n";
+
+  outFile.close();
+}
+
 void analyzeSomaPCA(unsigned char *labeledData, V3DLONG N, V3DLONG M, V3DLONG P,
                     const LocationSimple &lm, int somaIndex) {
   // Extract soma info
@@ -1117,6 +1195,23 @@ void analyzeSomaPCA(unsigned char *labeledData, V3DLONG N, V3DLONG M, V3DLONG P,
     printf("    v1: [%f, %f, %f]\n", vec1[0], vec1[1], vec1[2]);
     printf("    v2: [%f, %f, %f]\n", vec2[0], vec2[1], vec2[2]);
     printf("    v3: [%f, %f, %f]\n\n\n", vec3[0], vec3[1], vec3[2]);
+
+    // Save to CSV with save flag
+    QString defaultFileName = "soma_pca_results.csv";
+    QWidget *mainWin = QApplication::activeWindow();
+    bool saveEnabled = false;
+    savePCAResultsToCSV(defaultFileName, somaIndex, lm, pc1, pc2, pc3, vec1, vec2,
+                        vec3, x_center, y_center, z_center,
+                        mainWin,  // Use the stored pointer
+                        &saveEnabled);
+
+    if (somaIndex == 1) {
+      if (saveEnabled) {
+        printf("PCA results will be saved to the selected file.\n");
+      } else {
+        printf("PCA results will not be saved to file.\n");
+      }
+    }
   } else {
     printf("\nSoma #%d PCA failed.\n", somaIndex);
   }
