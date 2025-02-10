@@ -1097,15 +1097,18 @@ void analyzeSomaPCA(unsigned char *labeledData, V3DLONG N, V3DLONG M, V3DLONG P,
   // Analyze each soma with appropriate window size
   double pc1, pc2, pc3;
   double vec1[3], vec2[3], vec3[3];
+  double x_center, y_center, z_center;
 
   // Use sphere window type (1) and window size based on soma radius
   if (compute_sphere_win3d_pca_eigVec(
           img3d, N, M, P, x, y, z,  // Center on soma
           2 * r, 2 * r, 2 * r,      // Window size based on radius
-          pc1, pc2, pc3, vec1, vec2, vec3)) {
+          pc1, pc2, pc3, vec1, vec2, vec3, x_center, y_center, z_center)) {
     // Print results for this soma
     printf("\nSoma #%d PCA Results:\n", somaIndex);
     printf("  Center: (%.1f, %.1f, %.1f)\n", x, y, z);
+    printf("  Radius: %.1f\n", r);
+    printf("  Center of mass: (%f, %f, %f)\n", x_center, y_center, z_center);
     printf("  Eigenvalues:\n");
     printf("    pc1: %f\n", pc1);
     printf("    pc2: %f\n", pc2);
