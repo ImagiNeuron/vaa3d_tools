@@ -1118,9 +1118,11 @@ void savePCAResultsToCSV(const QString &filename, int somaIndex,
       if (fileExists) {
         // Remove and replace existing file
         if (QFile::remove(actualFilename)) {
-          printf("Existing file removed: %s\n", actualFilename.toStdString().c_str());
+          printf("Existing file removed: %s\n",
+                 actualFilename.toStdString().c_str());
         } else {
-          printf("Failed to remove existing file: %s\n", actualFilename.toStdString().c_str());
+          printf("Failed to remove existing file: %s\n",
+                 actualFilename.toStdString().c_str());
           shouldSave = false;
           if (saveEnabled) *saveEnabled = false;
           return;
@@ -1128,12 +1130,13 @@ void savePCAResultsToCSV(const QString &filename, int somaIndex,
       }
 
       // Write header if new file
-      std::ofstream outFile(actualFilename.toStdString().c_str(), std::ios::app);
+      std::ofstream outFile(actualFilename.toStdString().c_str(),
+                            std::ios::app);
       outFile << "SomaID,X,Y,Z,Radius,CenterMassX,CenterMassY,CenterMassZ,"
-              << "PC1,PC2,PC3,"
-              << "Vec1_X,Vec1_Y,Vec1_Z,"
-              << "Vec2_X,Vec2_Y,Vec2_Z,"
-              << "Vec3_X,Vec3_Y,Vec3_Z\n";
+              << "eigenvalue1,eigenvalue2,eigenvalue3,"
+              << "eigenvector1_x,eigenvector1_y,eigenvector1_z,"
+              << "eigenvector2_x,eigenvector2_y,eigenvector2_z,"
+              << "eigenvector3_x,eigenvector3_y,eigenvector3_z\n";
       outFile.close();
     } else {
       return;  // User chose not to save
@@ -1192,17 +1195,16 @@ void analyzeSomaPCA(unsigned char *labeledData, V3DLONG N, V3DLONG M, V3DLONG P,
     printf("    pc2: %f\n", pc2);
     printf("    pc3: %f\n", pc3);
     printf("  Principal axes:\n");
-    printf("    v1: [%f, %f, %f]\n", vec1[0], vec1[1], vec1[2]);
-    printf("    v2: [%f, %f, %f]\n", vec2[0], vec2[1], vec2[2]);
-    printf("    v3: [%f, %f, %f]\n\n\n", vec3[0], vec3[1], vec3[2]);
+    printf("    pc1: [%f, %f, %f]\n", vec1[0], vec1[1], vec1[2]);
+    printf("    pc2: [%f, %f, %f]\n", vec2[0], vec2[1], vec2[2]);
+    printf("    pc3: [%f, %f, %f]\n\n\n", vec3[0], vec3[1], vec3[2]);
 
     // Save to CSV with save flag
     QString defaultFileName = "soma_pca_results.csv";
     QWidget *mainWin = QApplication::activeWindow();
     bool saveEnabled = false;
-    savePCAResultsToCSV(defaultFileName, somaIndex, lm, pc1, pc2, pc3, vec1, vec2,
-                        vec3, x_center, y_center, z_center,
-                        mainWin,  // Use the stored pointer
+    savePCAResultsToCSV(defaultFileName, somaIndex, lm, pc1, pc2, pc3, vec1,
+                        vec2, vec3, x_center, y_center, z_center, mainWin,
                         &saveEnabled);
 
     if (somaIndex == 1) {
