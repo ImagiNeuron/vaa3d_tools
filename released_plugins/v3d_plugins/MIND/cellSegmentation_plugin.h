@@ -43,7 +43,7 @@ const double const_max_voxelValue = 255;
 // 27 directions -1
 const int const_count_neighbors = 26;
 // small enough global value as a last resort
-const double default_threshold_global = 20;
+const double default_threshold_global = 15;
 // cube of voxels of length 2
 const int default_threshold_regionSize = 8;
 const double const_infinitesimal = 0.000000001;
@@ -98,10 +98,10 @@ class dialogRun : public QDialog {
     QGridLayout *QGridLayout_exemplar_main = new QGridLayout();
     QLabel *QLabel_exemplar_maxMovement1 =
         new QLabel(QObject::tr("Max movement from\nmass center"));
-    QLineEdit_exemplar_maxMovement1 = new QLineEdit("3", QWidget_parent);
+    QLineEdit_exemplar_maxMovement1 = new QLineEdit("2", QWidget_parent);
     QLabel *QLabel_exemplar_maxMovement2 =
         new QLabel(QObject::tr("Max movement from\nmarker position"));
-    QLineEdit_exemplar_maxMovement2 = new QLineEdit("8", QWidget_parent);
+    QLineEdit_exemplar_maxMovement2 = new QLineEdit("4", QWidget_parent);
     QGridLayout_exemplar_main->addWidget(QLabel_exemplar_maxMovement1, 1, 1, 1,
                                          1);
     QGridLayout_exemplar_main->addWidget(QLineEdit_exemplar_maxMovement1, 1, 2,
@@ -345,7 +345,11 @@ class cellSegmentation : public QObject {
         memset(this->Image1D_mask, const_max_voxelValue, this->size_page);
         this->idx_shape = _idx_shape;
         // get potential seeds for other cells
+        // not necessary for now - for now we are just doing flooding on markers
         this->categorizeVoxelsByValue();
+
+        // apply the median filter as preprocessing
+        // this->filter_Median(3);
 
         // set parameters that contorl the segmentation
         this->threshold_deltaShapeStat = _threshold_deltaShapeStat;
@@ -358,7 +362,7 @@ class cellSegmentation : public QObject {
         this->is_initialized = false;
       }
 
-      // thresholds for the segmentation
+      // stores the tresholds that were used in segmentation
       vector<double> thresholds_valueChangeRatio;
       vector<V3DLONG> thresholds_voxelValue;
       vector<V3DLONG> thresholds_regionSize;
@@ -385,12 +389,14 @@ class cellSegmentation : public QObject {
         }
         // variables to track region growing and see if the center of mass has
         // moved
-        V3DLONG value_exemplar = this->Image1D_page[pos_exemplar];
-        V3DLONG count_step = (value_exemplar - default_threshold_global);
+        V3DLONG marker_intensity = this->Image1D_page[pos_exemplar];
+        V3DLONG count_step = (marker_intensity - default_threshold_global);
         V3DLONG pos_massCenterOld = -1;
         V3DLONG pos_massCenterNew = 0;
         vector<V3DLONG> poss_exemplarRegionNew;
         vector<V3DLONG> poss_exemplarRegionOld;
+        // the change in the threshold from the marker intensity at each
+        // flooding interation
         V3DLONG idx_step = 0;
         double value_centerMovement2 = 0;
 
@@ -402,73 +408,82 @@ class cellSegmentation : public QObject {
         for (idx_step = 0; idx_step < count_step; idx_step++) {
           // the trehsold on voxel values is decreasing each iteration -
           // allowing more voxels to be included as possibilities in flooding
-          V3DLONG threshold_exemplarRegion = value_exemplar - idx_step;
+          // decreases from value at the label to 25
+          V3DLONG threshold_exemplarRegion = marker_intensity - idx_step;
 
-          // region grow on this exemplar region
+          // region grow on this exemplar region and mark result as flooded
           poss_exemplarRegionNew =
               this->regionGrowOnPos(pos_exemplar, threshold_exemplarRegion, INF,
                                     this->size_page / 1000, this->Image1D_mask);
           this->poss2Image1D(poss_exemplarRegionNew, this->Image1D_mask,
                              const_max_voxelValue);
 
-          // if the region is too small, break
-          if (poss_exemplarRegionNew.size() < default_threshold_regionSize) {
-            break;
-          }
+          // if the region is too small, break. No longer necessary
+          // if (poss_exemplarRegionNew.size() < default_threshold_regionSize) {
+          //   break;
+          // }
+
           // make sure region has not moved too far awar from marker or center
           // of mass
           pos_massCenterNew = this->getCenterByMass(poss_exemplarRegionNew);
           double value_centerMovement1 =
               this->getEuclideanDistance2(pos_massCenterOld, pos_massCenterNew);
+
           value_centerMovement2 =
               this->getEuclideanDistance2(pos_exemplar, pos_massCenterNew);
+
           if (value_centerMovement1 > max_movment1) {
+            printf(
+                "final threshold: %d, for marker number %d (moved too far from "
+                "center of mass)\n",
+                threshold_exemplarRegion, idx_exemplar);
             break;
           }
+
           if (value_centerMovement2 > max_movment2) {
+            printf(
+                "final threshold: %d, for marker number (moved too far from "
+                "marker) %d\n",
+                threshold_exemplarRegion, idx_exemplar);
             break;
           }
+          // update the segmentations
           pos_massCenterOld = pos_massCenterNew;
           poss_exemplarRegionOld = poss_exemplarRegionNew;
         }
-        // try again with the maximum movement allowed being doubled
-        if ((idx_step < 1) || (value_centerMovement2 > max_movment2) ||
-            (poss_exemplarRegionOld.size() < default_threshold_regionSize)) {
-          for (idx_step = 0; idx_step < count_step; idx_step++) {
-            V3DLONG threshold_exemplarRegion = value_exemplar - idx_step;
-            poss_exemplarRegionNew = this->regionGrowOnPos(
-                pos_exemplar, threshold_exemplarRegion, INF,
-                this->size_page / 1000, this->Image1D_mask);
-            this->poss2Image1D(poss_exemplarRegionNew, this->Image1D_mask,
-                               const_max_voxelValue);
-            if (poss_exemplarRegionNew.size() < default_threshold_regionSize) {
-              break;
-            }
-            pos_massCenterNew = this->getCenterByMass(poss_exemplarRegionNew);
-            double value_centerMovement1 = this->getEuclideanDistance2(
-                pos_massCenterOld, pos_massCenterNew);
-            value_centerMovement2 =
-                this->getEuclideanDistance2(pos_exemplar, pos_massCenterNew);
-            if (value_centerMovement1 > (max_movment1 * 2)) {
-              break;
-            }
-            if (value_centerMovement2 > (max_movment2 * 2)) {
-              break;
-            }
-            pos_massCenterOld = pos_massCenterNew;
-            poss_exemplarRegionOld = poss_exemplarRegionNew;
-          }
-        }
+
+        // no need to attempt a second time
+
+        // heuristics to remove floodings that are bad, as well as bad markers
+
+        // initial threshold didn't lead to a grown region. This check is not
+        // necessary without too small region check
         if (idx_step < 1) {
+          printf("Marker number %d failed - index step did not change%d\n",
+                 idx_exemplar);
           continue;
-        }  // failed;
+        }
+
+        // // on final iteration, the center of mass moved too far
         if (value_centerMovement2 > (max_movment2 * 4)) {
+          printf(
+              "Marker number %d failed - value_centerMovement2 was %f (too "
+              "high)\n",
+              idx_exemplar, value_centerMovement2);
           continue;
-        }  // failed;
+        }
+
+        // region is too small
         if (poss_exemplarRegionOld.size() < default_threshold_regionSize) {
+          printf("Marker number %d failed - poss_exemplarRegionOld was %d\n",
+                 idx_exemplar, poss_exemplarRegionOld.size());
           continue;
-        }  // failed;
+        }
+
+        // region is too large
         if (poss_exemplarRegionOld.size() > (this->size_page / 1000)) {
+          printf("Marker number %d failed - poss_exemplarRegionOld was %d\n",
+                 idx_exemplar, poss_exemplarRegionOld.size());
           continue;
         }  // failed;
 
@@ -479,19 +494,27 @@ class cellSegmentation : public QObject {
             getMinDimension(boundBox_exemplarRegion) / 2;
         vector<V3DLONG> xyz_exemplarRegionCenter =
             this->index2Coordinate(pos_massCenterOld);
+        // the result is not saved if the shape stats are empty
+        // shape stats are empty if for some reason the PCA analysis cannot be
+        // completed
         vector<vector<double> > valuesVct_shapeStatExemplarRegion =
             this->getShapeStat(
                 xyz_exemplarRegionCenter[0], xyz_exemplarRegionCenter[1],
                 xyz_exemplarRegionCenter[2], radius_exemplarRegion);
         if (valuesVct_shapeStatExemplarRegion.empty()) {
+          printf(
+              "Marker number %d failed - valuesVct_shapeStatExemplarRegion was "
+              "empty\n",
+              idx_exemplar);
           continue;
         }  // failed;
 
+        // store the results of the segmentation and the tresholds
         this->poss2Image1D(poss_exemplarRegionOld, this->Image1D_mask, 0);
         possVct_exemplarRegion.push_back(poss_exemplarRegionOld);
         poss_exemplarNew.push_back(pos_massCenterOld);
         V3DLONG min_exemplarRegionValue = this->getMin(poss_exemplarRegionOld);
-        V3DLONG threshold_exemplarRegionValue = value_exemplar - idx_step;
+        V3DLONG threshold_exemplarRegionValue = marker_intensity - idx_step;
         thresholds_valueChangeRatio.push_back(
             (double)(min_exemplarRegionValue - threshold_exemplarRegionValue) /
             (double)min_exemplarRegionValue);
@@ -512,6 +535,7 @@ class cellSegmentation : public QObject {
       if (possVct_exemplarRegion.empty()) {
         return false;
       }
+
       poss_exemplar.clear();
       poss_exemplar = poss_exemplarNew;
       count_exemplar = poss_exemplar.size();
@@ -1911,6 +1935,10 @@ class cellSegmentation : public QObject {
       return valuesVct_result;
     }
 
+    /**
+     * @brief get the shape analysis depending on whether it is a sphere or a
+     * cube
+     */
     template <class T>
     bool getPCA(
         T ***img3d, V3DLONG sx, V3DLONG sy, V3DLONG sz, V3DLONG x0, V3DLONG y0,
@@ -1929,6 +1957,9 @@ class cellSegmentation : public QObject {
                              pc2, pc3, b_disp_CoM_etc, b_normalize_score);
     }
 
+    /**
+     * @brief get the PCA for a sphereical shape
+     */
     template <class T>
     bool getPCA_sphere(
         T ***img3d, V3DLONG sx, V3DLONG sy, V3DLONG sz, V3DLONG x0, V3DLONG y0,
@@ -2109,6 +2140,9 @@ class cellSegmentation : public QObject {
       return true;
     }
 
+    /**
+     * @brief get the PCA for a cube shape
+     */
     template <class T>
     bool getPCA_cube(
         T ***img3d, V3DLONG sx, V3DLONG sy, V3DLONG sz, V3DLONG x0, V3DLONG y0,
@@ -2322,6 +2356,8 @@ class cellSegmentation : public QObject {
     // check to make sure that landmarks are defined
     LandmarkList LandmarkList_current;
     V3DLONG count_currentLandmarkList = -1;
+
+    // cases where there are swc files (doesn't apply to us)
     if ((count_SWCList < 1) && (count_userDefinedLandmarkList < 1)) {
       v3d_msg(
           "You have not defined any landmarks or swc structure to run the "
