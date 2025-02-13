@@ -509,10 +509,14 @@ class cellSegmentation : public QObject {
           continue;
         }  // failed;
 
-        // store the results of the segmentation and the tresholds
+        // mark processed voxels
         this->poss2Image1D(poss_exemplarRegionOld, this->Image1D_mask, 0);
+
+        // store segmentation results
         possVct_exemplarRegion.push_back(poss_exemplarRegionOld);
         poss_exemplarNew.push_back(pos_massCenterOld);
+
+        // calculate and store statistics, including threshold that was used
         V3DLONG min_exemplarRegionValue = this->getMin(poss_exemplarRegionOld);
         V3DLONG threshold_exemplarRegionValue = marker_intensity - idx_step;
         thresholds_valueChangeRatio.push_back(
@@ -546,6 +550,9 @@ class cellSegmentation : public QObject {
       V3DLONG count_seedCategory = this->possVct_seed.size();
       unsigned char **masks_page =
           this->memory_allocate_uchar2D(count_exemplar, this->size_page);
+
+      // code that adds further markers and segmentations
+
       // for (V3DLONG idx_exemplar=0;idx_exemplar<count_exemplar;idx_exemplar++)
       // {
       // 	memset(masks_page[idx_exemplar], const_max_voxelValue,
@@ -677,19 +684,31 @@ class cellSegmentation : public QObject {
 
       // leave uncommented
       // memset(this->Image1D_mask, const_max_voxelValue, this->size_page);
+
+      // merge all segmentation results into one
       this->possVct_segmentationResult = this->mergePossVector(
           possVct_exemplarRegion, this->possVct_segmentationResult);
+      // update image mask (necessary after other segmentations)
       this->possVct2Image1D(this->possVct_segmentationResult,
                             this->Image1D_mask, 0);
+
+      // merge all segmentation centers into one
       this->poss_segmentationResultCenter =
           this->mergePoss(poss_exemplar, this->poss_segmentationResultCenter);
+
+      // creates landmarks from the centers of the resulting segmentation
       this->LandmarkList_segmentationResult =
           this->poss2LandMarkList(this->poss_segmentationResultCenter);
 
+      // this doesn't work
       // QString filename="quickfind_test.v3draw";
       // simple_saveimage_wrapper(this->_V3DPluginCallback2_currentCallback,filename.toAscii(),this->Image1D_segmentationResult,this->dim_X,this->dim_Y,this->dim_Z);
+
+      // get the 3D image of the segmentation result and save it in
+      // Image1D_segmentationResult
       this->possVct2Image1DC(this->possVct_segmentationResult,
                              this->Image1D_segmentationResult);
+
       this->memory_free_uchar2D(masks_page, count_exemplar);
       return true;
     }
@@ -829,6 +848,9 @@ class cellSegmentation : public QObject {
       }
     }
 
+    /**
+     * @brief - merges all centers of mass into one
+     */
     vector<vector<V3DLONG> > mergePossVector(
         vector<vector<V3DLONG> > vctList_input1,
         vector<vector<V3DLONG> > vctList_input2)  // vctList_input2 will be
@@ -1000,6 +1022,9 @@ class cellSegmentation : public QObject {
       this->colors_simpleTable.push_back(color_tmp);
     }
 
+    /**
+     * @brief - assigns colors to the segmented cell regions
+     */
     void possVct2Image1DC(vector<vector<V3DLONG> > possVct_input,
                           unsigned char *Image1D_input) {
       vector<V3DLONG> color_input(3, 0);
@@ -2420,6 +2445,7 @@ class cellSegmentation : public QObject {
           dialogRun1.shape_multiplier_uThresholdRegionSize, name_currentWindow,
           dialogRun1.exemplar_maxMovement1, dialogRun1.exemplar_maxMovement2);
     }
+    // if the segmentation is successful, display the results
     QString name_result = "Result";
     if (is_success) {
       // visualizationImage1D(this->class_segmentationMain1.Image1D_exemplar,
@@ -2427,6 +2453,8 @@ class cellSegmentation : public QObject {
       // this->class_segmentationMain1.dim_Y,
       // this->class_segmentationMain1.dim_Z, 3,
       // _V3DPluginCallback2_currentCallback, "Exemplar");
+
+      // visualization of result
       visualizationImage1D(
           this->class_segmentationMain1.Image1D_segmentationResult,
           this->class_segmentationMain1.dim_X,
@@ -2537,6 +2565,9 @@ class cellSegmentation : public QObject {
     }
   }
 
+  /**
+   * @brief visualization of the image
+   */
   void visualizationImage1D(
       unsigned char *Image1D_input, V3DLONG dim_X, V3DLONG dim_Y, V3DLONG dim_Z,
       int dim_C, V3DPluginCallback2 &_V3DPluginCallback2_currentCallback,
