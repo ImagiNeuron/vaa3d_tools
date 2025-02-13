@@ -349,7 +349,7 @@ class cellSegmentation : public QObject {
         this->categorizeVoxelsByValue();
 
         // apply the median filter as preprocessing
-        // this->filter_Median(3);
+        this->filter_Median(3);
 
         // set parameters that contorl the segmentation
         this->threshold_deltaShapeStat = _threshold_deltaShapeStat;
@@ -1478,7 +1478,8 @@ class cellSegmentation : public QObject {
         }
       }
       for (int i = 0; i < count_label; i++) {
-        if (sums_mass[i] > 0) {
+        if ((sums_mass[i] > 0) && ((possVct_resultWithEmpty[i].size() >
+                                    default_threshold_regionSize))) {
           possVct_result.push_back(possVct_resultWithEmpty[i]);
           poss_center.push_back(class_segmentationMain::coordinate2Index(
               mean_center[i].x + min_X, mean_center[i].y + min_Y,
@@ -1780,67 +1781,69 @@ class cellSegmentation : public QObject {
 #pragma endregion
 
 #pragma region "smoothing and filtering"
-    void filter_Median(V3DLONG _count_medianFilterRadius) {
-      if (_count_medianFilterRadius < 1) {
-        return;
-      }
-      unsigned char *arr;
-      int ii, jj;
-      int size = (2 * _count_medianFilterRadius + 1) *
-                 (2 * _count_medianFilterRadius + 1) *
-                 (2 * _count_medianFilterRadius + 1);
-      arr = new unsigned char[size];
+    void filter_Median(V3DLONG radius) {
+      if (radius < 1) return;
+
+      // Allocate a temporary output buffer.
       unsigned char *Image1D_output = memory_allocate_uchar1D(this->size_page);
+
+      // Process each slice.
       for (V3DLONG iz = 0; iz < this->dim_Z; iz++) {
-        cout << "\r median filter, " << (double)(iz + 1) * 100 / this->dim_Z
+        // Print progress.
+        cout << "\r median filter, " << (double)(iz + 1) * 100.0 / this->dim_Z
              << "% completed;" << flush;
-        V3DLONG offsetk = iz * this->offset_Z;
+
+        V3DLONG offsetZ = iz * this->offset_Z;
         for (V3DLONG iy = 0; iy < this->dim_Y; iy++) {
-          V3DLONG offsetj = iy * this->offset_Y;
+          V3DLONG offsetY = iy * this->offset_Y;
           for (V3DLONG ix = 0; ix < this->dim_X; ix++) {
-            V3DLONG xb = ix - _count_medianFilterRadius;
-            if (xb < 0) xb = 0;
-            V3DLONG xe = ix + _count_medianFilterRadius;
-            if (xe >= this->dim_X - 1) xe = this->dim_X - 1;
-            V3DLONG yb = iy - _count_medianFilterRadius;
-            if (yb < 0) yb = 0;
-            V3DLONG ye = iy + _count_medianFilterRadius;
-            if (ye >= this->dim_Y - 1) ye = this->dim_Y - 1;
-            V3DLONG zb = iz - _count_medianFilterRadius;
-            if (zb < 0) zb = 0;
-            V3DLONG ze = iz + _count_medianFilterRadius;
-            if (ze >= this->dim_Z - 1) ze = this->dim_Z - 1;
-            ii = 0;
+            // Compute window bounds (clamped to image boundaries)
+            V3DLONG xb = (ix >= radius) ? ix - radius : 0;
+            V3DLONG xe =
+                (ix + radius < this->dim_X) ? ix + radius : this->dim_X - 1;
+            V3DLONG yb = (iy >= radius) ? iy - radius : 0;
+            V3DLONG ye =
+                (iy + radius < this->dim_Y) ? iy + radius : this->dim_Y - 1;
+            V3DLONG zb = (iz >= radius) ? iz - radius : 0;
+            V3DLONG ze =
+                (iz + radius < this->dim_Z) ? iz + radius : this->dim_Z - 1;
+
+            // Build a histogram of the intensities in the current window.
+            int hist[256] = {0};
+            int count = 0;
             for (V3DLONG k = zb; k <= ze; k++) {
-              V3DLONG offsetkl = k * this->offset_Z;
+              V3DLONG offsetK = k * this->offset_Z;
               for (V3DLONG j = yb; j <= ye; j++) {
-                V3DLONG offsetjl = j * this->offset_Y;
+                V3DLONG offsetJ = j * this->offset_Y;
                 for (V3DLONG i = xb; i <= xe; i++) {
-                  unsigned char dataval =
-                      this->Image1D_page[offsetkl + offsetjl + i];
-                  arr[ii] = dataval;
-                  if (ii > 0) {
-                    jj = ii;
-                    while (jj > 0 && arr[jj - 1] > arr[jj]) {
-                      unsigned char tmp = arr[jj];
-                      arr[jj] = arr[jj - 1];
-                      arr[jj - 1] = tmp;
-                      jj--;
-                    }
-                  }
-                  ii++;
+                  unsigned char val = this->Image1D_page[offsetK + offsetJ + i];
+                  hist[val]++;
+                  count++;
                 }
               }
             }
-            V3DLONG index_pim = offsetk + offsetj + ix;
-            Image1D_output[index_pim] = arr[int(0.5 * ii) + 1];
+
+            // Find the median value by accumulating histogram counts.
+            int mid = count / 2;
+            int sum = 0, median = 0;
+            for (int v = 0; v < 256; v++) {
+              sum += hist[v];
+              if (sum > mid) {
+                median = v;
+                break;
+              }
+            }
+
+            // Set the output voxel.
+            Image1D_output[offsetZ + offsetY + ix] = (unsigned char)median;
           }
         }
       }
-      for (V3DLONG i = 0; i < this->size_page; i++) {
-        this->Image1D_page[i] = Image1D_output[i];
-      }
-      delete[] arr;
+
+      // Copy the filtered result back to the main image array.
+      memcpy(this->Image1D_page, Image1D_output,
+             this->size_page * sizeof(unsigned char));
+      memory_free_uchar1D(Image1D_output);
     }
 
     static void smooth_GVFkernal(double ***Image3D_input,
@@ -2527,6 +2530,35 @@ class cellSegmentation : public QObject {
                      << endl;
       }
       ofstream_log.close();
+
+      // new code for saving a binary TIFF
+      V3DLONG size_page = this->class_segmentationMain1.dim_X *
+                          this->class_segmentationMain1.dim_Y *
+                          this->class_segmentationMain1.dim_Z;
+      unsigned char *binarySegImage = new unsigned char[size_page];
+      memset(binarySegImage, 0,
+             size_page);  // Initialize to background (black)
+      for (const auto &region :
+           this->class_segmentationMain1.possVct_segmentationResult) {
+        for (V3DLONG idx : region) {
+          binarySegImage[idx] = 255;  // Set somas to white
+        }
+      }
+
+      QString savePath = QFileDialog::getSaveFileName(
+          _QWidget_parent, "Save binary segmented image", "",
+          "TIFF Files (*.tiff *.tif)");
+      if (!savePath.isEmpty()) {
+        V3DLONG outSZ[4] = {this->class_segmentationMain1.dim_X,
+                            this->class_segmentationMain1.dim_Y,
+                            this->class_segmentationMain1.dim_Z, 1};
+        simple_saveimage_wrapper(_V3DPluginCallback2_currentCallback,
+                                 savePath.toStdString().c_str(), binarySegImage,
+                                 outSZ, 1);
+        v3d_msg("Binary segmented image saved.");
+      }
+      delete[] binarySegImage;
+
       return true;
     } else {
       v3dhandleList v3dhandleList_current =
