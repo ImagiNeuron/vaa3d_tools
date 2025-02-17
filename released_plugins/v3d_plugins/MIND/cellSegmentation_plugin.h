@@ -65,6 +65,8 @@ enum enum_shape_t { sphere, cube };
 class dialogRun : public QDialog {
   Q_OBJECT
  public:
+  QComboBox *QComboBox_mode_selection;  // new combo box for mode selection
+  int segmentationMode;  // 1: iterative, 2: global Otsu, 3: local Otsu
   dialogRun(V3DPluginCallback2 &V3DPluginCallback2_currentCallback,
             QWidget *QWidget_parent, int int_channelDim) {
     // channel
@@ -142,6 +144,21 @@ class dialogRun : public QDialog {
                                       4, 1, 1);
     QGroupBox_shape_main->setLayout(QGridLayout_shape_main);
 
+    // Create a new group box for soma segmentation mode
+    QGroupBox *QGroupBox_segmentationMode =
+        new QGroupBox("Soma Segmentation Mode", this);
+    QHBoxLayout *layout_segmentationMode = new QHBoxLayout();
+    // Create and populate the dropdown
+    QComboBox_mode_selection = new QComboBox(this);
+    QComboBox_mode_selection->addItem("Iterative Threshold");
+    QComboBox_mode_selection->addItem("Global Otsu");
+    QComboBox_mode_selection->addItem("Local Otsu");
+    // (Optional) add a label if desired:
+    layout_segmentationMode->addWidget(new QLabel("Mode:", this));
+    layout_segmentationMode->addWidget(QComboBox_mode_selection);
+    // Set the layout for this section
+    QGroupBox_segmentationMode->setLayout(layout_segmentationMode);
+
     // control
     QPushButton *QPushButton_control_start =
         new QPushButton(QObject::tr("Run"));
@@ -158,6 +175,7 @@ class dialogRun : public QDialog {
     QGridLayout_main->addWidget(QGroupBox_channel_main);
     QGridLayout_main->addWidget(QGroupBox_shape_main);
     QGridLayout_main->addWidget(QGroupBox_exemplar_main);
+    QGridLayout_main->addWidget(QGroupBox_segmentationMode);
     QGridLayout_main->addWidget(QWidget_control_bar);
     setLayout(QGridLayout_main);
     setWindowTitle(QString("Soma Segmentation"));
@@ -205,6 +223,9 @@ class dialogRun : public QDialog {
         this->QLineEdit_exemplar_maxMovement1->text().toUInt();
     exemplar_maxMovement2 =
         this->QLineEdit_exemplar_maxMovement2->text().toUInt();
+    // retrieve the segmentation mode:
+    segmentationMode = QComboBox_mode_selection->currentIndex() + 1;
+
     if (this->QRadioButton_shape_sphere->isChecked()) {
       this->shape_type_selection = sphere;
     } else if (this->QRadioButton_shape_cube->isChecked()) {
@@ -281,6 +302,9 @@ class cellSegmentation : public QObject {
 
     LandmarkList LandmarkList_segmentationResult;
     vector<V3DLONG> poss_segmentationResultCenter;
+
+    // segmentation mode
+    int segmentationMode;  // 1: iterative, 2: global Otsu, 3: local Otsu
 // vector<V3DLONG> poss_segmentationResultCenterMerged;
 #pragma endregion
     class_segmentationMain() { is_initialized = false; }
@@ -297,7 +321,7 @@ class cellSegmentation : public QObject {
                      double _multiplier_thresholdRegionSize,
                      double _multiplier_uThresholdRegionSize,
                      QString _name_currentWindow, V3DLONG _maxMovement1,
-                     V3DLONG _maxMovement2) {
+                     V3DLONG _maxMovement2, int mode = 1) {
       // if (!this->is_initialized) // Temporally solution for the "parameter
       // window not popped up" problem;
       {
@@ -311,6 +335,7 @@ class cellSegmentation : public QObject {
         this->offset_channel = (idx_channel - 1) * size_page;
         this->offset_Z = dim_X * dim_Y;
         this->offset_Y = dim_X;
+        segmentationMode = mode;  // set the segmentation mode (1, 2, or 3)
 
         // allocate memory to store segmentation results
         this->Image1D_page = memory_allocate_uchar1D(this->size_page);
@@ -405,60 +430,91 @@ class cellSegmentation : public QObject {
         // and the distance from the center of mass / marker. The final flooded
         // region is the one that is closest to the center of mass of the
         // original cell
-        for (idx_step = 0; idx_step < count_step; idx_step++) {
-          // the trehsold on voxel values is decreasing each iteration -
-          // allowing more voxels to be included as possibilities in flooding
-          // decreases from value at the label to 25
-          V3DLONG threshold_exemplarRegion = marker_intensity - idx_step;
+        // Depending on the segmentation mode, choose the threshold:
+        if (segmentationMode == 1) {
+          for (idx_step = 0; idx_step < count_step; idx_step++) {
+            // the trehsold on voxel values is decreasing each iteration -
+            // allowing more voxels to be included as possibilities in flooding
+            // decreases from value at the label to 25
+            V3DLONG threshold_exemplarRegion = marker_intensity - idx_step;
 
-          // region grow on this exemplar region and mark result as flooded
-          poss_exemplarRegionNew =
-              this->regionGrowOnPos(pos_exemplar, threshold_exemplarRegion, INF,
-                                    this->size_page / 1000, this->Image1D_mask);
-          this->poss2Image1D(poss_exemplarRegionNew, this->Image1D_mask,
-                             const_max_voxelValue);
+            // region grow on this exemplar region and mark result as flooded
+            poss_exemplarRegionNew = this->regionGrowOnPos(
+                pos_exemplar, threshold_exemplarRegion, INF,
+                this->size_page / 1000, this->Image1D_mask);
+            this->poss2Image1D(poss_exemplarRegionNew, this->Image1D_mask,
+                               const_max_voxelValue);
 
-          // if the region is too small, break. No longer necessary
-          // if (poss_exemplarRegionNew.size() < default_threshold_regionSize) {
-          //   break;
-          // }
+            // if the region is too small, break. No longer necessary
+            // if (poss_exemplarRegionNew.size() < default_threshold_regionSize)
+            // {
+            //   break;
+            // }
 
-          // make sure region has not moved too far awar from marker or center
-          // of mass
-          pos_massCenterNew = this->getCenterByMass(poss_exemplarRegionNew);
-          double value_centerMovement1 =
-              this->getEuclideanDistance2(pos_massCenterOld, pos_massCenterNew);
+            // make sure region has not moved too far awar from marker or center
+            // of mass
+            pos_massCenterNew = this->getCenterByMass(poss_exemplarRegionNew);
+            double value_centerMovement1 = this->getEuclideanDistance2(
+                pos_massCenterOld, pos_massCenterNew);
 
+            value_centerMovement2 =
+                this->getEuclideanDistance2(pos_exemplar, pos_massCenterNew);
+
+            if (value_centerMovement1 > max_movment1) {
+              printf(
+                  "final threshold: %d, for marker number %d (moved too far "
+                  "from "
+                  "center of mass)\n",
+                  threshold_exemplarRegion, idx_exemplar);
+              break;
+            }
+
+            if (value_centerMovement2 > max_movment2) {
+              printf(
+                  "final threshold: %d, for marker number (moved too far from "
+                  "marker) %d\n",
+                  threshold_exemplarRegion, idx_exemplar);
+              break;
+            }
+            // update the segmentations
+            pos_massCenterOld = pos_massCenterNew;
+            poss_exemplarRegionOld = poss_exemplarRegionNew;
+          }
+        } else if (segmentationMode == 2) {
+          // Use a global Otsu threshold computed over the entire image:
+          V3DLONG threshold_exemplarRegion = globalOtsuThreshold();
+          printf("Global Otsu threshold computed: %d\n",
+                 threshold_exemplarRegion);
+          poss_exemplarRegionOld =
+              regionGrowOnPos(pos_exemplar, threshold_exemplarRegion, INF,
+                              size_page / 1000, Image1D_mask);
+          pos_massCenterOld = getCenterByMass(poss_exemplarRegionOld);
           value_centerMovement2 =
-              this->getEuclideanDistance2(pos_exemplar, pos_massCenterNew);
-
-          if (value_centerMovement1 > max_movment1) {
-            printf(
-                "final threshold: %d, for marker number %d (moved too far from "
-                "center of mass)\n",
-                threshold_exemplarRegion, idx_exemplar);
-            break;
-          }
-
-          if (value_centerMovement2 > max_movment2) {
-            printf(
-                "final threshold: %d, for marker number (moved too far from "
-                "marker) %d\n",
-                threshold_exemplarRegion, idx_exemplar);
-            break;
-          }
-          // update the segmentations
-          pos_massCenterOld = pos_massCenterNew;
-          poss_exemplarRegionOld = poss_exemplarRegionNew;
+              this->getEuclideanDistance2(pos_exemplar, pos_massCenterOld);
+        } else if (segmentationMode == 3) {
+          // Use a local Otsu threshold computed from a 20-voxel radius region
+          // around the marker
+          V3DLONG threshold_exemplarRegion =
+              localOtsuThreshold(pos_exemplar, 20);
+          vector<V3DLONG> xyz_exemplar = this->index2Coordinate(pos_exemplar);
+          printf(
+              "Local Otsu threshold computed at landmark (%ld, %ld, %ld): %d\n",
+              xyz_exemplar[0], xyz_exemplar[1], xyz_exemplar[2],
+              threshold_exemplarRegion);
+          poss_exemplarRegionOld =
+              regionGrowOnPos(pos_exemplar, threshold_exemplarRegion, INF,
+                              size_page / 1000, Image1D_mask);
+          pos_massCenterOld = getCenterByMass(poss_exemplarRegionOld);
+          value_centerMovement2 =
+              this->getEuclideanDistance2(pos_exemplar, pos_massCenterOld);
         }
-
         // no need to attempt a second time
 
         // heuristics to remove floodings that are bad, as well as bad markers
 
         // initial threshold didn't lead to a grown region. This check is not
         // necessary without too small region check
-        if (idx_step < 1) {
+        if (segmentationMode == 1 && idx_step < 1) {
           printf("Marker number %d failed - index step did not change%d\n",
                  idx_exemplar);
           continue;
@@ -503,7 +559,8 @@ class cellSegmentation : public QObject {
                 xyz_exemplarRegionCenter[2], radius_exemplarRegion);
         if (valuesVct_shapeStatExemplarRegion.empty()) {
           printf(
-              "Marker number %d failed - valuesVct_shapeStatExemplarRegion was "
+              "Marker number %d failed - valuesVct_shapeStatExemplarRegion "
+              "was "
               "empty\n",
               idx_exemplar);
           continue;
@@ -553,7 +610,8 @@ class cellSegmentation : public QObject {
 
       // code that adds further markers and segmentations
 
-      // for (V3DLONG idx_exemplar=0;idx_exemplar<count_exemplar;idx_exemplar++)
+      // for (V3DLONG
+      // idx_exemplar=0;idx_exemplar<count_exemplar;idx_exemplar++)
       // {
       // 	memset(masks_page[idx_exemplar], const_max_voxelValue,
       // this->size_page); 	for (V3DLONG i=0;i<this->size_page;i++)
@@ -622,8 +680,8 @@ class cellSegmentation : public QObject {
       // {continue;} 			V3DLONG pos_center =
       // this->getCenterByMass(poss_region); 			vector<V3DLONG>
       // xyz_center = this->index2Coordinate(pos_center);
-      // V3DLONG x = V3DLONG(xyz_center[0]); V3DLONG y = V3DLONG(xyz_center[1]);
-      // V3DLONG z = V3DLONG(xyz_center[2]);
+      // V3DLONG x = V3DLONG(xyz_center[0]); V3DLONG y =
+      // V3DLONG(xyz_center[1]); V3DLONG z = V3DLONG(xyz_center[2]);
       // vector<vector<double> > valuesVct_regionShapeStat =
       // this->getShapeStat(x, y, z, size_radius);
       // //consisted of 3 vectors with length 4; 			if
@@ -640,8 +698,8 @@ class cellSegmentation : public QObject {
       // 			vector<double> values_PC1 =
       // valuesVct_regionShapeStat[0]; vector<double> values_PC2 =
       // valuesVct_regionShapeStat[1]; vector<double> values_PC3 =
-      // valuesVct_regionShapeStat[2]; 			bool is_passedShapeTest
-      // = true; 			for (int m=0; m<4; m++)
+      // valuesVct_regionShapeStat[2]; 			bool
+      // is_passedShapeTest = true; 			for (int m=0; m<4; m++)
       // 			{
       // 				double value_anisotropy =
       // valueVctVct_exemplarShapeStat[idx_exemplarMapped][0][m];
@@ -715,8 +773,8 @@ class cellSegmentation : public QObject {
 #pragma endregion
 
     /**
-     * @brief Function to indentify voxels that can be potential seeds for cells
-     * based on their intensity
+     * @brief Function to indentify voxels that can be potential seeds for
+     * cells based on their intensity
      */
 #pragma region "regionGrow"
     void categorizeVoxelsByValue() {
@@ -1780,6 +1838,88 @@ class cellSegmentation : public QObject {
     }
 #pragma endregion
 
+#pragma region "otsu thresholding"
+    // Global Otsu threshold: use the histogram of the entire image
+    V3DLONG globalOtsuThreshold() {
+      int hist[256] = {0};
+      for (V3DLONG i = 0; i < size_page; i++) {
+        hist[Image1D_page[i]]++;
+      }
+      int total = size_page;
+      double sum = 0;
+      for (int t = 0; t < 256; t++) {
+        sum += t * hist[t];
+      }
+      double sumB = 0;
+      int wB = 0;
+      double varMax = 0;
+      int threshold = 0;
+      for (int t = 0; t < 256; t++) {
+        wB += hist[t];
+        if (wB == 0) continue;
+        int wF = total - wB;
+        if (wF == 0) break;
+        sumB += t * hist[t];
+        double mB = sumB / wB;
+        double mF = (sum - sumB) / wF;
+        double varBetween = (double)wB * wF * (mB - mF) * (mB - mF);
+        if (varBetween > varMax) {
+          varMax = varBetween;
+          threshold = t;
+        }
+      }
+      return threshold;
+    }
+
+    // Local Otsu threshold: compute a threshold using only voxels within a
+    // cubic region of the given radius around a given landmark.
+    V3DLONG localOtsuThreshold(V3DLONG landmarkIndex, V3DLONG radius) {
+      vector<V3DLONG> coord = index2Coordinate(landmarkIndex);
+      V3DLONG cx = coord[0], cy = coord[1], cz = coord[2];
+      int hist[256] = {0};
+      V3DLONG x_start = max((V3DLONG)0, cx - radius);
+      V3DLONG x_end = min(dim_X - 1, cx + radius);
+      V3DLONG y_start = max((V3DLONG)0, cy - radius);
+      V3DLONG y_end = min(dim_Y - 1, cy + radius);
+      V3DLONG z_start = max((V3DLONG)0, cz - radius);
+      V3DLONG z_end = min(dim_Z - 1, cz + radius);
+      int count_pixels = 0;
+      for (V3DLONG z = z_start; z <= z_end; z++) {
+        for (V3DLONG y = y_start; y <= y_end; y++) {
+          for (V3DLONG x = x_start; x <= x_end; x++) {
+            V3DLONG idx = coordinate2Index(x, y, z);
+            hist[Image1D_page[idx]]++;
+            count_pixels++;
+          }
+        }
+      }
+      if (count_pixels == 0) return default_threshold_global;  // fallback value
+      double sum = 0;
+      for (int t = 0; t < 256; t++) {
+        sum += t * hist[t];
+      }
+      double sumB = 0;
+      int wB = 0;
+      double varMax = 0;
+      int threshold = 0;
+      for (int t = 0; t < 256; t++) {
+        wB += hist[t];
+        if (wB == 0) continue;
+        int wF = count_pixels - wB;
+        if (wF == 0) break;
+        sumB += t * hist[t];
+        double mB = sumB / wB;
+        double mF = (sum - sumB) / wF;
+        double varBetween = (double)wB * wF * (mB - mF) * (mB - mF);
+        if (varBetween > varMax) {
+          varMax = varBetween;
+          threshold = t;
+        }
+      }
+      return threshold;
+    }
+#pragma endregion
+
 #pragma region "smoothing and filtering"
     void filter_Median(V3DLONG radius) {
       if (radius < 1) return;
@@ -1931,8 +2071,8 @@ class cellSegmentation : public QObject {
       for (int i = 1; i <= 4; i++) {
         rr = 2 + size_step * (i - 1);
         // bool is_valid = false;
-        /*if(getPCA(this->Image3D_page, this->dim_X, this->dim_Y, this->dim_Z, x
-        , y, z, rr, rr, rr,value_PC1, value_PC2, value_PC3, this->idx_shape,
+        /*if(getPCA(this->Image3D_page, this->dim_X, this->dim_Y, this->dim_Z,
+        x , y, z, rr, rr, rr,value_PC1, value_PC2, value_PC3, this->idx_shape,
         false))
         {
                 is_valid = true;
@@ -1950,10 +2090,11 @@ class cellSegmentation : public QObject {
       /*double value_Lscore = exp( -(
          (value_PC1-value_PC2)*(value_PC1-value_PC2) +
          (value_PC2-value_PC3)*(value_PC2-value_PC3) +
-         (value_PC1-value_PC3)*(value_PC1-value_PC3) ) / (value_PC1*value_PC1 +
-         value_PC2*value_PC2 + value_PC3*value_PC3) );*/
+         (value_PC1-value_PC3)*(value_PC1-value_PC3) ) / (value_PC1*value_PC1
+         + value_PC2*value_PC2 + value_PC3*value_PC3) );*/
       /*double value_linear =
-      (value_PC1-value_PC2)/(value_PC1+value_PC2+value_PC3); double value_planar
+      (value_PC1-value_PC2)/(value_PC1+value_PC2+value_PC3); double
+      value_planar
       = 2.0*(value_PC2-value_PC3)/(value_PC1+value_PC2+value_PC3); double
       value_sphere = 3.0*value_PC3/(value_PC1+value_PC2+value_PC3);*/
       // vct_result.push_back(value_Lscore);
@@ -1972,8 +2113,8 @@ class cellSegmentation : public QObject {
         T ***img3d, V3DLONG sx, V3DLONG sy, V3DLONG sz, V3DLONG x0, V3DLONG y0,
         V3DLONG z0, V3DLONG rx, V3DLONG ry, V3DLONG rz, double &pc1,
         double &pc2, double &pc3, int wintype = 0,
-        bool b_disp_CoM_etc =
-            true,  // b_disp_CoM_etc is the display option for center of mass )
+        bool b_disp_CoM_etc = true,      // b_disp_CoM_etc is the display option
+                                         // for center of mass )
         bool b_normalize_score = false)  // if the score if normalized with
                                          // respect to the window size
     {
@@ -1993,8 +2134,8 @@ class cellSegmentation : public QObject {
         T ***img3d, V3DLONG sx, V3DLONG sy, V3DLONG sz, V3DLONG x0, V3DLONG y0,
         V3DLONG z0, V3DLONG rx, V3DLONG ry, V3DLONG rz, double &pc1,
         double &pc2, double &pc3,
-        bool b_disp_CoM_etc =
-            true,  // b_disp_CoM_etc is the display option for center of mass )
+        bool b_disp_CoM_etc = true,  // b_disp_CoM_etc is the display option
+                                     // for center of mass )
         bool b_normalize_score = false) {
       if (!img3d || sx <= 0 || sy <= 0 || sz <= 0 || x0 < 0 || x0 >= sx ||
           y0 < 0 || y0 >= sy || z0 < 0 || z0 >= sz || rx < 0 || ry < 0 ||
@@ -2084,8 +2225,9 @@ class cellSegmentation : public QObject {
         // }
 
       } else {
-        // printf("Sum of window pixels equals or is smaller than 0. The window
-        // is not valid or some other problems in the data. Do nothing.\n");
+        // printf("Sum of window pixels equals or is smaller than 0. The
+        // window is not valid or some other problems in the data. Do
+        // nothing.\n");
         return false;
       }
 
@@ -2412,8 +2554,8 @@ class cellSegmentation : public QObject {
                          dim_C);
     bool is_success = false;
 
-    /*if (this->class_segmentationMain1.is_initialized) //temporary solution for
-    the "parameter window not popped up" problem;
+    /*if (this->class_segmentationMain1.is_initialized) //temporary solution
+    for the "parameter window not popped up" problem;
     {
             is_success =
     this->class_segmentationMain1.control_run(this->class_segmentationMain1.Image1D_page,
@@ -2440,13 +2582,17 @@ class cellSegmentation : public QObject {
         idx_shape = 0;
       }
       // call control run method to do segmentation
+      // In interface_run (or wherever control_run is called), pass the
+      // selected mode: (Assume dialogRun1.segmentationMode is set from the
+      // combo box.)
       is_success = this->class_segmentationMain1.control_run(
           Image1D_current, dim_X, dim_Y, dim_Z,
           dialogRun1.channel_idx_selection, LandmarkList_current, idx_shape,
           dialogRun1.shape_para_delta,
           dialogRun1.shape_multiplier_thresholdRegionSize,
           dialogRun1.shape_multiplier_uThresholdRegionSize, name_currentWindow,
-          dialogRun1.exemplar_maxMovement1, dialogRun1.exemplar_maxMovement2);
+          dialogRun1.exemplar_maxMovement1, dialogRun1.exemplar_maxMovement2,
+          dialogRun1.segmentationMode);  // pass mode 1, 2, or 3
     }
     // if the segmentation is successful, display the results
     QString name_result = "Result";
