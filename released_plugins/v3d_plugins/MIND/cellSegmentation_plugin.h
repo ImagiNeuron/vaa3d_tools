@@ -27,13 +27,12 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/opencv.hpp>
 #include <sstream>
 #include <string>
 #include <vector>
-
-#include <opencv2/opencv.hpp>
-#include <opencv2/imgproc/imgproc.hpp>
-#include <opencv2/highgui/highgui.hpp>
 
 #include "cellSegmentation_plugin.h"
 #include "compute_win_pca.h"
@@ -1843,7 +1842,9 @@ class cellSegmentation : public QObject {
 #pragma endregion
 
 #pragma region "otsu thresholding"
-    // Global Otsu threshold: use the histogram of the entire image
+    /**
+     * @brief Global Otsu threshold: use the histogram of the entire image
+     */
     V3DLONG globalOtsuThreshold() {
       int hist[256] = {0};
       for (V3DLONG i = 0; i < size_page; i++) {
@@ -1875,8 +1876,10 @@ class cellSegmentation : public QObject {
       return threshold;
     }
 
-    // Local Otsu threshold: compute a threshold using only voxels within a
-    // cubic region of the given radius around a given landmark.
+    /**
+     * @brief Local Otsu threshold: compute a threshold using only voxels within
+     * a cubic region of the given radius around a given landmark.
+     */
     V3DLONG localOtsuThreshold(V3DLONG landmarkIndex, V3DLONG radius) {
       vector<V3DLONG> coord = index2Coordinate(landmarkIndex);
       V3DLONG cx = coord[0], cy = coord[1], cz = coord[2];
@@ -1925,6 +1928,9 @@ class cellSegmentation : public QObject {
 #pragma endregion
 
 #pragma region "smoothing and filtering"
+    /**
+     * @brief Apply a median filter to the image with a given radius.
+     */
     void filter_Median(V3DLONG radius) {
       if (radius < 1) return;
 
@@ -2608,48 +2614,50 @@ class cellSegmentation : public QObject {
       // _V3DPluginCallback2_currentCallback, "Exemplar");
 
       // visualization of result
-    //   visualizationImage1D(
-    //       this->class_segmentationMain1.Image1D_segmentationResult,
-    //       this->class_segmentationMain1.dim_X,
-    //       this->class_segmentationMain1.dim_Y,
-    //       this->class_segmentationMain1.dim_Z, 3,
-    //       _V3DPluginCallback2_currentCallback, name_result);
-    //   // visualizationImage1D(this->class_segmentationMain1.Image1D_mask,
-    //   // this->class_segmentationMain1.dim_X,
-    //   // this->class_segmentationMain1.dim_Y,
-    //   // this->class_segmentationMain1.dim_Z, 1,
-    //   // _V3DPluginCallback2_currentCallback, "Mask");
-    //   v3dhandleList v3dhandleList_current =
-    //       _V3DPluginCallback2_currentCallback.getImageWindowList();
-    //   V3DLONG count_v3dhandle = v3dhandleList_current.size();
+      //   visualizationImage1D(
+      //       this->class_segmentationMain1.Image1D_segmentationResult,
+      //       this->class_segmentationMain1.dim_X,
+      //       this->class_segmentationMain1.dim_Y,
+      //       this->class_segmentationMain1.dim_Z, 3,
+      //       _V3DPluginCallback2_currentCallback, name_result);
+      //   // visualizationImage1D(this->class_segmentationMain1.Image1D_mask,
+      //   // this->class_segmentationMain1.dim_X,
+      //   // this->class_segmentationMain1.dim_Y,
+      //   // this->class_segmentationMain1.dim_Z, 1,
+      //   // _V3DPluginCallback2_currentCallback, "Mask");
+      //   v3dhandleList v3dhandleList_current =
+      //       _V3DPluginCallback2_currentCallback.getImageWindowList();
+      //   V3DLONG count_v3dhandle = v3dhandleList_current.size();
 
-    //   // QString name_exemplar = "Exemplar";
-    //   for (V3DLONG i = 0; i < count_v3dhandle; i++) {
-    //     if (_V3DPluginCallback2_currentCallback
-    //             .getImageName(v3dhandleList_current[i])
-    //             .contains(this->class_segmentationMain1.name_currentWindow)) {
-    //       _V3DPluginCallback2_currentCallback.setLandmark(
-    //           v3dhandleList_current[i],
-    //           this->class_segmentationMain1.LandmarkList_segmentationResult);
-    //       _V3DPluginCallback2_currentCallback.updateImageWindow(
-    //           v3dhandleList_current[i]);
-    //       break;
-    //     }
-    //     // if
-    //     // (_V3DPluginCallback2_currentCallback.getImageName(v3dhandleList_current[i]).contains(name_result))
-    //     //{
-    //     //_V3DPluginCallback2_currentCallback.setLandmark(v3dhandleList_current[i],
-    //     // this->class_segmentationMain1.LandmarkList_exemplar);
-    //     //_V3DPluginCallback2_currentCallback.updateImageWindow(v3dhandleList_current[i]);
-    //     //}
-    //     /*if
-    //     (_V3DPluginCallback2_currentCallback.getImageName(v3dhandleList_current[i]).contains(name_exemplar))
-    //     {
-    //             _V3DPluginCallback2_currentCallback.setLandmark(v3dhandleList_current[i],
-    //     this->class_segmentationMain1.LandmarkList_exemplar);
-    //             _V3DPluginCallback2_currentCallback.updateImageWindow(v3dhandleList_current[i]);
-    //     }*/
-    //   }
+      //   // QString name_exemplar = "Exemplar";
+      //   for (V3DLONG i = 0; i < count_v3dhandle; i++) {
+      //     if (_V3DPluginCallback2_currentCallback
+      //             .getImageName(v3dhandleList_current[i])
+      //             .contains(this->class_segmentationMain1.name_currentWindow))
+      //             {
+      //       _V3DPluginCallback2_currentCallback.setLandmark(
+      //           v3dhandleList_current[i],
+      //           this->class_segmentationMain1.LandmarkList_segmentationResult);
+      //       _V3DPluginCallback2_currentCallback.updateImageWindow(
+      //           v3dhandleList_current[i]);
+      //       break;
+      //     }
+      //     // if
+      //     //
+      //     (_V3DPluginCallback2_currentCallback.getImageName(v3dhandleList_current[i]).contains(name_result))
+      //     //{
+      //     //_V3DPluginCallback2_currentCallback.setLandmark(v3dhandleList_current[i],
+      //     // this->class_segmentationMain1.LandmarkList_exemplar);
+      //     //_V3DPluginCallback2_currentCallback.updateImageWindow(v3dhandleList_current[i]);
+      //     //}
+      //     /*if
+      //     (_V3DPluginCallback2_currentCallback.getImageName(v3dhandleList_current[i]).contains(name_exemplar))
+      //     {
+      //             _V3DPluginCallback2_currentCallback.setLandmark(v3dhandleList_current[i],
+      //     this->class_segmentationMain1.LandmarkList_exemplar);
+      //             _V3DPluginCallback2_currentCallback.updateImageWindow(v3dhandleList_current[i]);
+      //     }*/
+      //   }
       // temporary solution for Haru's request;
       ofstream ofstream_log;
 
@@ -2697,13 +2705,16 @@ class cellSegmentation : public QObject {
 
       // compute gradient of image
       unsigned char *gradientImage = new unsigned char[size_page];
-      sobel3D(binarySegImage, gradientImage, this->class_segmentationMain1.dim_X,
-              this->class_segmentationMain1.dim_Y, this->class_segmentationMain1.dim_Z);
+      sobel3D(binarySegImage, gradientImage,
+              this->class_segmentationMain1.dim_X,
+              this->class_segmentationMain1.dim_Y,
+              this->class_segmentationMain1.dim_Z);
 
-	  // overlay
-	  overlay2(_V3DPluginCallback2_currentCallback, _QWidget_parent, binarySegImage, gradientImage);
+      // overlay
+      overlay2(_V3DPluginCallback2_currentCallback, _QWidget_parent,
+               binarySegImage, gradientImage);
 
-	  QString savePath = QFileDialog::getSaveFileName(
+      QString savePath = QFileDialog::getSaveFileName(
           _QWidget_parent, "Save binary segmented image", "",
           "TIFF Files (*.tiff *.tif)");
       if (!savePath.isEmpty()) {
@@ -2800,24 +2811,27 @@ class cellSegmentation : public QObject {
   }
 #pragma endregion
 
-  void overlay(V3DPluginCallback2& callback, QWidget* parent, unsigned char* binarySegImage) {
-	v3dhandle curwin = callback.currentImageWindow();
+  void overlay(V3DPluginCallback2 &callback, QWidget *parent,
+               unsigned char *binarySegImage) {
+    v3dhandle curwin = callback.currentImageWindow();
 
-	Image4DSimple* p4DImage = callback.getImage(curwin);
-	unsigned char* data = p4DImage->getRawData();
-	unsigned char* newData = new unsigned char[p4DImage->getTotalBytes() * 2];
+    Image4DSimple *p4DImage = callback.getImage(curwin);
+    unsigned char *data = p4DImage->getRawData();
+    unsigned char *newData = new unsigned char[p4DImage->getTotalBytes() * 2];
 
-	memcpy(newData, data, p4DImage->getTotalBytes());
-	memcpy(newData + p4DImage->getTotalBytes(), binarySegImage, p4DImage->getTotalBytes());
+    memcpy(newData, data, p4DImage->getTotalBytes());
+    memcpy(newData + p4DImage->getTotalBytes(), binarySegImage,
+           p4DImage->getTotalBytes());
 
-	Image4DSimple *newImage = new Image4DSimple;
-	newImage->setData(newData, p4DImage->getXDim(), p4DImage->getYDim(), p4DImage->getZDim(), p4DImage->getCDim() * 2, V3D_UINT8);
+    Image4DSimple *newImage = new Image4DSimple;
+    newImage->setData(newData, p4DImage->getXDim(), p4DImage->getYDim(),
+                      p4DImage->getZDim(), p4DImage->getCDim() * 2, V3D_UINT8);
 
-	callback.setImage(curwin, newImage);
+    callback.setImage(curwin, newImage);
   }
 
-  void overlay2(V3DPluginCallback2 &callback, QWidget *parent, unsigned char *binarySegImage, unsigned char *gradientImage)
-  {
+  void overlay2(V3DPluginCallback2 &callback, QWidget *parent,
+                unsigned char *binarySegImage, unsigned char *gradientImage) {
     v3dhandle curwin = callback.currentImageWindow();
 
     Image4DSimple *p4DImage = callback.getImage(curwin);
@@ -2825,51 +2839,57 @@ class cellSegmentation : public QObject {
     unsigned char *newData = new unsigned char[p4DImage->getTotalBytes() * 3];
 
     memcpy(newData, data, p4DImage->getTotalBytes());
-    memcpy(newData + p4DImage->getTotalBytes(), binarySegImage, p4DImage->getTotalBytes());
-    memcpy(newData + p4DImage->getTotalBytes() * 2, gradientImage, p4DImage->getTotalBytes());
+    memcpy(newData + p4DImage->getTotalBytes(), binarySegImage,
+           p4DImage->getTotalBytes());
+    memcpy(newData + p4DImage->getTotalBytes() * 2, gradientImage,
+           p4DImage->getTotalBytes());
 
     Image4DSimple *newImage = new Image4DSimple;
-    newImage->setData(newData, p4DImage->getXDim(), p4DImage->getYDim(), p4DImage->getZDim(), p4DImage->getCDim() * 3, V3D_UINT8);
+    newImage->setData(newData, p4DImage->getXDim(), p4DImage->getYDim(),
+                      p4DImage->getZDim(), p4DImage->getCDim() * 3, V3D_UINT8);
 
     callback.setImage(curwin, newImage);
   }
-  
-  void sobel3D(unsigned char *data, unsigned char *out, V3DLONG dim_X, V3DLONG dim_Y, V3DLONG dim_Z) {
-      std::vector<cv::Mat> gradX(dim_Z), gradY(dim_Z);
-  
-      // Compute Sobel for x and y for each slice
-      for (int k = 0; k < dim_Z; k++) {
-          cv::Mat slice(dim_Y, dim_X, CV_8U, data + k * dim_X * dim_Y);
-          cv::Mat gx, gy;
-          cv::Sobel(slice, gx, CV_16S, 1, 0, 3);
-          cv::Sobel(slice, gy, CV_16S, 0, 1, 3);
-          gradX[k] = gx.clone();
-          gradY[k] = gy.clone();
-      }
-  
-      // Compute gradient magnitude for each voxel
-      for (int k = 0; k < dim_Z; k++) {
-          for (int j = 0; j < dim_Y; j++) {
-              for (int i = 0; i < dim_X; i++) {
-                  // Get Sobel derivatives in x and y
-                  short sx = gradX[k].at<short>(j, i);
-                  short sy = gradY[k].at<short>(j, i);
-  
-                  // Compute derivative in z using central difference
-                  int idx = k * dim_X * dim_Y + j * dim_X + i;
-                  int center = data[idx];
-                  int prev = (k == 0) ? center : data[(k - 1) * dim_X * dim_Y + j * dim_X + i];
-                  int next = (k == dim_Z - 1) ? center : data[(k + 1) * dim_X * dim_Y + j * dim_X + i];
-                  short sz = static_cast<short>((next - prev) / 2);
-  
-                  // Gradient magnitude (using Euclidean norm)
-                  int mag = static_cast<int>(std::sqrt(sx * sx + sy * sy + sz * sz));
-                  if (mag > 255) mag = 255;
-                  out[idx] = static_cast<unsigned char>(mag);
-              }
-          }
-      }
-  }
 
+  void sobel3D(unsigned char *data, unsigned char *out, V3DLONG dim_X,
+               V3DLONG dim_Y, V3DLONG dim_Z) {
+    std::vector<cv::Mat> gradX(dim_Z), gradY(dim_Z);
+
+    // Compute Sobel for x and y for each slice
+    for (int k = 0; k < dim_Z; k++) {
+      cv::Mat slice(dim_Y, dim_X, CV_8U, data + k * dim_X * dim_Y);
+      cv::Mat gx, gy;
+      cv::Sobel(slice, gx, CV_16S, 1, 0, 3);
+      cv::Sobel(slice, gy, CV_16S, 0, 1, 3);
+      gradX[k] = gx.clone();
+      gradY[k] = gy.clone();
+    }
+
+    // Compute gradient magnitude for each voxel
+    for (int k = 0; k < dim_Z; k++) {
+      for (int j = 0; j < dim_Y; j++) {
+        for (int i = 0; i < dim_X; i++) {
+          // Get Sobel derivatives in x and y
+          short sx = gradX[k].at<short>(j, i);
+          short sy = gradY[k].at<short>(j, i);
+
+          // Compute derivative in z using central difference
+          int idx = k * dim_X * dim_Y + j * dim_X + i;
+          int center = data[idx];
+          int prev =
+              (k == 0) ? center : data[(k - 1) * dim_X * dim_Y + j * dim_X + i];
+          int next = (k == dim_Z - 1)
+                         ? center
+                         : data[(k + 1) * dim_X * dim_Y + j * dim_X + i];
+          short sz = static_cast<short>((next - prev) / 2);
+
+          // Gradient magnitude (using Euclidean norm)
+          int mag = static_cast<int>(std::sqrt(sx * sx + sy * sy + sz * sz));
+          if (mag > 255) mag = 255;
+          out[idx] = static_cast<unsigned char>(mag);
+        }
+      }
+    }
+  }
 };
 #endif
