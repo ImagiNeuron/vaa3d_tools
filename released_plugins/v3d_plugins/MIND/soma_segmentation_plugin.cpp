@@ -30,6 +30,9 @@ void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
 void setRegionOfInterest(V3DPluginCallback2 &callback, v3dhandle &curwin,
                          float x, float y, float z, float radius);
 
+void isotropic_correction_func(V3DPluginCallback2 &callback, QWidget *parent,
+                               input_PARA &PARA, bool bmenu);
+
 /**
  * @brief Menu option under the MIND plugins
  */
