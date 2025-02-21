@@ -16,8 +16,10 @@ INCLUDEPATH += opencv/build/include
 LIBS += -Lopencv/build/x64/mingw/lib/ -lopencv_core4120 -lopencv_imgproc4120 -lopencv_highgui4120
 
 HEADERS	+= soma_segmentation_plugin.h
+HEADERS += ResolutionDialog.h
 HEADERS += cellSegmentation_plugin.h
 SOURCES	+= soma_segmentation_plugin.cpp
+SOURCES += ResolutionDialog.cpp
 SOURCES	+= $$VAA3DPATH/v3d_main/basic_c_fun/v3d_message.cpp
 SOURCES += $$VAA3DPATH/v3d_main/neuron_editing/v_neuronswc.cpp
 SOURCES	+= $$VAA3DPATH/v3d_main/basic_c_fun/basic_surf_objs.cpp
