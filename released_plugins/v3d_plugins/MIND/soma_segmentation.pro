@@ -12,8 +12,8 @@ INCLUDEPATH += $$VAA3DPATH/v3d_main/jba/c++
 INCLUDEPATH += $$VAA3DPATH/v3d_main/common_lib/include
 
 # opencv
-INCLUDEPATH += opencv/build_/include
-LIBS += -Lopencv/build_/x64/mingw/lib/ -lopencv_core4120 -lopencv_imgproc4120 -lopencv_highgui4120
+INCLUDEPATH += opencv/build/include
+LIBS += -Lopencv/build/x64/mingw/lib/ -lopencv_core4120 -lopencv_imgproc4120 -lopencv_highgui4120
 
 HEADERS	+= soma_segmentation_plugin.h
 HEADERS += cellSegmentation_plugin.h
