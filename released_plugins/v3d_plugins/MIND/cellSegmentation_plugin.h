@@ -1,8 +1,8 @@
 /* adapted from cellseg_quickfind - cellSegmentation.cpp
- * 2014-10-12 :by Xiang Li (lindbergh.li@gmail.com);
+ * 2014-10-12: by Xiang Li (lindbergh.li@gmail.com);
  * 2025-02-10: By ImagiNeuron - Thibaut Baguette, Shidan Javaheri, Siger Ma and
- * Athmane Benarous. Performs 3D flood filling on labelled cells
- */
+ * Athmane Benarous. Performs 3D flood filling on marked cells using either
+ * otsu, local otsu or iterative thresholding. */
 
 #ifndef __CELLSEGMENTATION_PLUGIN_H__
 #define __CELLSEGMENTATION_PLUGIN_H__
@@ -56,6 +56,7 @@ const double const_infinitesimal = 0.000000001;
 enum enum_shape_t { sphere, cube };
 #pragma endregion
 
+#pragma region "dialogInitialization"
 /**
  * @class dialogRun
  * @brief Dialog box for the inputs into cell segmentation which include:
@@ -63,8 +64,8 @@ enum enum_shape_t { sphere, cube };
  * - Restrictions on the exemplar labels (max deviations from mass center and
  * marker position)
  * - The shape of the cells being considered
+ * - The type of tresholding to be used (iterative, global Otsu, local Otsu)
  */
-#pragma region "dialogInitialization"
 class dialogRun : public QDialog {
   Q_OBJECT
  public:
@@ -313,10 +314,10 @@ class cellSegmentation : public QObject {
     class_segmentationMain() { is_initialized = false; }
     ~class_segmentationMain() {}
 
+#pragma region "control-run"
     /**
      * @brief - Main function that goes over landmarks and floods them
      */
-#pragma region "control-run"
     bool control_run(unsigned char *_Image1D_original, V3DLONG _dim_X,
                      V3DLONG _dim_Y, V3DLONG _dim_Z, int _idx_channel,
                      LandmarkList _LandmarkList_exemplar, int _idx_shape,
@@ -2477,10 +2478,10 @@ class cellSegmentation : public QObject {
 
   class_segmentationMain class_segmentationMain1;
 
+#pragma region "interface"
   /**
    * @brief main method that is called when the plugin is clicked
    */
-#pragma region "interface"
   bool interface_run(V3DPluginCallback2 &_V3DPluginCallback2_currentCallback,
                      QWidget *_QWidget_parent) {
     // generic checks to make sure that the plugin can run
@@ -2811,6 +2812,10 @@ class cellSegmentation : public QObject {
   }
 #pragma endregion
 
+#pragma region "overlay"
+  /**
+   * @brief overlay the binary segmentation onto the original image
+   */
   void overlay(V3DPluginCallback2 &callback, QWidget *parent,
                unsigned char *binarySegImage) {
     v3dhandle curwin = callback.currentImageWindow();
@@ -2830,6 +2835,10 @@ class cellSegmentation : public QObject {
     callback.setImage(curwin, newImage);
   }
 
+  /**
+   * @brief overlay two images onto the original image. Used to overlay
+   * the segmentation and the gradient image.
+   */
   void overlay2(V3DPluginCallback2 &callback, QWidget *parent,
                 unsigned char *binarySegImage, unsigned char *gradientImage) {
     v3dhandle curwin = callback.currentImageWindow();
@@ -2852,6 +2861,9 @@ class cellSegmentation : public QObject {
     callback.setImage(newwin, newImage);
   }
 
+  /**
+   * @brief Compute 3D Sobel filter
+   */
   void sobel3D(unsigned char *data, unsigned char *out, V3DLONG dim_X,
                V3DLONG dim_Y, V3DLONG dim_Z) {
     std::vector<cv::Mat> gradX(dim_Z), gradY(dim_Z);
@@ -2893,4 +2905,5 @@ class cellSegmentation : public QObject {
     }
   }
 };
+#pragma endregion
 #endif

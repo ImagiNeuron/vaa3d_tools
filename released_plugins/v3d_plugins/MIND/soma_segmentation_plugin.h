@@ -1,7 +1,6 @@
 /* soma_segmentation_plugin.h
- * A plugin for soma segmentation using 3D watershed (Vincent & Soille style).
- *
- * 2024-11-16 : by ImagiNeuron: Shidan Javaheri, Siger Ma, Athmane Benarous and
+ * A plugin for analysis of neuron somas in the brain.
+ * 2024-11-16: by ImagiNeuron: Shidan Javaheri, Siger Ma, Athmane Benarous and
  * Thibaut Baguette
  */
 
@@ -49,40 +48,6 @@ class SomaSegmentation : public QObject, public V3DPluginInterface2_1 {
               V3DPluginArgList &output, V3DPluginCallback2 &callback,
               QWidget *parent);
 };
-
-/***********************************
- * Declaration of Helper Functions
- **********************************/
-
-// Median filter
-void applyMedianFilter(const unsigned char *inputData,
-                       unsigned char *outputData, V3DLONG N, V3DLONG M,
-                       V3DLONG P, int windowSize);
-
-// Gaussian filter
-void applyGaussianFilter(const unsigned char *inputData,
-                         unsigned char *outputData, V3DLONG N, V3DLONG M,
-                         V3DLONG P, float sigma);
-
-// Subvolume extraction
-void extractSubvolume(const unsigned char *inData, unsigned char *outData,
-                      V3DLONG N, V3DLONG M, V3DLONG P, int x1, int x2, int y1,
-                      int y2, int z1, int z2);
-
-// Watershed (Vincent & Soille)
-void applyWatershedVS(const unsigned char *subvol, unsigned short *labelOut,
-                      int sx, int sy, int sz);
-
-// (Minimal) BFS-based 3D distance transform for removing watershed lines
-void dt3d_binary(const float *inData, V3DLONG *pix_index, const V3DLONG *sz,
-                 float threshVal = 0);
-
-// Simple 3D morphological opening (erosion + dilation) with a 3x3x3
-// neighborhood
-static void morphologicalOpen3D(unsigned char *vol, int sx, int sy, int sz);
-
-// Compute Otsu threshold
-static int computeOtsuThreshold(const unsigned char *data, int length);
 
 // Main reconstruction function (invoked from menu or command-line)
 struct input_PARA {
