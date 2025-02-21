@@ -2833,6 +2833,7 @@ class cellSegmentation : public QObject {
   void overlay2(V3DPluginCallback2 &callback, QWidget *parent,
                 unsigned char *binarySegImage, unsigned char *gradientImage) {
     v3dhandle curwin = callback.currentImageWindow();
+    v3dhandle newwin = callback.newImageWindow();
 
     Image4DSimple *p4DImage = callback.getImage(curwin);
     unsigned char *data = p4DImage->getRawData();
@@ -2848,7 +2849,7 @@ class cellSegmentation : public QObject {
     newImage->setData(newData, p4DImage->getXDim(), p4DImage->getYDim(),
                       p4DImage->getZDim(), p4DImage->getCDim() * 3, V3D_UINT8);
 
-    callback.setImage(curwin, newImage);
+    callback.setImage(newwin, newImage);
   }
 
   void sobel3D(unsigned char *data, unsigned char *out, V3DLONG dim_X,
