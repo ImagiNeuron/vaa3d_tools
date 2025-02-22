@@ -13,6 +13,7 @@
 #include <time.h>
 #include <v3d_interface.h>
 
+#include <QCheckBox>
 #include <QComboBox>
 #include <QCommonStyle>
 #include <QGridLayout>
@@ -71,6 +72,10 @@ class dialogRun : public QDialog {
  public:
   QComboBox *QComboBox_mode_selection;  // new combo box for mode selection
   int segmentationMode;  // 1: iterative, 2: global Otsu, 3: local Otsu
+  QCheckBox *QCheckBox_medianFiltering;   // new checkbox for median filtering
+  bool applyMedianFiltering;              // flag read from the checkbox
+  QCheckBox *QCheckBox_markerConstraint;  // new checkbox for marker constraint
+  bool applyMarkerConstraint;             // flag read from the checkbox
   dialogRun(V3DPluginCallback2 &V3DPluginCallback2_currentCallback,
             QWidget *QWidget_parent, int int_channelDim) {
     // channel
@@ -157,9 +162,16 @@ class dialogRun : public QDialog {
     QComboBox_mode_selection->addItem("Iterative Threshold");
     QComboBox_mode_selection->addItem("Global Otsu");
     QComboBox_mode_selection->addItem("Local Otsu");
-    // (Optional) add a label if desired:
     layout_segmentationMode->addWidget(new QLabel("Mode:", this));
     layout_segmentationMode->addWidget(QComboBox_mode_selection);
+    // Add the median filtering checkbox next to segmentation mode
+    QCheckBox_medianFiltering = new QCheckBox("Median Filtering", this);
+    QCheckBox_medianFiltering->setChecked(true);  // default is enabled
+    layout_segmentationMode->addWidget(QCheckBox_medianFiltering);
+    // Add the marker constraint checkbox next to median filtering
+    QCheckBox_markerConstraint = new QCheckBox("Marker Constraint", this);
+    QCheckBox_markerConstraint->setChecked(false);  // default off
+    layout_segmentationMode->addWidget(QCheckBox_markerConstraint);
     // Set the layout for this section
     QGroupBox_segmentationMode->setLayout(layout_segmentationMode);
 
@@ -229,6 +241,10 @@ class dialogRun : public QDialog {
         this->QLineEdit_exemplar_maxMovement2->text().toUInt();
     // retrieve the segmentation mode:
     segmentationMode = QComboBox_mode_selection->currentIndex() + 1;
+    // retrieve the median filtering flag
+    applyMedianFiltering = QCheckBox_medianFiltering->isChecked();
+    // retrieve the marker constraint flag
+    applyMarkerConstraint = QCheckBox_markerConstraint->isChecked();
 
     if (this->QRadioButton_shape_sphere->isChecked()) {
       this->shape_type_selection = sphere;
@@ -309,9 +325,18 @@ class cellSegmentation : public QObject {
 
     // segmentation mode
     int segmentationMode;  // 1: iterative, 2: global Otsu, 3: local Otsu
+    // median filtering check
+    bool applyMedianFiltering;
+    // marker constraint check
+    bool applyMarkerConstraint;
+
 // vector<V3DLONG> poss_segmentationResultCenterMerged;
 #pragma endregion
-    class_segmentationMain() { is_initialized = false; }
+    class_segmentationMain() {
+      is_initialized = false;
+      applyMedianFiltering = true;    // default to true
+      applyMarkerConstraint = false;  // default: no marker constraint
+    }
     ~class_segmentationMain() {}
 
 #pragma region "control-run"
@@ -354,8 +379,8 @@ class cellSegmentation : public QObject {
         for (V3DLONG i = 0; i < this->size_page; i++) {
           // copy image data
           this->Image1D_page[i] = _Image1D_original[i + offset_channel];
-          // converts an index in a 1D array to a 3D coordinate, and store data
-          // in 3D array
+          // converts an index in a 1D array to a 3D coordinate, and store
+          // data in 3D array
           vector<V3DLONG> xyz_i = this->index2Coordinate(i);
           this->Image3D_page[xyz_i[2]][xyz_i[1]][xyz_i[0]] =
               this->Image1D_page[i];
@@ -374,11 +399,14 @@ class cellSegmentation : public QObject {
         memset(this->Image1D_mask, const_max_voxelValue, this->size_page);
         this->idx_shape = _idx_shape;
         // get potential seeds for other cells
-        // not necessary for now - for now we are just doing flooding on markers
+        // not necessary for now - for now we are just doing flooding on
+        // markers
         this->categorizeVoxelsByValue();
 
-        // apply the median filter as preprocessing
-        this->filter_Median(3);
+        // optionally apply the median filter as preprocessing
+        if (this->applyMedianFiltering) {
+          this->filter_Median(3);
+        }
 
         // set parameters that contorl the segmentation
         this->threshold_deltaShapeStat = _threshold_deltaShapeStat;
@@ -431,15 +459,15 @@ class cellSegmentation : public QObject {
 
         // region growing on each examplar label, trying different tresholds
         // until conditions are broken. Conditions on the size of the region,
-        // and the distance from the center of mass / marker. The final flooded
-        // region is the one that is closest to the center of mass of the
-        // original cell
-        // Depending on the segmentation mode, choose the threshold:
+        // and the distance from the center of mass / marker. The final
+        // flooded region is the one that is closest to the center of mass of
+        // the original cell Depending on the segmentation mode, choose the
+        // threshold:
         if (segmentationMode == 1) {
           for (idx_step = 0; idx_step < count_step; idx_step++) {
             // the trehsold on voxel values is decreasing each iteration -
-            // allowing more voxels to be included as possibilities in flooding
-            // decreases from value at the label to 25
+            // allowing more voxels to be included as possibilities in
+            // flooding decreases from value at the label to 25
             V3DLONG threshold_exemplarRegion = marker_intensity - idx_step;
 
             // region grow on this exemplar region and mark result as flooded
@@ -450,13 +478,14 @@ class cellSegmentation : public QObject {
                                const_max_voxelValue);
 
             // if the region is too small, break. No longer necessary
-            // if (poss_exemplarRegionNew.size() < default_threshold_regionSize)
+            // if (poss_exemplarRegionNew.size() <
+            // default_threshold_regionSize)
             // {
             //   break;
             // }
 
-            // make sure region has not moved too far awar from marker or center
-            // of mass
+            // make sure region has not moved too far awar from marker or
+            // center of mass
             pos_massCenterNew = this->getCenterByMass(poss_exemplarRegionNew);
             double value_centerMovement1 = this->getEuclideanDistance2(
                 pos_massCenterOld, pos_massCenterNew);
@@ -475,7 +504,8 @@ class cellSegmentation : public QObject {
 
             if (value_centerMovement2 > max_movment2) {
               printf(
-                  "final threshold: %d, for marker number (moved too far from "
+                  "final threshold: %d, for marker number (moved too far "
+                  "from "
                   "marker) %d\n",
                   threshold_exemplarRegion, idx_exemplar);
               break;
@@ -502,7 +532,8 @@ class cellSegmentation : public QObject {
               localOtsuThreshold(pos_exemplar, 20);
           vector<V3DLONG> xyz_exemplar = this->index2Coordinate(pos_exemplar);
           printf(
-              "Local Otsu threshold computed at landmark (%ld, %ld, %ld): %d\n",
+              "Local Otsu threshold computed at landmark (%ld, %ld, %ld): "
+              "%d\n",
               xyz_exemplar[0], xyz_exemplar[1], xyz_exemplar[2],
               threshold_exemplarRegion);
           poss_exemplarRegionOld =
@@ -843,6 +874,18 @@ class cellSegmentation : public QObject {
             if (this->checkValidity(pos_neighbor)) {
               // only prcoess voxels that haven't yet been processed
               if (_mask_input[pos_neighbor] > 0) {
+                // if marker constraint is enabled, skip neighbors that fall
+                // outside the sphere
+                if (this->applyMarkerConstraint) {
+                  double distSq =
+                      this->getEuclideanDistance2(_pos_seed, pos_neighbor);
+                  if (distSq >
+                      this->max_movment2) {  // max_movment2 was computed as
+                                             // (_maxMovement2)^2
+                    continue;
+                  }
+                }
+
                 V3DLONG value_neighbor = this->Image1D_page[pos_neighbor];
                 if ((value_neighbor > _threshold_voxelValue) &&
                     ((min_voxelValue - value_neighbor) <
@@ -1878,8 +1921,8 @@ class cellSegmentation : public QObject {
     }
 
     /**
-     * @brief Local Otsu threshold: compute a threshold using only voxels within
-     * a cubic region of the given radius around a given landmark.
+     * @brief Local Otsu threshold: compute a threshold using only voxels
+     * within a cubic region of the given radius around a given landmark.
      */
     V3DLONG localOtsuThreshold(V3DLONG landmarkIndex, V3DLONG radius) {
       vector<V3DLONG> coord = index2Coordinate(landmarkIndex);
@@ -2586,6 +2629,12 @@ class cellSegmentation : public QObject {
       if (dialogRun1.exec() != QDialog::Accepted) {
         return false;
       }
+      // Set the median filtering flag from the dialog
+      this->class_segmentationMain1.applyMedianFiltering =
+          dialogRun1.applyMedianFiltering;
+      // Set the marker flag from the dialog
+      this->class_segmentationMain1.applyMarkerConstraint =
+          dialogRun1.applyMarkerConstraint;
       int idx_shape;  // get shape paramters;
       if (dialogRun1.shape_type_selection == sphere) {
         idx_shape = 1;
@@ -2596,6 +2645,7 @@ class cellSegmentation : public QObject {
       // In interface_run (or wherever control_run is called), pass the
       // selected mode: (Assume dialogRun1.segmentationMode is set from the
       // combo box.)
+      // call control_run method to do segmentation
       is_success = this->class_segmentationMain1.control_run(
           Image1D_current, dim_X, dim_Y, dim_Z,
           dialogRun1.channel_idx_selection, LandmarkList_current, idx_shape,
@@ -2715,18 +2765,29 @@ class cellSegmentation : public QObject {
       overlay2(_V3DPluginCallback2_currentCallback, _QWidget_parent,
                binarySegImage, gradientImage);
 
-      QString savePath = QFileDialog::getSaveFileName(
-          _QWidget_parent, "Save binary segmented image", "",
-          "TIFF Files (*.tiff *.tif)");
-      if (!savePath.isEmpty()) {
-        V3DLONG outSZ[4] = {this->class_segmentationMain1.dim_X,
-                            this->class_segmentationMain1.dim_Y,
-                            this->class_segmentationMain1.dim_Z, 1};
-        simple_saveimage_wrapper(_V3DPluginCallback2_currentCallback,
-                                 savePath.toStdString().c_str(), binarySegImage,
-                                 outSZ, 1);
-        v3d_msg("Binary segmented image saved.");
-      }
+      // save binary image
+      // QString savePath = QFileDialog::getSaveFileName(
+      //     _QWidget_parent, "Save binary segmented image", "",
+      //     "TIFF Files (*.tiff *.tif)");
+      // if (!savePath.isEmpty()) {
+      //   V3DLONG outSZ[4] = {this->class_segmentationMain1.dim_X,
+      //                       this->class_segmentationMain1.dim_Y,
+      //                       this->class_segmentationMain1.dim_Z, 1};
+      //   simple_saveimage_wrapper(_V3DPluginCallback2_currentCallback,
+      //                            savePath.toStdString().c_str(),
+      //                            binarySegImage, outSZ, 1);
+      //   v3d_msg("Binary segmented image saved.");
+      // }
+
+      // Automatically save binary segmented image to current directory.
+      QString savePath = QDir::currentPath() + "/segmentation_result.tif";
+      V3DLONG outSZ[4] = {this->class_segmentationMain1.dim_X,
+                          this->class_segmentationMain1.dim_Y,
+                          this->class_segmentationMain1.dim_Z, 1};
+      simple_saveimage_wrapper(_V3DPluginCallback2_currentCallback,
+                               savePath.toStdString().c_str(), binarySegImage,
+                               outSZ, 1);
+      v3d_msg(QString("Binary segmented image saved to %1.").arg(savePath));
       delete[] binarySegImage;
 
       return true;
