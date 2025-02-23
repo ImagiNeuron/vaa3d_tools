@@ -155,23 +155,22 @@ class dialogRun : public QDialog {
 
     // Create a new group box for soma segmentation mode
     QGroupBox *QGroupBox_segmentationMode =
-        new QGroupBox("Soma Segmentation Mode", this);
+        new QGroupBox("Segmentation Preferences", this);
     QHBoxLayout *layout_segmentationMode = new QHBoxLayout();
     // Create and populate the dropdown
     QComboBox_mode_selection = new QComboBox(this);
     QComboBox_mode_selection->addItem("Iterative Threshold");
     QComboBox_mode_selection->addItem("Global Otsu");
     QComboBox_mode_selection->addItem("Local Otsu");
-    layout_segmentationMode->addWidget(new QLabel("Mode:", this));
-    layout_segmentationMode->addWidget(QComboBox_mode_selection);
+    layout_segmentationMode->addWidget(QComboBox_mode_selection, 2);
     // Add the median filtering checkbox next to segmentation mode
     QCheckBox_medianFiltering = new QCheckBox("Median Filtering", this);
     QCheckBox_medianFiltering->setChecked(true);  // default is enabled
-    layout_segmentationMode->addWidget(QCheckBox_medianFiltering);
+    layout_segmentationMode->addWidget(QCheckBox_medianFiltering, 1);
     // Add the marker constraint checkbox next to median filtering
     QCheckBox_markerConstraint = new QCheckBox("Marker Constraint", this);
     QCheckBox_markerConstraint->setChecked(false);  // default off
-    layout_segmentationMode->addWidget(QCheckBox_markerConstraint);
+    layout_segmentationMode->addWidget(QCheckBox_markerConstraint, 1);
     // Set the layout for this section
     QGroupBox_segmentationMode->setLayout(layout_segmentationMode);
 
