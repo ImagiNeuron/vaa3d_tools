@@ -39,8 +39,9 @@ using namespace std;
 //  * @param PARA - the input parameters
 //  * @param bmenu - whether the function is being called from the menu
 //  */
-My4DImage *reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
-                               input_PARA &PARA, bool bmenu) {
+MIND_4DImage *reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
+                                  input_PARA &PARA, bool bmenu)
+{
   unsigned char *data1d = 0;
   V3DLONG N, M, P, sc, c;
   V3DLONG in_sz[4];
@@ -216,11 +217,12 @@ bool SomaSegmentation::dofunc(const QString &func_name,
 }
 
 ////////////////////////////////////////////////////////////////////////
-// Implementation of My4DImage methods
+// Implementation of MIND_4DImage methods
 
-My4DImage::My4DImage() : data(nullptr), xdim(0), ydim(0), zdim(0), cdim(0) {}
+MIND_4DImage::MIND_4DImage() : data(nullptr), xdim(0), ydim(0), zdim(0), cdim(0) {}
 
-My4DImage::My4DImage(const My4DImage &other) {
+MIND_4DImage::MIND_4DImage(const MIND_4DImage &other)
+{
   xdim = other.xdim;
   ydim = other.ydim;
   zdim = other.zdim;
@@ -233,7 +235,8 @@ My4DImage::My4DImage(const My4DImage &other) {
   }
 }
 
-My4DImage &My4DImage::operator=(const My4DImage &other) {
+MIND_4DImage &MIND_4DImage::operator=(const MIND_4DImage &other)
+{
   if (this == &other) return *this;
   delete[] data;
   xdim = other.xdim;
@@ -338,4 +341,4 @@ void isotropic_correction_func(V3DPluginCallback2 &callback, QWidget *parent,
   return;
 }
 
-My4DImage::~My4DImage() { delete[] data; }
+MIND_4DImage::~MIND_4DImage() { delete[] data; }

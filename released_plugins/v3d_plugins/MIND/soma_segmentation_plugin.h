@@ -20,14 +20,14 @@ struct MyMarker {
 };
 
 // A basic 4D image container
-struct My4DImage {
+struct MIND_4DImage {
   unsigned char *data;
   V3DLONG xdim, ydim, zdim, cdim;
 
-  My4DImage();
-  My4DImage(const My4DImage &other);
-  My4DImage &operator=(const My4DImage &other);
-  ~My4DImage();
+  MIND_4DImage();
+  MIND_4DImage(const MIND_4DImage &other);
+  MIND_4DImage &operator=(const MIND_4DImage &other);
+  ~MIND_4DImage();
 };
 
 // Plugin class
@@ -54,8 +54,8 @@ struct input_PARA {
   QString inimg_file;
   V3DLONG channel;
 };
-My4DImage *reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
-                               input_PARA &PARA, bool bmenu);
+MIND_4DImage *reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
+                                  input_PARA &PARA, bool bmenu);
 
 void isotropic_correction_func(V3DPluginCallback2 &callback, QWidget *parent,
                                input_PARA &PARA, bool bmenu);
