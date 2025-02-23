@@ -1,6 +1,7 @@
 release/soma_segmentation_plugin.o
 release/v3d_message.o
 release/basic_surf_objs.o
+release/basic_4dimage_create.o
 release/newmat1.o
 release/newmat2.o
 release/newmat3.o

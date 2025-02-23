@@ -96,4 +96,6 @@ void savePCAResultsToCSV(
     QWidget *parent = nullptr,
     bool *saveEnabled = nullptr);  // Add save flag parameter
 
+void drawLine(Image4DSimple *image, double *from, double *to);
+
 #endif  // __SOMA_SEGMENTATION_PLUGIN_H__

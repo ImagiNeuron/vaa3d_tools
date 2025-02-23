@@ -20,6 +20,7 @@
 #include "../../v3d/compute_win_pca_wp.h"
 #include "basic_surf_objs.h"
 #include "v3d_message.h"
+#include "basic_4dimage.h"
 
 using namespace std;
 
@@ -77,11 +78,13 @@ void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
 void pca_func(V3DPluginCallback2 &callback, QWidget *parent, input_PARA &PARA,
               bool bmenu);
 
+void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent);
+
 /**************************************
  * Plugin Interface Methods
  **************************************/
 QStringList SomaSegmentation::menulist() const {
-  return QStringList() << tr("soma_segmentation") << tr("PCA analysis")
+  return QStringList() << tr("soma_segmentation") << tr("PCA analysis") << tr("Visualize PCA")
                        << tr("about");
 }
 
@@ -100,6 +103,8 @@ void SomaSegmentation::domenu(const QString &menu_name,
     bool bmenu = true;
     input_PARA PARA;
     pca_func(callback, parent, PARA, bmenu);
+  } else if (menu_name == tr("Visualize PCA")) {
+    visualizePCA_func(callback, parent);
   } else {
     v3d_msg(
         tr("Soma segmentation plugin using 3D watershed.\n"
@@ -1224,3 +1229,175 @@ void analyzeSomaPCA(unsigned char *labeledData, V3DLONG N, V3DLONG M, V3DLONG P,
   }
   delete[] img3d;
 }
+
+void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent) {
+  v3dhandle curwin = callback.currentImageWindow();
+  if (!curwin) {
+    v3d_msg("No image opened.", parent);
+    return;
+  }
+  Image4DSimple *p4DImage = callback.getImage(curwin);
+  if (!p4DImage) {
+    v3d_msg("No image opened.", parent);
+    return;
+  }
+  Image4DSimple *pcaVisualization = new Image4DSimple();
+  pcaVisualization->createBlankImage(p4DImage->getXDim(), p4DImage->getYDim(), p4DImage->getZDim(), p4DImage->getCDim(), V3D_UINT8);
+  pcaVisualization->setOriginX(p4DImage->getOriginX());
+  pcaVisualization->setOriginY(p4DImage->getOriginY());
+  pcaVisualization->setOriginZ(p4DImage->getOriginZ());
+  pcaVisualization->setRezX(p4DImage->getRezX());
+  pcaVisualization->setRezY(p4DImage->getRezY());
+  pcaVisualization->setRezZ(p4DImage->getRezZ());
+
+  // load pca data from csv
+  QString filename = QFileDialog::getOpenFileName(
+      parent, "Open PCA Results", "", "CSV Files (*.csv)");
+  if (filename.isEmpty()) {
+    printf("No file selected.\n");
+    return;
+  }
+
+  std::ifstream inFile(filename.toStdString().c_str());
+  if (!inFile.is_open()) {
+    printf("Failed to open file: %s\n", filename.toStdString().c_str());
+    return;
+  }
+
+  // Skip header
+  std::string line;
+  std::getline(inFile, line);
+
+  // Read data
+  while (std::getline(inFile, line)) {
+    std::istringstream ss(line);
+    std::string token;
+
+    int somaID;
+    double center[3];
+    double pc1, pc2, pc3;
+    double vec1Pos[3], vec2Pos[3], vec3Pos[3];
+
+    int col = 0;
+    while (std::getline(ss, token, ',')) {
+      switch (col) {
+        case 0: somaID = std::stoi(token); break;
+        case 1: center[0] = std::stod(token); break;
+        case 2: center[1] = std::stod(token); break;
+        case 3: center[2] = std::stod(token); break;
+        case 8: pc1 = std::stod(token); break;
+        case 9: pc2 = std::stod(token); break;
+        case 10: pc3 = std::stod(token); break;
+        case 11: vec1Pos[0] = 10.0 * std::stod(token) + center[0]; break;
+        case 12: vec1Pos[1] = 10.0 * std::stod(token) + center[1]; break;
+        case 13: vec1Pos[2] = 10.0 * std::stod(token) + center[2]; break;
+        case 14: vec2Pos[0] = 10.0 * std::stod(token) + center[0]; break;
+        case 15: vec2Pos[1] = 10.0 * std::stod(token) + center[1]; break;
+        case 16: vec2Pos[2] = 10.0 * std::stod(token) + center[2]; break;
+        case 17: vec3Pos[0] = 10.0 * std::stod(token) + center[0]; break;
+        case 18: vec3Pos[1] = 10.0 * std::stod(token) + center[1]; break;
+        case 19: vec3Pos[2] = 10.0 * std::stod(token) + center[2]; break;
+      }
+      col++;
+    }
+
+    printf("Soma #%d PCA Results. Center (%f, %f, %f) | eigenvals (%f, %f, %f) | vec1Pos (%f, %f, %f) | vec2Pos (%f, %f, %f) | vec3Pos (%f, %f, %f)\n\n", somaID,
+           center[0], center[1], center[2], pc1, pc2, pc3, vec1Pos[0], vec1Pos[1], vec1Pos[2], vec2Pos[0], vec2Pos[1], vec2Pos[2], vec3Pos[0], vec3Pos[1], vec3Pos[2]);
+
+    // Visualize
+    drawLine(pcaVisualization, center, vec1Pos);
+    drawLine(pcaVisualization, center, vec2Pos);
+    drawLine(pcaVisualization, center, vec3Pos);
+  }
+
+  inFile.close();
+
+  // Show the PCA visualization
+  v3dhandle newwin = callback.newImageWindow();
+  callback.setImage(newwin, pcaVisualization);
+}
+
+void drawLine(Image4DSimple *image, double *from, double *to) {
+  // convert points from world space to image space
+  int x1 = (int)((from[0] - image->getOriginX()) / image->getRezX());
+  int y1 = (int)((from[1] - image->getOriginY()) / image->getRezY());
+  int z1 = (int)((from[2] - image->getOriginZ()) / image->getRezZ());
+  int x2 = (int)((to[0] - image->getOriginX()) / image->getRezX());
+  int y2 = (int)((to[1] - image->getOriginY()) / image->getRezY());
+  int z2 = (int)((to[2] - image->getOriginZ()) / image->getRezZ());
+  
+  unsigned char *imgData = image->getRawData();
+
+  auto fillPixel = [&](int x, int y, int z) {
+    if (x >= 0 && x < image->getXDim() && y >= 0 && y < image->getYDim() && z >= 0 && z < image->getZDim()) {
+      imgData[z * image->getYDim() * image->getXDim() + y * image->getXDim() + x] = 255;
+    }
+  };
+
+  // Bresenham's line algorithm
+  int dx = abs(x2 - x1), xs = x2 > x1 ? 1 : -1;
+  int dy = abs(y2 - y1), ys = y2 > y1 ? 1 : -1;
+  int dz = abs(z2 - z1), zs = z2 > z1 ? 1 : -1;
+  int drivingAxis;
+  // Determine which difference is largest
+  if (dx >= dy && dx >= dz)      drivingAxis = 0; // X-axis
+  else if (dy >= dx && dy >= dz) drivingAxis = 1; // Y-axis
+  else                           drivingAxis = 2; // Z-axis
+
+  // Plot the initial point
+  fillPixel(x1, y1, z1);
+
+  if (drivingAxis == 0) {
+    int p1 = 2 * dy - dx;
+    int p2 = 2 * dz - dx;
+    while (x1 != x2) {
+      x1 += xs;
+      if (p1 >= 0) {
+        y1 += ys;
+        p1 -= 2 * dx;
+      }
+      if (p2 >= 0) {
+        z1 += zs;
+        p2 -= 2 * dx;
+      }
+      p1 += 2 * dy;
+      p2 += 2 * dz;
+      fillPixel(x1, y1, z1);
+    }
+  } else if (drivingAxis == 1) {
+    int p1 = 2 * dx - dy;
+    int p2 = 2 * dz - dy;
+    while (y1 != y2) {
+      y1 += ys;
+      if (p1 >= 0) {
+        x1 += xs;
+        p1 -= 2 * dy;
+      }
+      if (p2 >= 0) {
+        z1 += zs;
+        p2 -= 2 * dy;
+      }
+      p1 += 2 * dx;
+      p2 += 2 * dz;
+      fillPixel(x1, y1, z1);
+    }
+  } else {
+    int p1 = 2 * dy - dz;
+    int p2 = 2 * dx - dz;
+    while (z1 != z2) {
+      z1 += zs;
+      if (p1 >= 0) {
+        y1 += ys;
+        p1 -= 2 * dz;
+      }
+      if (p2 >= 0) {
+        x1 += xs;
+        p2 -= 2 * dz;
+      }
+      p1 += 2 * dy;
+      p2 += 2 * dx;
+      fillPixel(x1, y1, z1);
+    }
+  }
+}
+
