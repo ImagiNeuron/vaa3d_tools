@@ -1285,18 +1285,20 @@ void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent) {
         case 1: center[0] = std::stod(token); break;
         case 2: center[1] = std::stod(token); break;
         case 3: center[2] = std::stod(token); break;
+        // case 4: // radius
+        // case 5,6,7: // center of mass
         case 8: pc1 = std::stod(token); break;
         case 9: pc2 = std::stod(token); break;
         case 10: pc3 = std::stod(token); break;
-        case 11: vec1Pos[0] = 10.0 * std::stod(token) + center[0]; break;
-        case 12: vec1Pos[1] = 10.0 * std::stod(token) + center[1]; break;
-        case 13: vec1Pos[2] = 10.0 * std::stod(token) + center[2]; break;
-        case 14: vec2Pos[0] = 10.0 * std::stod(token) + center[0]; break;
-        case 15: vec2Pos[1] = 10.0 * std::stod(token) + center[1]; break;
-        case 16: vec2Pos[2] = 10.0 * std::stod(token) + center[2]; break;
-        case 17: vec3Pos[0] = 10.0 * std::stod(token) + center[0]; break;
-        case 18: vec3Pos[1] = 10.0 * std::stod(token) + center[1]; break;
-        case 19: vec3Pos[2] = 10.0 * std::stod(token) + center[2]; break;
+        case 11: vec1Pos[0] = pc1 * std::stod(token) + center[0]; break;
+        case 12: vec1Pos[1] = pc1 * std::stod(token) + center[1]; break;
+        case 13: vec1Pos[2] = pc1 * std::stod(token) + center[2]; break;
+        case 14: vec2Pos[0] = pc2 * std::stod(token) + center[0]; break;
+        case 15: vec2Pos[1] = pc2 * std::stod(token) + center[1]; break;
+        case 16: vec2Pos[2] = pc2 * std::stod(token) + center[2]; break;
+        case 17: vec3Pos[0] = pc3 * std::stod(token) + center[0]; break;
+        case 18: vec3Pos[1] = pc3 * std::stod(token) + center[1]; break;
+        case 19: vec3Pos[2] = pc3 * std::stod(token) + center[2]; break;
       }
       col++;
     }
