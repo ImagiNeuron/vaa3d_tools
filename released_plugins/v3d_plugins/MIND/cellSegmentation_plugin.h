@@ -456,6 +456,8 @@ class cellSegmentation : public QObject {
         V3DLONG idx_step = 0;
         double value_centerMovement2 = 0;
 
+        double radius_marker = _LandmarkList_exemplar[idx_exemplar].radius;
+
         // region growing on each examplar label, trying different tresholds
         // until conditions are broken. Conditions on the size of the region,
         // and the distance from the center of mass / marker. The final
@@ -472,7 +474,7 @@ class cellSegmentation : public QObject {
             // region grow on this exemplar region and mark result as flooded
             poss_exemplarRegionNew = this->regionGrowOnPos(
                 pos_exemplar, threshold_exemplarRegion, INF,
-                this->size_page / 1000, this->Image1D_mask);
+                this->size_page / 1000, this->Image1D_mask, radius_marker);
             this->poss2Image1D(poss_exemplarRegionNew, this->Image1D_mask,
                                const_max_voxelValue);
 
@@ -520,7 +522,7 @@ class cellSegmentation : public QObject {
                  threshold_exemplarRegion);
           poss_exemplarRegionOld =
               regionGrowOnPos(pos_exemplar, threshold_exemplarRegion, INF,
-                              size_page / 1000, Image1D_mask);
+                              size_page / 1000, Image1D_mask, radius_marker);
           pos_massCenterOld = getCenterByMass(poss_exemplarRegionOld);
           value_centerMovement2 =
               this->getEuclideanDistance2(pos_exemplar, pos_massCenterOld);
@@ -537,7 +539,7 @@ class cellSegmentation : public QObject {
               threshold_exemplarRegion);
           poss_exemplarRegionOld =
               regionGrowOnPos(pos_exemplar, threshold_exemplarRegion, INF,
-                              size_page / 1000, Image1D_mask);
+                              size_page / 1000, Image1D_mask, radius_marker);
           pos_massCenterOld = getCenterByMass(poss_exemplarRegionOld);
           value_centerMovement2 =
               this->getEuclideanDistance2(pos_exemplar, pos_massCenterOld);
@@ -834,7 +836,8 @@ class cellSegmentation : public QObject {
                                     V3DLONG _threshold_voxelValue,
                                     double _threshold_valueChangeRatio,
                                     V3DLONG _uThreshold_regionSize,
-                                    unsigned char *_mask_input) {
+                                    unsigned char *_mask_input,
+                                    double _radius) {
       // final segmentation
       vector<V3DLONG> poss_result;
       // voxels being considered
@@ -878,9 +881,7 @@ class cellSegmentation : public QObject {
                 if (this->applyMarkerConstraint) {
                   double distSq =
                       this->getEuclideanDistance2(_pos_seed, pos_neighbor);
-                  if (distSq >
-                      this->max_movment2) {  // max_movment2 was computed as
-                                             // (_maxMovement2)^2
+                  if (distSq > _radius * _radius) {
                     continue;
                   }
                 }
