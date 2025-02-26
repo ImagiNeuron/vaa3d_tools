@@ -1,8 +1,7 @@
-
-TEMPLATE	= lib
-CONFIG	+= qt plugin warn_off
+TEMPLATE = lib
+CONFIG += qt plugin warn_off
 QT += widgets
-#CONFIG	+= x86_64
+#CONFIG += x86_64
 VAA3DPATH = ../../../../v3d_external
 
 INCLUDEPATH += $$VAA3DPATH/v3d_main/basic_c_fun
@@ -15,14 +14,15 @@ INCLUDEPATH += $$VAA3DPATH/v3d_main/common_lib/include
 INCLUDEPATH += opencv/build/include
 LIBS += -Lopencv/build/x64/mingw/lib/ -lopencv_core4120 -lopencv_imgproc4120 -lopencv_highgui4120
 
-HEADERS	+= soma_segmentation_plugin.h
+HEADERS += soma_segmentation_plugin.h
 HEADERS += ResolutionDialog.h
 HEADERS += cellSegmentation_plugin.h
-SOURCES	+= soma_segmentation_plugin.cpp
+SOURCES += soma_segmentation_plugin.cpp
 SOURCES += ResolutionDialog.cpp
-SOURCES	+= $$VAA3DPATH/v3d_main/basic_c_fun/v3d_message.cpp
+SOURCES += $$VAA3DPATH/v3d_main/basic_c_fun/v3d_message.cpp
 SOURCES += $$VAA3DPATH/v3d_main/neuron_editing/v_neuronswc.cpp
-SOURCES	+= $$VAA3DPATH/v3d_main/basic_c_fun/basic_surf_objs.cpp
+SOURCES += $$VAA3DPATH/v3d_main/basic_c_fun/basic_surf_objs.cpp
+SOURCES += $$VAA3DPATH/v3d_main/basic_c_fun/basic_4dimage_create.cpp
 SOURCES += $$VAA3DPATH/v3d_main/jba/newmat11/newmat1.cpp
 SOURCES += $$VAA3DPATH/v3d_main/jba/newmat11/newmat2.cpp 
 SOURCES += $$VAA3DPATH/v3d_main/jba/newmat11/newmat3.cpp 
@@ -47,5 +47,5 @@ SOURCES += $$VAA3DPATH/v3d_main/jba/newmat11/nm_misc.cpp
 SOURCES += $$VAA3DPATH/v3d_main/jba/newmat11/newmatrm.cpp
 SOURCES += $$VAA3DPATH/v3d_main/jba/newmat11/newmat9.cpp
 
-TARGET	= $$qtLibraryTarget(soma_segmentation)
-DESTDIR	= $$VAA3DPATH/bin/plugins/MIND/soma_segmentation/
+TARGET = $$qtLibraryTarget(soma_segmentation)
+DESTDIR = $$VAA3DPATH/bin/plugins/MIND/soma_segmentation/
