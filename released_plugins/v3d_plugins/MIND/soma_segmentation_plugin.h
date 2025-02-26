@@ -1,7 +1,6 @@
 /* soma_segmentation_plugin.h
- * A plugin for soma segmentation using 3D watershed (Vincent & Soille style).
- *
- * 2024-11-16 : by ImagiNeuron: Shidan Javaheri, Siger Ma, Athmane Benarous and
+ * A plugin for analysis of neuron somas in the brain.
+ * 2024-11-16: by ImagiNeuron: Shidan Javaheri, Siger Ma, Athmane Benarous and
  * Thibaut Baguette
  */
 
@@ -14,6 +13,8 @@
 #include <QtGui>
 #include <fstream>  // Add this for file output
 
+#include "cellSegmentation_plugin.h"
+
 // A basic structure for a marker
 struct MyMarker {
   float x, y, z;
@@ -21,14 +22,14 @@ struct MyMarker {
 };
 
 // A basic 4D image container
-struct My4DImage {
+struct MIND_4DImage {
   unsigned char *data;
   V3DLONG xdim, ydim, zdim, cdim;
 
-  My4DImage();
-  My4DImage(const My4DImage &other);
-  My4DImage &operator=(const My4DImage &other);
-  ~My4DImage();
+  MIND_4DImage();
+  MIND_4DImage(const MIND_4DImage &other);
+  MIND_4DImage &operator=(const MIND_4DImage &other);
+  ~MIND_4DImage();
 };
 
 // Plugin class
@@ -50,45 +51,27 @@ class SomaSegmentation : public QObject, public V3DPluginInterface2_1 {
               QWidget *parent);
 };
 
-/***********************************
- * Declaration of Helper Functions
- **********************************/
+// Main reconstruction function (invoked from menu or command-line)
+struct input_PARA {
+  QString inimg_file;
+  V3DLONG channel;
+};
+MIND_4DImage *reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
+                                  input_PARA &PARA, bool bmenu);
 
-// Median filter
-void applyMedianFilter(const unsigned char *inputData,
-                       unsigned char *outputData, V3DLONG N, V3DLONG M,
-                       V3DLONG P, int windowSize);
+// Isotropic correction function
 
-// Gaussian filter
-void applyGaussianFilter(const unsigned char *inputData,
-                         unsigned char *outputData, V3DLONG N, V3DLONG M,
-                         V3DLONG P, float sigma);
-
-// Subvolume extraction
-void extractSubvolume(const unsigned char *inData, unsigned char *outData,
-                      V3DLONG N, V3DLONG M, V3DLONG P, int x1, int x2, int y1,
-                      int y2, int z1, int z2);
-
-// Watershed (Vincent & Soille)
-void applyWatershedVS(const unsigned char *subvol, unsigned short *labelOut,
-                      int sx, int sy, int sz);
-
-// (Minimal) BFS-based 3D distance transform for removing watershed lines
-void dt3d_binary(const float *inData, V3DLONG *pix_index, const V3DLONG *sz,
-                 float threshVal = 0);
-
-// Simple 3D morphological opening (erosion + dilation) with a 3x3x3
-// neighborhood
-static void morphologicalOpen3D(unsigned char *vol, int sx, int sy, int sz);
-
-// Compute Otsu threshold
-static int computeOtsuThreshold(const unsigned char *data, int length);
+void isotropic_correction_func(V3DPluginCallback2 &callback, QWidget *parent,
+                               input_PARA &PARA, bool bmenu);
 
 // PCA Analysis
+
+void pca_func(V3DPluginCallback2 &callback, QWidget *parent, input_PARA &PARA,
+              bool bmenu);
+
 void analyzeSomaPCA(unsigned char *labeledData, V3DLONG N, V3DLONG M, V3DLONG P,
                     const LocationSimple &lm, int somaIndex);
 
-// Save PCA results to CSV
 void savePCAResultsToCSV(
     const QString &filename, int somaIndex, const LocationSimple &lm,
     double pc1, double pc2, double pc3, const double *vec1, const double *vec2,
@@ -97,5 +80,7 @@ void savePCAResultsToCSV(
     bool *saveEnabled = nullptr);  // Add save flag parameter
 
 void drawLine(Image4DSimple *image, double *from, double *to);
+
+void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent);
 
 #endif  // __SOMA_SEGMENTATION_PLUGIN_H__
