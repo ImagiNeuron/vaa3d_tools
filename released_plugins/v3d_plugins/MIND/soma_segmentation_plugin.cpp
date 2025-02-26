@@ -1,16 +1,26 @@
-/* soma_segmentation_plugin.cpp
- * This plugin allows the segmentation of individual somas with 3D flooding
- * algorithms. It generates ground truth data to train machine learning
- * algorithms for automatic soma segmnentation in the brain
+/** soma_segmentation_plugin.cpp
+ * This plugin supports the analaysis and segmentaiton of neuron somas in the
+ * brain.
  *
- * 2024-11-16 : by ImagiNeuron: Shidan Javaheri, Siger Ma, Athmane Benarous and
+ * It includes several functions:
+ * - isotropic correction - to view 3D imagery of the brain isotropically
+ * - soma segmentation - to segment individual somas using a user defined 3D
+ * region-growing algorithm, and output a binary segmented image
+ *
+ * 2024-11-16: by ImagiNeuron: Shidan Javaheri, Siger Ma, Athmane Benarous and
  * Thibaut Baguette (McGill University)
  */
 
 #include "soma_segmentation_plugin.h"
 
+#include <QFileDialog>
 #include <QInputDialog>
 #include <QMessageBox>
+#include <algorithm>
+#include <cassert>
+#include <cmath>
+#include <cstring>
+#include <queue>
 #include <vector>
 
 #include "ResolutionDialog.h"
@@ -19,25 +29,101 @@
 
 using namespace std;
 
-struct input_PARA {
-  QString inimg_file;
-  V3DLONG channel;
-};
+// /**
+//  * @brief Function to reconstruct somas
+//  *
+//  * Default function - copy format and add functionality afterwards
+//  *
+//  * @param callback - the V3D plugin callback interface
+//  * @param parent - the parent interface
+//  * @param PARA - the input parameters
+//  * @param bmenu - whether the function is being called from the menu
+//  */
+MIND_4DImage *reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
+                                  input_PARA &PARA, bool bmenu)
+{
+  unsigned char *data1d = 0;
+  V3DLONG N, M, P, sc, c;
+  V3DLONG in_sz[4];
+  if (bmenu) {
+    v3dhandle curwin = callback.currentImageWindow();
+    if (!curwin) {
+      QMessageBox::information(
+          0, "", "You don't have any image open in the main window.");
+      return nullptr;
+    }
+    Image4DSimple *p4DImage = callback.getImage(curwin);
+    if (!p4DImage) {
+      QMessageBox::information(0, "",
+                               "The image pointer is invalid. Ensure your data "
+                               "is valid and try again!");
+      return nullptr;
+    }
+    data1d = p4DImage->getRawData();
+    N = p4DImage->getXDim();
+    M = p4DImage->getYDim();
+    P = p4DImage->getZDim();
+    sc = p4DImage->getCDim();
+    bool ok1;
+    if (sc == 1) {
+      c = 1;
+      ok1 = true;
+    } else
+      c = QInputDialog::getInt(parent, "Channel", "Enter channel NO:", 1, 1, sc,
+                               1, &ok1);
+    if (!ok1) return nullptr;
+    in_sz[0] = N;
+    in_sz[1] = M;
+    in_sz[2] = P;
+    in_sz[3] = sc;
+    PARA.inimg_file = p4DImage->getFileName();
+  } else {
+    int datatype = 0;
+    if (!simple_loadimage_wrapper(callback,
+                                  PARA.inimg_file.toStdString().c_str(), data1d,
+                                  in_sz, datatype)) {
+      fprintf(stderr, "Error reading file [%s].\n",
+              PARA.inimg_file.toStdString().c_str());
+      return nullptr;
+    }
+    if (PARA.channel < 1 || PARA.channel > in_sz[3]) {
+      fprintf(stderr, "Invalid channel number.\n");
+      return nullptr;
+    }
+    N = in_sz[0];
+    M = in_sz[1];
+    P = in_sz[2];
+    sc = in_sz[3];
+    c = PARA.channel;
+  }
 
-void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
-                         input_PARA &PARA, bool bmenu);
+  v3dhandle curwin = callback.currentImageWindow();
+  if (!curwin) {
+    v3d_msg("No image window is currently open.", bmenu);
+    return nullptr;
+  }
+  Image4DSimple *p4DImage = callback.getImage(curwin);
+  if (!p4DImage) {
+    v3d_msg("Invalid image pointer.", bmenu);
+    return nullptr;
+  }
+  LandmarkList landmarkList = callback.getLandmark(curwin);
+  if (landmarkList.isEmpty()) {
+    v3d_msg("No landmarks defined. Please define at least one landmark.",
+            bmenu);
+    return nullptr;
+  }
+  // Put code here
+}
 
-void setRegionOfInterest(V3DPluginCallback2 &callback, v3dhandle &curwin,
-                         float x, float y, float z, float radius);
-
-void isotropic_correction_func(V3DPluginCallback2 &callback, QWidget *parent,
-                               input_PARA &PARA, bool bmenu);
+////////////////////////////////////////////////////////////////////////
+// Standard Vaa3D plugin interface implementations
 
 /**
  * @brief Menu option under the MIND plugins
  */
 QStringList SomaSegmentation::menulist() const {
-  return QStringList() << tr("soma_segmentation") << tr("isotropic correction")
+  return QStringList() << tr("soma_segmentation") << tr("isotropic_correction")
                        << tr("about");
 }
 
@@ -45,13 +131,12 @@ QStringList SomaSegmentation::menulist() const {
  * @brief Function list for the soma segmentation plugin
  */
 QStringList SomaSegmentation::funclist() const {
-  return QStringList() << tr("segment_somas") << tr("isotropic correction")
+  return QStringList() << tr("segment_somas") << tr("isotropic_correction")
                        << tr("help");
 }
 
 /**
- * @brief Display a description about the soma segmentation plugin and what it
- * does
+ * @brief Call the appropriate methods when the menue items are clicked
  *
  * @param menu_name - the name of the menu being described
  * @param callback - the V3D plugin callback interface
@@ -62,28 +147,27 @@ void SomaSegmentation::domenu(const QString &menu_name,
   if (menu_name == tr("soma_segmentation")) {
     bool bmenu = true;
     input_PARA PARA;
-    reconstruction_func(callback, parent, PARA, bmenu);
-
-  } else if (menu_name == tr("isotropic correction")) {
+    cellSegmentation cellseg;
+    cellseg.interface_run(callback, parent);
+  } else if (menu_name == tr("isotropic_correction")) {
     bool bmenu = true;
     input_PARA PARA;
-
     isotropic_correction_func(callback, parent, PARA, bmenu);
-
   } else {
-    v3d_msg(tr(
-        "This plugin allows the segmentation of individual somas with 3D "
-        "flooding algorithms. It generates ground truth data to train machine "
-        "learning algorithms for automatic soma segmnentation in the brain. "
-        "Developed by ImagiNeuron: Shidan Javaheri, Siger Ma, Athmane Benarous "
-        "and Thibaut Baguette, 2024-11-16"));
+    v3d_msg(tr("This plugin segments individual somas using a 3D "
+               "region-growing algorithm "
+               "with median filtering, and one of three possible tresholding "
+               "methods: local or global otsu thresholding, as well as "
+               "iterative tresholding."
+               "All methods use landmarks as seeds. Developed by ImagiNeuron "
+               "(2025-02-20)"),
+            0);
   }
 }
 
 /**
- * @brief Function to segment somas
- *
- * Describe how function works here
+ * @brief Call the appropriate methods when the function items are called from
+ * the command line
  *
  * @param func_name - the name of the function
  * @param input - the input arguments
@@ -99,7 +183,6 @@ bool SomaSegmentation::dofunc(const QString &func_name,
   if (func_name == tr("segment_somas")) {
     bool bmenu = false;
     input_PARA PARA;
-
     vector<char *> *pinfiles =
         (input.size() >= 1) ? (vector<char *> *)input[0].p : 0;
     vector<char *> *pparas =
@@ -108,7 +191,7 @@ bool SomaSegmentation::dofunc(const QString &func_name,
     vector<char *> paras = (pparas != 0) ? *pparas : vector<char *>();
 
     if (infiles.empty()) {
-      fprintf(stderr, "Need input image. \n");
+      fprintf(stderr, "Need input image.\n");
       return false;
     } else
       PARA.inimg_file = infiles[0];
@@ -117,192 +200,56 @@ bool SomaSegmentation::dofunc(const QString &func_name,
     k++;
     reconstruction_func(callback, parent, PARA, bmenu);
   } else if (func_name == tr("help")) {
-    ////HERE IS WHERE THE DEVELOPERS SHOULD UPDATE THE USAGE OF THE PLUGIN
-
-    printf("**** Usage of soma_segmentation tracing **** \n");
+    printf("**** Usage of soma_segmentation ****\n");
     printf(
         "vaa3d -x soma_segmentation -f segment_somas -i <inimg_file> -p "
-        "<channel> <other parameters>\n");
+        "<channel>\n");
     printf("inimg_file       The input image\n");
     printf(
-        "channel          Data channel for tracing. Start from 1 (default "
-        "1).\n");
-
+        "channel          Data channel for processing (starting from 1, "
+        "default 1)\n");
     printf(
-        "outswc_file      Will be named automatically based on the input image "
-        "file name, so you don't have to specify it.\n\n");
-
+        "The output segmented image is binary (white soma, black "
+        "background).\n");
   } else
     return false;
-
   return true;
 }
 
-void setRegionOfInterest(V3DPluginCallback2 &callback, v3dhandle &curwin,
-                         float x, float y, float z, float radius) {
-  // reset ROI
-  ROIList roiList = callback.getROI(curwin);
-  for (int j = 0; j < 3; j++) {
-    roiList[j].clear();
-  }
+////////////////////////////////////////////////////////////////////////
+// Implementation of MIND_4DImage methods
 
-  // set ROI
-  // ROIList being a QList<QPolygon>, and QPolygon being a QVector<QPoint>,
-  // we represent the x, y, and z planes as polygons with 4 points each to
-  // form a cube with the landmark at the center
-  float x_min = x - radius * 2.0f;
-  float x_max = x + radius * 2.0f;
-  float y_min = y - radius * 2.0f;
-  float y_max = y + radius * 2.0f;
-  float z_min = z - radius * 2.0f;
-  float z_max = z + radius * 2.0f;
-  // x-y plane
-  roiList[0] << QPoint(x_min, y_min);
-  roiList[0] << QPoint(x_max, y_min);
-  roiList[0] << QPoint(x_max, y_max);
-  roiList[0] << QPoint(x_min, y_max);
-  // z-y plane
-  roiList[1] << QPoint(z_min, y_min);
-  roiList[1] << QPoint(z_max, y_min);
-  roiList[1] << QPoint(z_max, y_max);
-  roiList[1] << QPoint(z_min, y_max);
-  // x-z plane
-  roiList[2] << QPoint(x_min, z_min);
-  roiList[2] << QPoint(x_max, z_min);
-  roiList[2] << QPoint(x_max, z_max);
-  roiList[2] << QPoint(x_min, z_max);
+MIND_4DImage::MIND_4DImage() : data(nullptr), xdim(0), ydim(0), zdim(0), cdim(0) {}
 
-  if (callback.setROI(curwin, roiList)) {
-    callback.updateImageWindow(curwin);
+MIND_4DImage::MIND_4DImage(const MIND_4DImage &other)
+{
+  xdim = other.xdim;
+  ydim = other.ydim;
+  zdim = other.zdim;
+  cdim = other.cdim;
+  if (other.data) {
+    data = new unsigned char[xdim * ydim * zdim * cdim];
+    std::copy(other.data, other.data + xdim * ydim * zdim * cdim, data);
   } else {
-    qDebug() << "error: failed to set ROI";
-    return;
-  }
-
-  callback.openROI3DWindow(curwin);
-
-  // Update landmark
-  View3DControl *v3dlocalcontrol = callback.getLocalView3DControl(curwin);
-  if (v3dlocalcontrol) {
-    v3dlocalcontrol->updateLandmark();
-  } else {
-    qDebug() << "error: failed to update 3D viewer";
-    return;
+    data = nullptr;
   }
 }
 
-/**
- * @brief Function to reconstruct somas
- *
- * Describe how function works here
- *
- * @param callback - the V3D plugin callback interface
- * @param parent - the parent interface
- * @param PARA - the input parameters
- * @param bmenu - whether the function is being called from the menu
- */
-void reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
-                         input_PARA &PARA, bool bmenu) {
-  unsigned char *data1d = 0;
-  V3DLONG N, M, P, sc, c;
-  V3DLONG in_sz[4];
-  if (bmenu) {
-    v3dhandle curwin = callback.currentImageWindow();
-    if (!curwin) {
-      QMessageBox::information(
-          0, "", "You don't have any image open in the main window.");
-      return;
-    }
-
-    Image4DSimple *p4DImage = callback.getImage(curwin);
-
-    if (!p4DImage) {
-      QMessageBox::information(0, "",
-                               "The image pointer is invalid. Ensure your data "
-                               "is valid and try again!");
-      return;
-    }
-
-    data1d = p4DImage->getRawData();
-    N = p4DImage->getXDim();
-    M = p4DImage->getYDim();
-    P = p4DImage->getZDim();
-    sc = p4DImage->getCDim();
-
-    bool ok1;
-
-    if (sc == 1) {
-      c = 1;
-      ok1 = true;
-    } else {
-      c = QInputDialog::getInt(parent, "Channel", "Enter channel NO:", 1, 1, sc,
-                               1, &ok1);
-    }
-
-    if (!ok1) return;
-
-    in_sz[0] = N;
-    in_sz[1] = M;
-    in_sz[2] = P;
-    in_sz[3] = sc;
-
-    PARA.inimg_file = p4DImage->getFileName();
+MIND_4DImage &MIND_4DImage::operator=(const MIND_4DImage &other)
+{
+  if (this == &other) return *this;
+  delete[] data;
+  xdim = other.xdim;
+  ydim = other.ydim;
+  zdim = other.zdim;
+  cdim = other.cdim;
+  if (other.data) {
+    data = new unsigned char[xdim * ydim * zdim * cdim];
+    std::copy(other.data, other.data + xdim * ydim * zdim * cdim, data);
   } else {
-    int datatype = 0;
-    if (!simple_loadimage_wrapper(callback,
-                                  PARA.inimg_file.toStdString().c_str(), data1d,
-                                  in_sz, datatype)) {
-      fprintf(stderr,
-              "Error happens in reading the subject file [%s]. Exit. \n",
-              PARA.inimg_file.toStdString().c_str());
-      return;
-    }
-    if (PARA.channel < 1 || PARA.channel > in_sz[3]) {
-      fprintf(stderr, "Invalid channel number. \n");
-      return;
-    }
-    N = in_sz[0];
-    M = in_sz[1];
-    P = in_sz[2];
-    sc = in_sz[3];
-    c = PARA.channel;
+    data = nullptr;
   }
-
-  //// THIS IS WHERE THE DEVELOPERS SHOULD ADD THEIR OWN NEURON TRACING CODE
-
-  // get current window, image, and landmarks
-  v3dhandle curwin = callback.currentImageWindow();
-  Image4DSimple *p4DImage = callback.getImage(curwin);
-  LandmarkList landmarkList = callback.getLandmark(curwin);
-
-  // check if image is valid
-  if (!p4DImage) {
-    qDebug() << "error: invalid image";
-    return;
-  }
-
-  // get 1st landmark
-  if (landmarkList.size() < 1) {
-    qDebug() << "error: no landmark found";
-    return;
-  }
-  LocationSimple lm = landmarkList[0];
-  float x, y, z;
-  float radius;
-  x = lm.x;
-  y = lm.y;
-  z = lm.z;
-  radius = lm.radius;
-
-  // Ask for desired resolution of a image pixel along the 3
-  // axes for isotropic correction and set resolution of the image
-  ResolutionDialog dialog(parent);
-  dialog.setResolutionOfImage(p4DImage);
-
-  // Set the ROI
-  setRegionOfInterest(callback, curwin, x, y, z, radius);
-
-  return;
+  return *this;
 }
 
 /**
@@ -393,3 +340,5 @@ void isotropic_correction_func(V3DPluginCallback2 &callback, QWidget *parent,
 
   return;
 }
+
+MIND_4DImage::~MIND_4DImage() { delete[] data; }
