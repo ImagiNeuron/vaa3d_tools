@@ -23,14 +23,15 @@ void savePCAResultsToCSV(const QString &filename, int somaIndex,
 
     if (shouldSave) {
       QString suggestedName = QFileInfo(filename).fileName();
-      actualFilename = QFileDialog::getSaveFileName(
-          parent, "Save PCA Results", suggestedName, "CSV Files (*.csv)");
-      if (actualFilename.isEmpty()) {
-        printf("Save cancelled by user.\n");
-        shouldSave = false;
-        if (saveEnabled) *saveEnabled = false;
-        return;
-      }
+      // actualFilename = QFileDialog::getSaveFileName(
+      //     parent, "Save PCA Results", suggestedName, "CSV Files (*.csv)");
+      // if (actualFilename.isEmpty()) {
+      //   printf("Save cancelled by user.\n");
+      //   shouldSave = false;
+      //   if (saveEnabled) *saveEnabled = false;
+      //   return;
+      // }
+      actualFilename = suggestedName;
 
       // Ensure it has .csv extension
       if (!actualFilename.endsWith(".csv", Qt::CaseInsensitive)) {
