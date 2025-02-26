@@ -41,6 +41,7 @@
 #include "sstream"
 #include "string"
 #include "v3d_message.h"
+#include "pcaAnalysis.h"
 using namespace std;
 const int const_length_histogram = 256;
 const double const_max_voxelValue = 255;
@@ -601,6 +602,8 @@ class cellSegmentation : public QObject {
               idx_exemplar);
           continue;
         }  // failed;
+
+        analyzeSomaPCA(this->Image1D_segmentationResult, this->dim_X, this->dim_Y, this->dim_Z, _LandmarkList_exemplar[idx_exemplar], idx_exemplar + 1);
 
         // mark processed voxels
         this->poss2Image1D(poss_exemplarRegionOld, this->Image1D_mask, 0);
