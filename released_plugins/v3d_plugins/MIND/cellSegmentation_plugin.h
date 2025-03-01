@@ -457,6 +457,14 @@ class cellSegmentation : public QObject {
         double value_centerMovement2 = 0;
 
         double radius_marker = _LandmarkList_exemplar[idx_exemplar].radius;
+        // print the radius
+        printf("Marker number %d, radius: %f\n", idx_exemplar, radius_marker);
+
+        std::string comment = _LandmarkList_exemplar[idx_exemplar].comments;
+        // print if the comment contains the string equals"1"
+        if (comment.find("1") != std::string::npos) {
+          printf("Marker number %d: %s\n", idx_exemplar, comment.c_str());
+        }
 
         // region growing on each examplar label, trying different tresholds
         // until conditions are broken. Conditions on the size of the region,
