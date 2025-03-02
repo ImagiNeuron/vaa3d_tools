@@ -275,11 +275,11 @@ class dialogRun : public QDialog {
     segmentationMode = QComboBox_mode_selection->currentIndex() + 1;
     if (segmentationMode == 3) {
       localOtsuRadius = QLineEdit_localOtsuRadius->text().toDouble();
-      // Enforce a valid range of 3 to 20.
+      // Enforce a valid range of 3 to 50.
       if (localOtsuRadius < 3)
         localOtsuRadius = 3;
-      else if (localOtsuRadius > 20)
-        localOtsuRadius = 20;
+      else if (localOtsuRadius > 50)
+        localOtsuRadius = 50;
     }
     // retrieve the median filtering flag
     applyMedianFiltering = QCheckBox_medianFiltering->isChecked();
