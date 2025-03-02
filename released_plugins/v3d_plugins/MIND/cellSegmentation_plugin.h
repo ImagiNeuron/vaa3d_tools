@@ -287,9 +287,9 @@ class dialogRun : public QDialog {
     if (applyMedianFiltering) {
       medianFilteringRadius =
           QLineEdit_medianFilteringRadius->text().toDouble();
-      // Enforce a valid range of 2 to 9.
-      if (medianFilteringRadius < 2)
-        medianFilteringRadius = 2;
+      // Enforce a valid range of 1 to 9.
+      if (medianFilteringRadius < 1)
+        medianFilteringRadius = 1;
       else if (medianFilteringRadius > 9)
         medianFilteringRadius = 9;
     }
