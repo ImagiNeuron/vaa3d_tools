@@ -78,6 +78,11 @@ class dialogRun : public QDialog {
   bool applyMarkerConstraint;               // flag read from the checkbox
   QCheckBox *QCheckBox_manualThresholding;  // checkbox for manual thresholding
   bool manualThresholding;                  //  flag for manual thresholding
+  QLineEdit *QLineEdit_localOtsuRadius;     // line edit for local Otsu radius
+  QLineEdit *
+      QLineEdit_medianFilteringRadius;  // line edit for median filtering radius
+  double localOtsuRadius;               // radius for local Otsu radius
+  double medianFilteringRadius;         // radius for median filtering radius
   dialogRun(V3DPluginCallback2 &V3DPluginCallback2_currentCallback,
             QWidget *QWidget_parent, int int_channelDim) {
     // channel
@@ -155,31 +160,52 @@ class dialogRun : public QDialog {
                                       4, 1, 1);
     QGroupBox_shape_main->setLayout(QGridLayout_shape_main);
 
-    // Create a new group box for soma segmentation mode
+    // Create a new group box for segmentation preferences
     QGroupBox *QGroupBox_segmentationMode =
         new QGroupBox("Segmentation Preferences", this);
-    QHBoxLayout *layout_segmentationMode = new QHBoxLayout();
-    // Create and populate the dropdown
+    QVBoxLayout *vLayout_segmentation = new QVBoxLayout();
+    // Row 1: Segmentation mode, Local Otsu radius, Manual thresholding
+    QHBoxLayout *hLayout_segmentationTop = new QHBoxLayout();
+    // Segmentation Mode Label
+    QLabel *label_segMode = new QLabel("Segmentation Mode:", this);
+    hLayout_segmentationTop->addWidget(label_segMode, 0);
+    // Segmentation Mode Dropdown
     QComboBox_mode_selection = new QComboBox(this);
     QComboBox_mode_selection->addItem("Iterative Threshold");
     QComboBox_mode_selection->addItem("Global Otsu");
     QComboBox_mode_selection->addItem("Local Otsu");
-    layout_segmentationMode->addWidget(QComboBox_mode_selection, 2);
-    // Add the median filtering checkbox next to segmentation mode
-    QCheckBox_medianFiltering = new QCheckBox("Median Filtering", this);
-    QCheckBox_medianFiltering->setChecked(true);  // default is enabled
-    layout_segmentationMode->addWidget(QCheckBox_medianFiltering, 1);
-    // Add the marker constraint checkbox next to median filtering
-    QCheckBox_markerConstraint = new QCheckBox("Marker Constraint", this);
-    QCheckBox_markerConstraint->setChecked(false);  // default off
-    layout_segmentationMode->addWidget(QCheckBox_markerConstraint, 1);
-    // Create and add the manual thresholding checkbox.
+    hLayout_segmentationTop->addWidget(QComboBox_mode_selection, 2);
+    // Local Otsu Radius Label
+    QLabel *label_localOtsuRadius = new QLabel("Local Otsu Radius:", this);
+    hLayout_segmentationTop->addWidget(label_localOtsuRadius, 0);
+    // Local Otsu Radius Input
+    QLineEdit_localOtsuRadius = new QLineEdit("20", this);  // default value
+    hLayout_segmentationTop->addWidget(QLineEdit_localOtsuRadius, 1);
+    // Manual Thresholding Checkbox
     QCheckBox_manualThresholding = new QCheckBox("Manual Thresholding", this);
     QCheckBox_manualThresholding->setChecked(false);  // default off
-    // add it to the segmentation mode layout:
-    layout_segmentationMode->addWidget(QCheckBox_manualThresholding, 1);
-    // Set the layout for this section
-    QGroupBox_segmentationMode->setLayout(layout_segmentationMode);
+    hLayout_segmentationTop->addWidget(QCheckBox_manualThresholding, 0);
+    vLayout_segmentation->addLayout(hLayout_segmentationTop);
+    // Row 2: Median filtering, its radius, and marker constraint
+    QHBoxLayout *hLayout_segmentationBottom = new QHBoxLayout();
+    // Median Filtering Checkbox
+    QCheckBox_medianFiltering = new QCheckBox("Median Filtering", this);
+    QCheckBox_medianFiltering->setChecked(true);  // default is enabled
+    hLayout_segmentationBottom->addWidget(QCheckBox_medianFiltering, 0);
+    // Median Filtering Radius Label
+    QLabel *label_medianRadius = new QLabel("Median Filtering Radius:", this);
+    hLayout_segmentationBottom->addWidget(label_medianRadius, 0);
+    // Median Filtering Radius Input
+    QLineEdit_medianFilteringRadius =
+        new QLineEdit("3", this);  // default value
+    hLayout_segmentationBottom->addWidget(QLineEdit_medianFilteringRadius, 1);
+    // Marker Constraint Checkbox
+    QCheckBox_markerConstraint = new QCheckBox("Marker Constraint", this);
+    QCheckBox_markerConstraint->setChecked(false);  // default off
+    hLayout_segmentationBottom->addWidget(QCheckBox_markerConstraint, 0);
+    vLayout_segmentation->addLayout(hLayout_segmentationBottom);
+    // Set the layout for the group box
+    QGroupBox_segmentationMode->setLayout(vLayout_segmentation);
 
     // control
     QPushButton *QPushButton_control_start =
@@ -247,8 +273,26 @@ class dialogRun : public QDialog {
         this->QLineEdit_exemplar_maxMovement2->text().toUInt();
     // retrieve the segmentation mode:
     segmentationMode = QComboBox_mode_selection->currentIndex() + 1;
+    if (segmentationMode == 3) {
+      localOtsuRadius = QLineEdit_localOtsuRadius->text().toDouble();
+      // Enforce a valid range of 3 to 20.
+      if (localOtsuRadius < 3)
+        localOtsuRadius = 3;
+      else if (localOtsuRadius > 20)
+        localOtsuRadius = 20;
+    }
     // retrieve the median filtering flag
     applyMedianFiltering = QCheckBox_medianFiltering->isChecked();
+    // Retrieve the median filtering radius only if median filtering is enabled.
+    if (applyMedianFiltering) {
+      medianFilteringRadius =
+          QLineEdit_medianFilteringRadius->text().toDouble();
+      // Enforce a valid range of 2 to 9.
+      if (medianFilteringRadius < 2)
+        medianFilteringRadius = 2;
+      else if (medianFilteringRadius > 9)
+        medianFilteringRadius = 9;
+    }
     // retrieve the marker constraint flag
     applyMarkerConstraint = QCheckBox_markerConstraint->isChecked();
     // Retrieve manual threshold flag:
@@ -333,8 +377,12 @@ class cellSegmentation : public QObject {
 
     // segmentation mode
     int segmentationMode;  // 1: iterative, 2: global Otsu, 3: local Otsu
+    // Local Otsu radius input
+    double localOtsuRadius;
     // median filtering check
     bool applyMedianFiltering;
+    // median filtering radius input
+    double medianFilteringRadius;
     // marker constraint check
     bool applyMarkerConstraint;
     // manual thresholding check
@@ -415,7 +463,8 @@ class cellSegmentation : public QObject {
 
         // optionally apply the median filter as preprocessing
         if (this->applyMedianFiltering) {
-          this->filter_Median(3);
+          // Use the user-provided median filtering radius.
+          this->filter_Median((V3DLONG)(this->medianFilteringRadius));
         }
 
         // set parameters that contorl the segmentation
@@ -550,7 +599,9 @@ class cellSegmentation : public QObject {
             value_centerMovement2 =
                 this->getEuclideanDistance2(pos_exemplar, pos_massCenterOld);
           } else if (segmentationMode == 3) {
-            threshold_exemplarRegion = localOtsuThreshold(pos_exemplar, 20);
+            // Use the local Otsu radius provided by the user.
+            threshold_exemplarRegion = localOtsuThreshold(
+                pos_exemplar, (V3DLONG)(this->localOtsuRadius));
             vector<V3DLONG> xyz_exemplar = this->index2Coordinate(pos_exemplar);
             printf(
                 "Local Otsu threshold computed at landmark (%ld, %ld, %ld): "
@@ -2653,9 +2704,15 @@ class cellSegmentation : public QObject {
       if (dialogRun1.exec() != QDialog::Accepted) {
         return false;
       }
+      // Set the local Otsu radius from the dialog
+      this->class_segmentationMain1.localOtsuRadius =
+          dialogRun1.localOtsuRadius;
       // Set the median filtering flag from the dialog
       this->class_segmentationMain1.applyMedianFiltering =
           dialogRun1.applyMedianFiltering;
+      // Set the median filtering radius from the dialog
+      this->class_segmentationMain1.medianFilteringRadius =
+          dialogRun1.medianFilteringRadius;
       // Set the marker flag from the dialog
       this->class_segmentationMain1.applyMarkerConstraint =
           dialogRun1.applyMarkerConstraint;
