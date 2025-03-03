@@ -176,7 +176,8 @@ class dialogRun : public QDialog {
     QComboBox_mode_selection->addItem("Local Otsu");
     hLayout_segmentationTop->addWidget(QComboBox_mode_selection, 2);
     // Local Otsu Radius Label
-    QLabel *label_localOtsuRadius = new QLabel("Local Otsu Radius:", this);
+    QLabel *label_localOtsuRadius =
+        new QLabel("Local Otsu Radius: (Voxels)", this);
     hLayout_segmentationTop->addWidget(label_localOtsuRadius, 0);
     // Local Otsu Radius Input
     QLineEdit_localOtsuRadius = new QLineEdit("20", this);  // default value
@@ -193,7 +194,8 @@ class dialogRun : public QDialog {
     QCheckBox_medianFiltering->setChecked(true);  // default is enabled
     hLayout_segmentationBottom->addWidget(QCheckBox_medianFiltering, 0);
     // Median Filtering Radius Label
-    QLabel *label_medianRadius = new QLabel("Median Filtering Radius:", this);
+    QLabel *label_medianRadius =
+        new QLabel("Median Filtering Radius: (Voxels)", this);
     hLayout_segmentationBottom->addWidget(label_medianRadius, 0);
     // Median Filtering Radius Input
     QLineEdit_medianFilteringRadius =
@@ -625,7 +627,7 @@ class cellSegmentation : public QObject {
 
         // initial threshold didn't lead to a grown region. This check is not
         // necessary without too small region check
-        if (segmentationMode == 1 && idx_step < 1) {
+        if (segmentationMode == 1 && idx_step < 1 && manualThresh == -1) {
           printf("Marker number %d failed - index step did not change%d\n",
                  idx_exemplar);
           continue;
