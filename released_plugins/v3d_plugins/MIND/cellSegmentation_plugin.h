@@ -71,12 +71,19 @@ enum enum_shape_t { sphere, cube };
 class dialogRun : public QDialog {
   Q_OBJECT
  public:
-  QComboBox *QComboBox_mode_selection;  // new combo box for mode selection
+  QComboBox *QComboBox_mode_selection;  // combo box for mode selection
   int segmentationMode;  // 1: iterative, 2: global Otsu, 3: local Otsu
-  QCheckBox *QCheckBox_medianFiltering;   // new checkbox for median filtering
-  bool applyMedianFiltering;              // flag read from the checkbox
-  QCheckBox *QCheckBox_markerConstraint;  // new checkbox for marker constraint
-  bool applyMarkerConstraint;             // flag read from the checkbox
+  QCheckBox *QCheckBox_medianFiltering;     // checkbox for median filtering
+  bool applyMedianFiltering;                // flag read from the checkbox
+  QCheckBox *QCheckBox_markerConstraint;    // checkbox for marker constraint
+  bool applyMarkerConstraint;               // flag read from the checkbox
+  QCheckBox *QCheckBox_manualThresholding;  // checkbox for manual thresholding
+  bool manualThresholding;                  //  flag for manual thresholding
+  QLineEdit *QLineEdit_localOtsuRadius;     // line edit for local Otsu radius
+  QLineEdit *
+      QLineEdit_medianFilteringRadius;  // line edit for median filtering radius
+  double localOtsuRadius;               // radius for local Otsu radius
+  double medianFilteringRadius;         // radius for median filtering radius
   dialogRun(V3DPluginCallback2 &V3DPluginCallback2_currentCallback,
             QWidget *QWidget_parent, int int_channelDim) {
     // channel
@@ -154,26 +161,54 @@ class dialogRun : public QDialog {
                                       4, 1, 1);
     QGroupBox_shape_main->setLayout(QGridLayout_shape_main);
 
-    // Create a new group box for soma segmentation mode
+    // Create a new group box for segmentation preferences
     QGroupBox *QGroupBox_segmentationMode =
         new QGroupBox("Segmentation Preferences", this);
-    QHBoxLayout *layout_segmentationMode = new QHBoxLayout();
-    // Create and populate the dropdown
+    QVBoxLayout *vLayout_segmentation = new QVBoxLayout();
+    // Row 1: Segmentation mode, Local Otsu radius, Manual thresholding
+    QHBoxLayout *hLayout_segmentationTop = new QHBoxLayout();
+    // Segmentation Mode Label
+    QLabel *label_segMode = new QLabel("Segmentation Mode:", this);
+    hLayout_segmentationTop->addWidget(label_segMode, 0);
+    // Segmentation Mode Dropdown
     QComboBox_mode_selection = new QComboBox(this);
     QComboBox_mode_selection->addItem("Iterative Threshold");
     QComboBox_mode_selection->addItem("Global Otsu");
     QComboBox_mode_selection->addItem("Local Otsu");
-    layout_segmentationMode->addWidget(QComboBox_mode_selection, 2);
-    // Add the median filtering checkbox next to segmentation mode
+    hLayout_segmentationTop->addWidget(QComboBox_mode_selection, 2);
+    // Local Otsu Radius Label
+    QLabel *label_localOtsuRadius =
+        new QLabel("Local Otsu Radius: (Voxels)", this);
+    hLayout_segmentationTop->addWidget(label_localOtsuRadius, 0);
+    // Local Otsu Radius Input
+    QLineEdit_localOtsuRadius = new QLineEdit("20", this);  // default value
+    hLayout_segmentationTop->addWidget(QLineEdit_localOtsuRadius, 1);
+    // Manual Thresholding Checkbox
+    QCheckBox_manualThresholding = new QCheckBox("Manual Thresholding", this);
+    QCheckBox_manualThresholding->setChecked(false);  // default off
+    hLayout_segmentationTop->addWidget(QCheckBox_manualThresholding, 0);
+    vLayout_segmentation->addLayout(hLayout_segmentationTop);
+    // Row 2: Median filtering, its radius, and marker constraint
+    QHBoxLayout *hLayout_segmentationBottom = new QHBoxLayout();
+    // Median Filtering Checkbox
     QCheckBox_medianFiltering = new QCheckBox("Median Filtering", this);
     QCheckBox_medianFiltering->setChecked(true);  // default is enabled
-    layout_segmentationMode->addWidget(QCheckBox_medianFiltering, 1);
-    // Add the marker constraint checkbox next to median filtering
+    hLayout_segmentationBottom->addWidget(QCheckBox_medianFiltering, 0);
+    // Median Filtering Radius Label
+    QLabel *label_medianRadius =
+        new QLabel("Median Filtering Radius: (Voxels)", this);
+    hLayout_segmentationBottom->addWidget(label_medianRadius, 0);
+    // Median Filtering Radius Input
+    QLineEdit_medianFilteringRadius =
+        new QLineEdit("3", this);  // default value
+    hLayout_segmentationBottom->addWidget(QLineEdit_medianFilteringRadius, 1);
+    // Marker Constraint Checkbox
     QCheckBox_markerConstraint = new QCheckBox("Marker Constraint", this);
     QCheckBox_markerConstraint->setChecked(false);  // default off
-    layout_segmentationMode->addWidget(QCheckBox_markerConstraint, 1);
-    // Set the layout for this section
-    QGroupBox_segmentationMode->setLayout(layout_segmentationMode);
+    hLayout_segmentationBottom->addWidget(QCheckBox_markerConstraint, 0);
+    vLayout_segmentation->addLayout(hLayout_segmentationBottom);
+    // Set the layout for the group box
+    QGroupBox_segmentationMode->setLayout(vLayout_segmentation);
 
     // control
     QPushButton *QPushButton_control_start =
@@ -241,10 +276,30 @@ class dialogRun : public QDialog {
         this->QLineEdit_exemplar_maxMovement2->text().toUInt();
     // retrieve the segmentation mode:
     segmentationMode = QComboBox_mode_selection->currentIndex() + 1;
+    if (segmentationMode == 3) {
+      localOtsuRadius = QLineEdit_localOtsuRadius->text().toDouble();
+      // Enforce a valid range of 3 to 50.
+      if (localOtsuRadius < 3)
+        localOtsuRadius = 3;
+      else if (localOtsuRadius > 50)
+        localOtsuRadius = 50;
+    }
     // retrieve the median filtering flag
     applyMedianFiltering = QCheckBox_medianFiltering->isChecked();
+    // Retrieve the median filtering radius only if median filtering is enabled.
+    if (applyMedianFiltering) {
+      medianFilteringRadius =
+          QLineEdit_medianFilteringRadius->text().toDouble();
+      // Enforce a valid range of 1 to 9.
+      if (medianFilteringRadius < 1)
+        medianFilteringRadius = 1;
+      else if (medianFilteringRadius > 9)
+        medianFilteringRadius = 9;
+    }
     // retrieve the marker constraint flag
     applyMarkerConstraint = QCheckBox_markerConstraint->isChecked();
+    // Retrieve manual threshold flag:
+    manualThresholding = QCheckBox_manualThresholding->isChecked();
 
     if (this->QRadioButton_shape_sphere->isChecked()) {
       this->shape_type_selection = sphere;
@@ -325,10 +380,16 @@ class cellSegmentation : public QObject {
 
     // segmentation mode
     int segmentationMode;  // 1: iterative, 2: global Otsu, 3: local Otsu
+    // Local Otsu radius input
+    double localOtsuRadius;
     // median filtering check
     bool applyMedianFiltering;
+    // median filtering radius input
+    double medianFilteringRadius;
     // marker constraint check
     bool applyMarkerConstraint;
+    // manual thresholding check
+    bool manualThresholding;
 
 // vector<V3DLONG> poss_segmentationResultCenterMerged;
 #pragma endregion
@@ -345,7 +406,7 @@ class cellSegmentation : public QObject {
      */
     bool control_run(unsigned char *_Image1D_original, V3DLONG _dim_X,
                      V3DLONG _dim_Y, V3DLONG _dim_Z, int _idx_channel,
-                     LandmarkList _LandmarkList_exemplar, int _idx_shape,
+                     LandmarkList &_LandmarkList_exemplar, int _idx_shape,
                      double _threshold_deltaShapeStat,
                      double _multiplier_thresholdRegionSize,
                      double _multiplier_uThresholdRegionSize,
@@ -405,7 +466,8 @@ class cellSegmentation : public QObject {
 
         // optionally apply the median filter as preprocessing
         if (this->applyMedianFiltering) {
-          this->filter_Median(3);
+          // Use the user-provided median filtering radius.
+          this->filter_Median((V3DLONG)(this->medianFilteringRadius));
         }
 
         // set parameters that contorl the segmentation
@@ -459,99 +521,114 @@ class cellSegmentation : public QObject {
 
         double radius_marker = _LandmarkList_exemplar[idx_exemplar].radius;
 
+        // Retrieve the current landmark comment.
+        std::string comment = _LandmarkList_exemplar[idx_exemplar].comments;
+
+        int manualThresh = -1;
+        if (this->manualThresholding) {
+          size_t pos = comment.find("threshold:");
+          if (pos != std::string::npos) {
+            pos += 10;  // length of "threshold:"
+            // Skip any whitespace.
+            while (pos < comment.size() && isspace(comment[pos])) pos++;
+            try {
+              manualThresh = std::stoi(comment.substr(pos));
+            } catch (...) {
+              manualThresh = -1;  // parsing failed, ignore
+            }
+            // Validate the extracted value.
+            if (manualThresh < default_threshold_global || manualThresh > 255)
+              manualThresh = -1;
+          }
+        }
         // region growing on each examplar label, trying different tresholds
         // until conditions are broken. Conditions on the size of the region,
         // and the distance from the center of mass / marker. The final
         // flooded region is the one that is closest to the center of mass of
         // the original cell Depending on the segmentation mode, choose the
         // threshold:
-        if (segmentationMode == 1) {
-          for (idx_step = 0; idx_step < count_step; idx_step++) {
-            // the trehsold on voxel values is decreasing each iteration -
-            // allowing more voxels to be included as possibilities in
-            // flooding decreases from value at the label to 25
-            V3DLONG threshold_exemplarRegion = marker_intensity - idx_step;
-
-            // region grow on this exemplar region and mark result as flooded
-            poss_exemplarRegionNew = this->regionGrowOnPos(
-                pos_exemplar, threshold_exemplarRegion, INF,
-                this->size_page / 1000, this->Image1D_mask, radius_marker);
-            this->poss2Image1D(poss_exemplarRegionNew, this->Image1D_mask,
-                               const_max_voxelValue);
-
-            // if the region is too small, break. No longer necessary
-            // if (poss_exemplarRegionNew.size() <
-            // default_threshold_regionSize)
-            // {
-            //   break;
-            // }
-
-            // make sure region has not moved too far awar from marker or
-            // center of mass
-            pos_massCenterNew = this->getCenterByMass(poss_exemplarRegionNew);
-            double value_centerMovement1 = this->getEuclideanDistance2(
-                pos_massCenterOld, pos_massCenterNew);
-
+        V3DLONG threshold_exemplarRegion;
+        // If manualThresh is provided, skip any threshold calculations.
+        if (manualThresh != -1) {
+          threshold_exemplarRegion = manualThresh;
+          // Use the manual threshold in region growing.
+          poss_exemplarRegionOld = this->regionGrowOnPos(
+              pos_exemplar, threshold_exemplarRegion, INF,
+              this->size_page / 1000, this->Image1D_mask, radius_marker);
+          pos_massCenterOld = getCenterByMass(poss_exemplarRegionOld);
+          value_centerMovement2 =
+              this->getEuclideanDistance2(pos_exemplar, pos_massCenterOld);
+        } else {
+          // No manual threshold provided: choose segmentation mode to compute
+          // threshold.
+          if (segmentationMode == 1) {
+            for (idx_step = 0; idx_step < count_step; idx_step++) {
+              threshold_exemplarRegion = marker_intensity - idx_step;
+              poss_exemplarRegionNew = this->regionGrowOnPos(
+                  pos_exemplar, threshold_exemplarRegion, INF,
+                  this->size_page / 1000, this->Image1D_mask, radius_marker);
+              this->poss2Image1D(poss_exemplarRegionNew, this->Image1D_mask,
+                                 const_max_voxelValue);
+              pos_massCenterNew = this->getCenterByMass(poss_exemplarRegionNew);
+              double value_centerMovement1 = this->getEuclideanDistance2(
+                  pos_massCenterOld, pos_massCenterNew);
+              value_centerMovement2 =
+                  this->getEuclideanDistance2(pos_exemplar, pos_massCenterNew);
+              if (value_centerMovement1 > max_movment1) {
+                printf(
+                    "final threshold: %d, for marker number %d (moved too far "
+                    "from center of mass)\n",
+                    threshold_exemplarRegion, idx_exemplar);
+                break;
+              }
+              if (value_centerMovement2 > max_movment2) {
+                printf(
+                    "final threshold: %d, for marker number %d (moved too far "
+                    "from marker)\n",
+                    threshold_exemplarRegion, idx_exemplar);
+                break;
+              }
+              pos_massCenterOld = pos_massCenterNew;
+              poss_exemplarRegionOld = poss_exemplarRegionNew;
+            }
+          } else if (segmentationMode == 2) {
+            threshold_exemplarRegion = globalOtsuThreshold();
+            printf("Global Otsu threshold computed: %d\n",
+                   threshold_exemplarRegion);
+            poss_exemplarRegionOld =
+                regionGrowOnPos(pos_exemplar, threshold_exemplarRegion, INF,
+                                size_page / 1000, Image1D_mask, radius_marker);
+            pos_massCenterOld = getCenterByMass(poss_exemplarRegionOld);
             value_centerMovement2 =
-                this->getEuclideanDistance2(pos_exemplar, pos_massCenterNew);
-
-            if (value_centerMovement1 > max_movment1) {
-              printf(
-                  "final threshold: %d, for marker number %d (moved too far "
-                  "from "
-                  "center of mass)\n",
-                  threshold_exemplarRegion, idx_exemplar);
-              break;
-            }
-
-            if (value_centerMovement2 > max_movment2) {
-              printf(
-                  "final threshold: %d, for marker number (moved too far "
-                  "from "
-                  "marker) %d\n",
-                  threshold_exemplarRegion, idx_exemplar);
-              break;
-            }
-            // update the segmentations
-            pos_massCenterOld = pos_massCenterNew;
-            poss_exemplarRegionOld = poss_exemplarRegionNew;
+                this->getEuclideanDistance2(pos_exemplar, pos_massCenterOld);
+          } else if (segmentationMode == 3) {
+            // Use the local Otsu radius provided by the user.
+            threshold_exemplarRegion = localOtsuThreshold(
+                pos_exemplar, (V3DLONG)(this->localOtsuRadius));
+            vector<V3DLONG> xyz_exemplar = this->index2Coordinate(pos_exemplar);
+            printf(
+                "Local Otsu threshold computed at landmark (%ld, %ld, %ld): "
+                "%d\n",
+                xyz_exemplar[0], xyz_exemplar[1], xyz_exemplar[2],
+                threshold_exemplarRegion);
+            poss_exemplarRegionOld =
+                regionGrowOnPos(pos_exemplar, threshold_exemplarRegion, INF,
+                                size_page / 1000, Image1D_mask, radius_marker);
+            pos_massCenterOld = getCenterByMass(poss_exemplarRegionOld);
+            value_centerMovement2 =
+                this->getEuclideanDistance2(pos_exemplar, pos_massCenterOld);
           }
-        } else if (segmentationMode == 2) {
-          // Use a global Otsu threshold computed over the entire image:
-          V3DLONG threshold_exemplarRegion = globalOtsuThreshold();
-          printf("Global Otsu threshold computed: %d\n",
-                 threshold_exemplarRegion);
-          poss_exemplarRegionOld =
-              regionGrowOnPos(pos_exemplar, threshold_exemplarRegion, INF,
-                              size_page / 1000, Image1D_mask, radius_marker);
-          pos_massCenterOld = getCenterByMass(poss_exemplarRegionOld);
-          value_centerMovement2 =
-              this->getEuclideanDistance2(pos_exemplar, pos_massCenterOld);
-        } else if (segmentationMode == 3) {
-          // Use a local Otsu threshold computed from a 20-voxel radius region
-          // around the marker
-          V3DLONG threshold_exemplarRegion =
-              localOtsuThreshold(pos_exemplar, 20);
-          vector<V3DLONG> xyz_exemplar = this->index2Coordinate(pos_exemplar);
-          printf(
-              "Local Otsu threshold computed at landmark (%ld, %ld, %ld): "
-              "%d\n",
-              xyz_exemplar[0], xyz_exemplar[1], xyz_exemplar[2],
-              threshold_exemplarRegion);
-          poss_exemplarRegionOld =
-              regionGrowOnPos(pos_exemplar, threshold_exemplarRegion, INF,
-                              size_page / 1000, Image1D_mask, radius_marker);
-          pos_massCenterOld = getCenterByMass(poss_exemplarRegionOld);
-          value_centerMovement2 =
-              this->getEuclideanDistance2(pos_exemplar, pos_massCenterOld);
         }
+        // Update the landmark's comment with the threshold value
+        _LandmarkList_exemplar[idx_exemplar].comments =
+            "threshold:" + std::to_string(threshold_exemplarRegion);
         // no need to attempt a second time
 
         // heuristics to remove floodings that are bad, as well as bad markers
 
         // initial threshold didn't lead to a grown region. This check is not
         // necessary without too small region check
-        if (segmentationMode == 1 && idx_step < 1) {
+        if (segmentationMode == 1 && idx_step < 1 && manualThresh == -1) {
           printf("Marker number %d failed - index step did not change%d\n",
                  idx_exemplar);
           continue;
@@ -2632,12 +2709,21 @@ class cellSegmentation : public QObject {
       if (dialogRun1.exec() != QDialog::Accepted) {
         return false;
       }
+      // Set the local Otsu radius from the dialog
+      this->class_segmentationMain1.localOtsuRadius =
+          dialogRun1.localOtsuRadius;
       // Set the median filtering flag from the dialog
       this->class_segmentationMain1.applyMedianFiltering =
           dialogRun1.applyMedianFiltering;
+      // Set the median filtering radius from the dialog
+      this->class_segmentationMain1.medianFilteringRadius =
+          dialogRun1.medianFilteringRadius;
       // Set the marker flag from the dialog
       this->class_segmentationMain1.applyMarkerConstraint =
           dialogRun1.applyMarkerConstraint;
+      // Set the manual thresholding flag from the dialog
+      this->class_segmentationMain1.manualThresholding =
+          dialogRun1.manualThresholding;
       int idx_shape;  // get shape paramters;
       if (dialogRun1.shape_type_selection == sphere) {
         idx_shape = 1;
@@ -2649,6 +2735,7 @@ class cellSegmentation : public QObject {
       // selected mode: (Assume dialogRun1.segmentationMode is set from the
       // combo box.)
       // call control_run method to do segmentation
+      // For example:
       is_success = this->class_segmentationMain1.control_run(
           Image1D_current, dim_X, dim_Y, dim_Z,
           dialogRun1.channel_idx_selection, LandmarkList_current, idx_shape,
@@ -2656,7 +2743,13 @@ class cellSegmentation : public QObject {
           dialogRun1.shape_multiplier_thresholdRegionSize,
           dialogRun1.shape_multiplier_uThresholdRegionSize, name_currentWindow,
           dialogRun1.exemplar_maxMovement1, dialogRun1.exemplar_maxMovement2,
-          dialogRun1.segmentationMode);  // pass mode 1, 2, or 3
+          dialogRun1.segmentationMode);
+
+      // Then update the original window with the modified landmarks:
+      _V3DPluginCallback2_currentCallback.setLandmark(v3dhandle_currentWindow,
+                                                      LandmarkList_current);
+      _V3DPluginCallback2_currentCallback.updateImageWindow(
+          v3dhandle_currentWindow);
     }
     // if the segmentation is successful, display the results
     QString name_result = "Result";
