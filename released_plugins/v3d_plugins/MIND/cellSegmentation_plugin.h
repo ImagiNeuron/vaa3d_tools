@@ -72,7 +72,7 @@ class dialogRun : public QDialog {
   Q_OBJECT
  public:
   QComboBox *QComboBox_mode_selection;  // combo box for mode selection
-  int segmentationMode;  // 1: iterative, 2: global Otsu, 3: local Otsu
+  int segmentationMode;  // 1: local otsu, 2: global Otsu, 3: iterative
   QCheckBox *QCheckBox_medianFiltering;     // checkbox for median filtering
   bool applyMedianFiltering;                // flag read from the checkbox
   QCheckBox *QCheckBox_markerConstraint;    // checkbox for marker constraint
@@ -172,16 +172,16 @@ class dialogRun : public QDialog {
     hLayout_segmentationTop->addWidget(label_segMode, 0);
     // Segmentation Mode Dropdown
     QComboBox_mode_selection = new QComboBox(this);
-    QComboBox_mode_selection->addItem("Iterative Threshold");
-    QComboBox_mode_selection->addItem("Global Otsu");
     QComboBox_mode_selection->addItem("Local Otsu");
+    QComboBox_mode_selection->addItem("Global Otsu");
+    QComboBox_mode_selection->addItem("Iterative Threshold");
     hLayout_segmentationTop->addWidget(QComboBox_mode_selection, 2);
     // Local Otsu Radius Label
     QLabel *label_localOtsuRadius =
         new QLabel("Local Otsu Radius: (Voxels)", this);
     hLayout_segmentationTop->addWidget(label_localOtsuRadius, 0);
     // Local Otsu Radius Input
-    QLineEdit_localOtsuRadius = new QLineEdit("20", this);  // default value
+    QLineEdit_localOtsuRadius = new QLineEdit("10", this);  // default value
     hLayout_segmentationTop->addWidget(QLineEdit_localOtsuRadius, 1);
     // Manual Thresholding Checkbox
     QCheckBox_manualThresholding = new QCheckBox("Manual Thresholding", this);
@@ -200,11 +200,11 @@ class dialogRun : public QDialog {
     hLayout_segmentationBottom->addWidget(label_medianRadius, 0);
     // Median Filtering Radius Input
     QLineEdit_medianFilteringRadius =
-        new QLineEdit("3", this);  // default value
+        new QLineEdit("1", this);  // default value
     hLayout_segmentationBottom->addWidget(QLineEdit_medianFilteringRadius, 1);
     // Marker Constraint Checkbox
     QCheckBox_markerConstraint = new QCheckBox("Marker Constraint", this);
-    QCheckBox_markerConstraint->setChecked(false);  // default off
+    QCheckBox_markerConstraint->setChecked(true);  // default on
     hLayout_segmentationBottom->addWidget(QCheckBox_markerConstraint, 0);
     vLayout_segmentation->addLayout(hLayout_segmentationBottom);
     // Set the layout for the group box
@@ -276,7 +276,7 @@ class dialogRun : public QDialog {
         this->QLineEdit_exemplar_maxMovement2->text().toUInt();
     // retrieve the segmentation mode:
     segmentationMode = QComboBox_mode_selection->currentIndex() + 1;
-    if (segmentationMode == 3) {
+    if (segmentationMode == 1) {
       localOtsuRadius = QLineEdit_localOtsuRadius->text().toDouble();
       // Enforce a valid range of 3 to 50.
       if (localOtsuRadius < 3)
@@ -380,7 +380,7 @@ class cellSegmentation : public QObject {
     vector<V3DLONG> poss_segmentationResultCenter;
 
     // segmentation mode
-    int segmentationMode;  // 1: iterative, 2: global Otsu, 3: local Otsu
+    int segmentationMode;  // 1: local otsu, 2: global Otsu, 3: iterative
     // Local Otsu radius input
     double localOtsuRadius;
     // median filtering check
@@ -570,7 +570,7 @@ class cellSegmentation : public QObject {
         } else {
           // No manual threshold provided: choose segmentation mode to compute
           // threshold.
-          if (segmentationMode == 1) {
+          if (segmentationMode == 3) {
             for (idx_step = 0; idx_step < count_step; idx_step++) {
               threshold_exemplarRegion = marker_intensity - idx_step;
               poss_exemplarRegionNew = this->regionGrowOnPos(
@@ -610,7 +610,7 @@ class cellSegmentation : public QObject {
             pos_massCenterOld = getCenterByMass(poss_exemplarRegionOld);
             value_centerMovement2 =
                 this->getEuclideanDistance2(pos_exemplar, pos_massCenterOld);
-          } else if (segmentationMode == 3) {
+          } else if (segmentationMode == 1) {
             // Use the local Otsu radius provided by the user.
             threshold_exemplarRegion = localOtsuThreshold(
                 pos_exemplar, (V3DLONG)(this->localOtsuRadius));
@@ -637,14 +637,14 @@ class cellSegmentation : public QObject {
 
         // initial threshold didn't lead to a grown region. This check is not
         // necessary without too small region check
-        if (segmentationMode == 1 && idx_step < 1 && manualThresh == -1) {
+        if (segmentationMode == 3 && idx_step < 1 && manualThresh == -1) {
           printf("Marker number %d failed - index step did not change%d\n",
                  idx_exemplar);
           continue;
         }
 
         // // on final iteration, the center of mass moved too far
-        if (segmentationMode == 1 &&
+        if (segmentationMode == 3 &&
             value_centerMovement2 > (max_movment2 * 4)) {
           printf(
               "Marker number %d failed - value_centerMovement2 was %f (too "
