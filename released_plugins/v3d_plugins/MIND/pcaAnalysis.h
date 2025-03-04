@@ -15,7 +15,7 @@
 // Function prototypes
 
 void analyzeSomaPCA(unsigned char *labeledData, V3DLONG N, V3DLONG M, V3DLONG P,
-                    const LocationSimple &lm, int somaIndex);
+                    const LocationSimple &lm, int somaIndex, QString savePath);
 
 void savePCAResultsToCSV(const QString &filename, int somaIndex,
                          const LocationSimple &lm, double pc1, double pc2,

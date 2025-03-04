@@ -911,10 +911,12 @@ class cellSegmentation : public QObject {
 
       // perform PCA analysis on the binary segmentation
       // for each index inside the segmentedLabels vector
+
+      QString savePath = _name_currentWindow + "_seg_pca.csv";
       for (int idx_exemplar : segmentedLabels) {
         analyzeSomaPCA(this->binarySegImage, this->dim_X, this->dim_Y,
                        this->dim_Z, _LandmarkList_exemplar[idx_exemplar],
-                       idx_exemplar + 1);
+                       idx_exemplar + 1, savePath);
       }
 
       this->memory_free_uchar2D(masks_page, count_exemplar);
@@ -2770,6 +2772,7 @@ class cellSegmentation : public QObject {
       // combo box.)
       // call control_run method to do segmentation
       // For example:
+
       is_success = this->class_segmentationMain1.control_run(
           Image1D_current, dim_X, dim_Y, dim_Z,
           dialogRun1.channel_idx_selection, LandmarkList_current, idx_shape,
@@ -2901,7 +2904,8 @@ class cellSegmentation : public QObject {
       // }
 
       // Automatically save binary segmented image to current directory.
-      QString savePath = QDir::currentPath() + "/segmentation_result.tif";
+
+      QString savePath = name_currentWindow + "_seg.tif";
       V3DLONG outSZ[4] = {this->class_segmentationMain1.dim_X,
                           this->class_segmentationMain1.dim_Y,
                           this->class_segmentationMain1.dim_Z, 1};

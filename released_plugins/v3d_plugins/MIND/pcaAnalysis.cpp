@@ -22,7 +22,7 @@ void savePCAResultsToCSV(const QString &filename, int somaIndex,
     if (saveEnabled) *saveEnabled = shouldSave;
 
     if (shouldSave) {
-      QString suggestedName = QFileInfo(filename).fileName();
+      // QString suggestedName = QFileInfo(filename).fileName();
       // actualFilename = QFileDialog::getSaveFileName(
       //     parent, "Save PCA Results", suggestedName, "CSV Files (*.csv)");
       // if (actualFilename.isEmpty()) {
@@ -31,7 +31,9 @@ void savePCAResultsToCSV(const QString &filename, int somaIndex,
       //   if (saveEnabled) *saveEnabled = false;
       //   return;
       // }
-      actualFilename = suggestedName;
+      // actualFilename = suggestedName;
+
+      actualFilename = filename;
 
       // Ensure it has .csv extension
       if (!actualFilename.endsWith(".csv", Qt::CaseInsensitive)) {
@@ -83,7 +85,7 @@ void savePCAResultsToCSV(const QString &filename, int somaIndex,
 }
 
 void analyzeSomaPCA(unsigned char *labeledData, V3DLONG N, V3DLONG M, V3DLONG P,
-                    const LocationSimple &lm, int somaIndex) {
+                    const LocationSimple &lm, int somaIndex, QString savePath) {
   // Extract soma info
   float x = lm.x;
   float y = lm.y;
@@ -124,11 +126,10 @@ void analyzeSomaPCA(unsigned char *labeledData, V3DLONG N, V3DLONG M, V3DLONG P,
     printf("    pc3: [%f, %f, %f]\n\n\n", vec3[0], vec3[1], vec3[2]);
 
     // Save to CSV with save flag
-    QString defaultFileName = "soma_pca_results.csv";
     QWidget *mainWin = QApplication::activeWindow();
     bool saveEnabled = false;
-    savePCAResultsToCSV(defaultFileName, somaIndex, lm, pc1, pc2, pc3, vec1,
-                        vec2, vec3, x_center, y_center, z_center, mainWin,
+    savePCAResultsToCSV(savePath, somaIndex, lm, pc1, pc2, pc3, vec1, vec2,
+                        vec3, x_center, y_center, z_center, mainWin,
                         &saveEnabled);
 
     if (somaIndex == 1) {
