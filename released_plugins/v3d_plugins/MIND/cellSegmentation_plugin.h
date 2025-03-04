@@ -38,10 +38,10 @@
 #include "cellSegmentation_plugin.h"
 #include "compute_win_pca_wp.h"
 #include "convert_type2uint8.h"
+#include "pcaAnalysis.h"
 #include "sstream"
 #include "string"
 #include "v3d_message.h"
-#include "pcaAnalysis.h"
 using namespace std;
 const int const_length_histogram = 256;
 const double const_max_voxelValue = 255;
@@ -369,8 +369,9 @@ class cellSegmentation : public QObject {
     // Exemplar (or learn from it);
     unsigned char *Image1D_exemplar;
 
-    // segmentation - where ther results are stored
+    // segmentation - where the results are stored
     vector<vector<V3DLONG> > possVct_segmentationResult;
+    unsigned char *binarySegImage;
 
     vector<vector<V3DLONG> > possVct_seed;
     unsigned char *Image1D_segmentationResult;
@@ -497,6 +498,9 @@ class cellSegmentation : public QObject {
       V3DLONG count_exemplar = poss_exemplar.size();
       vector<V3DLONG> poss_exemplarNew;
 
+      // create list of indexes of successfully segmented labels
+      vector<int> segmentedLabels;
+
       // main loop - iterating over each exemplar
       for (V3DLONG idx_exemplar = 0; idx_exemplar < count_exemplar;
            idx_exemplar++) {
@@ -504,6 +508,11 @@ class cellSegmentation : public QObject {
         // make sure this voxel has not already been processed (255 is not
         // processed)
         if (this->Image1D_mask[pos_exemplar] < 1) {
+          // soma skipped as flooding of other soma overlapped with it
+          printf(
+              "Skipping soma %d - due to overlap with other soma "
+              "segmentations\n",
+              idx_exemplar + 1);
           continue;
         }
         // variables to track region growing and see if the center of mass has
@@ -635,7 +644,8 @@ class cellSegmentation : public QObject {
         }
 
         // // on final iteration, the center of mass moved too far
-        if (value_centerMovement2 > (max_movment2 * 4)) {
+        if (segmentationMode == 1 &&
+            value_centerMovement2 > (max_movment2 * 4)) {
           printf(
               "Marker number %d failed - value_centerMovement2 was %f (too "
               "high)\n",
@@ -656,6 +666,9 @@ class cellSegmentation : public QObject {
                  idx_exemplar, poss_exemplarRegionOld.size());
           continue;
         }  // failed;
+
+        // store index of successful label
+        segmentedLabels.push_back(idx_exemplar);
 
         // analyse the properties of the shape of the cell
         vector<V3DLONG> boundBox_exemplarRegion =
@@ -679,8 +692,6 @@ class cellSegmentation : public QObject {
               idx_exemplar);
           continue;
         }  // failed;
-
-        analyzeSomaPCA(this->Image1D_segmentationResult, this->dim_X, this->dim_Y, this->dim_Z, _LandmarkList_exemplar[idx_exemplar], idx_exemplar + 1);
 
         // mark processed voxels
         this->poss2Image1D(poss_exemplarRegionOld, this->Image1D_mask, 0);
@@ -709,6 +720,7 @@ class cellSegmentation : public QObject {
             valuesVct_shapeStatExemplarRegion);
         thresholds_radius.push_back(radius_exemplarRegion);
       }
+
       if (possVct_exemplarRegion.empty()) {
         return false;
       }
@@ -717,7 +729,10 @@ class cellSegmentation : public QObject {
       poss_exemplar = poss_exemplarNew;
       count_exemplar = poss_exemplar.size();
       memset(this->Image1D_exemplar, 0, this->size_page3);
+      // store segmented regions in image format
       this->possVct2Image1DC(possVct_exemplarRegion, this->Image1D_exemplar);
+
+      // stores the tresholds used for segmentation
       vector<V3DLONG> mapping_exemplar =
           this->sort(thresholds_voxelValue);  // in ascending order;
       V3DLONG count_seedCategory = this->possVct_seed.size();
@@ -882,6 +897,25 @@ class cellSegmentation : public QObject {
       // Image1D_segmentationResult
       this->possVct2Image1DC(this->possVct_segmentationResult,
                              this->Image1D_segmentationResult);
+
+      // create the binary segmentation image
+      V3DLONG size_page = this->dim_X * this->dim_Y * this->dim_Z;
+      binarySegImage = new unsigned char[size_page];
+      memset(binarySegImage, 0,
+             size_page);  // Initialize to background (black)
+      for (const auto &region : this->possVct_segmentationResult) {
+        for (V3DLONG idx : region) {
+          binarySegImage[idx] = 255;  // Set somas to white
+        }
+      }
+
+      // perform PCA analysis on the binary segmentation
+      // for each index inside the segmentedLabels vector
+      for (int idx_exemplar : segmentedLabels) {
+        analyzeSomaPCA(this->binarySegImage, this->dim_X, this->dim_Y,
+                       this->dim_Z, _LandmarkList_exemplar[idx_exemplar],
+                       idx_exemplar + 1);
+      }
 
       this->memory_free_uchar2D(masks_page, count_exemplar);
       return true;
@@ -2840,26 +2874,17 @@ class cellSegmentation : public QObject {
       V3DLONG size_page = this->class_segmentationMain1.dim_X *
                           this->class_segmentationMain1.dim_Y *
                           this->class_segmentationMain1.dim_Z;
-      unsigned char *binarySegImage = new unsigned char[size_page];
-      memset(binarySegImage, 0,
-             size_page);  // Initialize to background (black)
-      for (const auto &region :
-           this->class_segmentationMain1.possVct_segmentationResult) {
-        for (V3DLONG idx : region) {
-          binarySegImage[idx] = 255;  // Set somas to white
-        }
-      }
 
       // compute gradient of image
       unsigned char *gradientImage = new unsigned char[size_page];
-      sobel3D(binarySegImage, gradientImage,
+      sobel3D(this->class_segmentationMain1.binarySegImage, gradientImage,
               this->class_segmentationMain1.dim_X,
               this->class_segmentationMain1.dim_Y,
               this->class_segmentationMain1.dim_Z);
 
       // overlay
       overlay2(_V3DPluginCallback2_currentCallback, _QWidget_parent,
-               binarySegImage, gradientImage);
+               this->class_segmentationMain1.binarySegImage, gradientImage);
 
       // save binary image
       // QString savePath = QFileDialog::getSaveFileName(
@@ -2880,11 +2905,11 @@ class cellSegmentation : public QObject {
       V3DLONG outSZ[4] = {this->class_segmentationMain1.dim_X,
                           this->class_segmentationMain1.dim_Y,
                           this->class_segmentationMain1.dim_Z, 1};
-      simple_saveimage_wrapper(_V3DPluginCallback2_currentCallback,
-                               savePath.toStdString().c_str(), binarySegImage,
-                               outSZ, 1);
+      simple_saveimage_wrapper(
+          _V3DPluginCallback2_currentCallback, savePath.toStdString().c_str(),
+          this->class_segmentationMain1.binarySegImage, outSZ, 1);
       v3d_msg(QString("Binary segmented image saved to %1.").arg(savePath));
-      delete[] binarySegImage;
+      delete[] this->class_segmentationMain1.binarySegImage;
 
       return true;
     } else {
