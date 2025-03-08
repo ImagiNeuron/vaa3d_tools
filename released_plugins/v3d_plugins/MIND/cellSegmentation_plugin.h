@@ -38,6 +38,7 @@
 #include "cellSegmentation_plugin.h"
 #include "compute_win_pca_wp.h"
 #include "convert_type2uint8.h"
+#include "pcaAnalysis.h"
 #include "sstream"
 #include "string"
 #include "v3d_message.h"
@@ -71,7 +72,7 @@ class dialogRun : public QDialog {
   Q_OBJECT
  public:
   QComboBox *QComboBox_mode_selection;  // combo box for mode selection
-  int segmentationMode;  // 1: iterative, 2: global Otsu, 3: local Otsu
+  int segmentationMode;  // 1: local otsu, 2: global Otsu, 3: iterative
   QCheckBox *QCheckBox_medianFiltering;     // checkbox for median filtering
   bool applyMedianFiltering;                // flag read from the checkbox
   QCheckBox *QCheckBox_markerConstraint;    // checkbox for marker constraint
@@ -171,16 +172,16 @@ class dialogRun : public QDialog {
     hLayout_segmentationTop->addWidget(label_segMode, 0);
     // Segmentation Mode Dropdown
     QComboBox_mode_selection = new QComboBox(this);
-    QComboBox_mode_selection->addItem("Iterative Threshold");
-    QComboBox_mode_selection->addItem("Global Otsu");
     QComboBox_mode_selection->addItem("Local Otsu");
+    QComboBox_mode_selection->addItem("Global Otsu");
+    QComboBox_mode_selection->addItem("Iterative Threshold");
     hLayout_segmentationTop->addWidget(QComboBox_mode_selection, 2);
     // Local Otsu Radius Label
     QLabel *label_localOtsuRadius =
         new QLabel("Local Otsu Radius: (Voxels)", this);
     hLayout_segmentationTop->addWidget(label_localOtsuRadius, 0);
     // Local Otsu Radius Input
-    QLineEdit_localOtsuRadius = new QLineEdit("20", this);  // default value
+    QLineEdit_localOtsuRadius = new QLineEdit("10", this);  // default value
     hLayout_segmentationTop->addWidget(QLineEdit_localOtsuRadius, 1);
     // Manual Thresholding Checkbox
     QCheckBox_manualThresholding = new QCheckBox("Manual Thresholding", this);
@@ -199,11 +200,11 @@ class dialogRun : public QDialog {
     hLayout_segmentationBottom->addWidget(label_medianRadius, 0);
     // Median Filtering Radius Input
     QLineEdit_medianFilteringRadius =
-        new QLineEdit("3", this);  // default value
+        new QLineEdit("1", this);  // default value
     hLayout_segmentationBottom->addWidget(QLineEdit_medianFilteringRadius, 1);
     // Marker Constraint Checkbox
     QCheckBox_markerConstraint = new QCheckBox("Marker Constraint", this);
-    QCheckBox_markerConstraint->setChecked(false);  // default off
+    QCheckBox_markerConstraint->setChecked(true);  // default on
     hLayout_segmentationBottom->addWidget(QCheckBox_markerConstraint, 0);
     vLayout_segmentation->addLayout(hLayout_segmentationBottom);
     // Set the layout for the group box
@@ -275,7 +276,7 @@ class dialogRun : public QDialog {
         this->QLineEdit_exemplar_maxMovement2->text().toUInt();
     // retrieve the segmentation mode:
     segmentationMode = QComboBox_mode_selection->currentIndex() + 1;
-    if (segmentationMode == 3) {
+    if (segmentationMode == 1) {
       localOtsuRadius = QLineEdit_localOtsuRadius->text().toDouble();
       // Enforce a valid range of 3 to 50.
       if (localOtsuRadius < 3)
@@ -368,8 +369,9 @@ class cellSegmentation : public QObject {
     // Exemplar (or learn from it);
     unsigned char *Image1D_exemplar;
 
-    // segmentation - where ther results are stored
+    // segmentation - where the results are stored
     vector<vector<V3DLONG> > possVct_segmentationResult;
+    unsigned char *binarySegImage;
 
     vector<vector<V3DLONG> > possVct_seed;
     unsigned char *Image1D_segmentationResult;
@@ -378,7 +380,7 @@ class cellSegmentation : public QObject {
     vector<V3DLONG> poss_segmentationResultCenter;
 
     // segmentation mode
-    int segmentationMode;  // 1: iterative, 2: global Otsu, 3: local Otsu
+    int segmentationMode;  // 1: local otsu, 2: global Otsu, 3: iterative
     // Local Otsu radius input
     double localOtsuRadius;
     // median filtering check
@@ -496,6 +498,9 @@ class cellSegmentation : public QObject {
       V3DLONG count_exemplar = poss_exemplar.size();
       vector<V3DLONG> poss_exemplarNew;
 
+      // create list of indexes of successfully segmented labels
+      vector<int> segmentedLabels;
+
       // main loop - iterating over each exemplar
       for (V3DLONG idx_exemplar = 0; idx_exemplar < count_exemplar;
            idx_exemplar++) {
@@ -503,6 +508,11 @@ class cellSegmentation : public QObject {
         // make sure this voxel has not already been processed (255 is not
         // processed)
         if (this->Image1D_mask[pos_exemplar] < 1) {
+          // soma skipped as flooding of other soma overlapped with it
+          printf(
+              "Skipping soma %d - due to overlap with other soma "
+              "segmentations\n",
+              idx_exemplar + 1);
           continue;
         }
         // variables to track region growing and see if the center of mass has
@@ -560,7 +570,7 @@ class cellSegmentation : public QObject {
         } else {
           // No manual threshold provided: choose segmentation mode to compute
           // threshold.
-          if (segmentationMode == 1) {
+          if (segmentationMode == 3) {
             for (idx_step = 0; idx_step < count_step; idx_step++) {
               threshold_exemplarRegion = marker_intensity - idx_step;
               poss_exemplarRegionNew = this->regionGrowOnPos(
@@ -600,7 +610,7 @@ class cellSegmentation : public QObject {
             pos_massCenterOld = getCenterByMass(poss_exemplarRegionOld);
             value_centerMovement2 =
                 this->getEuclideanDistance2(pos_exemplar, pos_massCenterOld);
-          } else if (segmentationMode == 3) {
+          } else if (segmentationMode == 1) {
             // Use the local Otsu radius provided by the user.
             threshold_exemplarRegion = localOtsuThreshold(
                 pos_exemplar, (V3DLONG)(this->localOtsuRadius));
@@ -627,14 +637,15 @@ class cellSegmentation : public QObject {
 
         // initial threshold didn't lead to a grown region. This check is not
         // necessary without too small region check
-        if (segmentationMode == 1 && idx_step < 1 && manualThresh == -1) {
+        if (segmentationMode == 3 && idx_step < 1 && manualThresh == -1) {
           printf("Marker number %d failed - index step did not change%d\n",
                  idx_exemplar);
           continue;
         }
 
         // // on final iteration, the center of mass moved too far
-        if (value_centerMovement2 > (max_movment2 * 4)) {
+        if (segmentationMode == 3 &&
+            value_centerMovement2 > (max_movment2 * 4)) {
           printf(
               "Marker number %d failed - value_centerMovement2 was %f (too "
               "high)\n",
@@ -655,6 +666,9 @@ class cellSegmentation : public QObject {
                  idx_exemplar, poss_exemplarRegionOld.size());
           continue;
         }  // failed;
+
+        // store index of successful label
+        segmentedLabels.push_back(idx_exemplar);
 
         // analyse the properties of the shape of the cell
         vector<V3DLONG> boundBox_exemplarRegion =
@@ -706,6 +720,7 @@ class cellSegmentation : public QObject {
             valuesVct_shapeStatExemplarRegion);
         thresholds_radius.push_back(radius_exemplarRegion);
       }
+
       if (possVct_exemplarRegion.empty()) {
         return false;
       }
@@ -714,7 +729,10 @@ class cellSegmentation : public QObject {
       poss_exemplar = poss_exemplarNew;
       count_exemplar = poss_exemplar.size();
       memset(this->Image1D_exemplar, 0, this->size_page3);
+      // store segmented regions in image format
       this->possVct2Image1DC(possVct_exemplarRegion, this->Image1D_exemplar);
+
+      // stores the tresholds used for segmentation
       vector<V3DLONG> mapping_exemplar =
           this->sort(thresholds_voxelValue);  // in ascending order;
       V3DLONG count_seedCategory = this->possVct_seed.size();
@@ -879,6 +897,27 @@ class cellSegmentation : public QObject {
       // Image1D_segmentationResult
       this->possVct2Image1DC(this->possVct_segmentationResult,
                              this->Image1D_segmentationResult);
+
+      // create the binary segmentation image
+      V3DLONG size_page = this->dim_X * this->dim_Y * this->dim_Z;
+      binarySegImage = new unsigned char[size_page];
+      memset(binarySegImage, 0,
+             size_page);  // Initialize to background (black)
+      for (const auto &region : this->possVct_segmentationResult) {
+        for (V3DLONG idx : region) {
+          binarySegImage[idx] = 255;  // Set somas to white
+        }
+      }
+
+      // perform PCA analysis on the binary segmentation
+      // for each index inside the segmentedLabels vector
+
+      QString savePath = _name_currentWindow + "_seg_pca.csv";
+      for (int idx_exemplar : segmentedLabels) {
+        analyzeSomaPCA(this->binarySegImage, this->dim_X, this->dim_Y,
+                       this->dim_Z, _LandmarkList_exemplar[idx_exemplar],
+                       idx_exemplar + 1, savePath);
+      }
 
       this->memory_free_uchar2D(masks_page, count_exemplar);
       return true;
@@ -2733,6 +2772,7 @@ class cellSegmentation : public QObject {
       // combo box.)
       // call control_run method to do segmentation
       // For example:
+
       is_success = this->class_segmentationMain1.control_run(
           Image1D_current, dim_X, dim_Y, dim_Z,
           dialogRun1.channel_idx_selection, LandmarkList_current, idx_shape,
@@ -2837,26 +2877,17 @@ class cellSegmentation : public QObject {
       V3DLONG size_page = this->class_segmentationMain1.dim_X *
                           this->class_segmentationMain1.dim_Y *
                           this->class_segmentationMain1.dim_Z;
-      unsigned char *binarySegImage = new unsigned char[size_page];
-      memset(binarySegImage, 0,
-             size_page);  // Initialize to background (black)
-      for (const auto &region :
-           this->class_segmentationMain1.possVct_segmentationResult) {
-        for (V3DLONG idx : region) {
-          binarySegImage[idx] = 255;  // Set somas to white
-        }
-      }
 
       // compute gradient of image
       unsigned char *gradientImage = new unsigned char[size_page];
-      sobel3D(binarySegImage, gradientImage,
+      sobel3D(this->class_segmentationMain1.binarySegImage, gradientImage,
               this->class_segmentationMain1.dim_X,
               this->class_segmentationMain1.dim_Y,
               this->class_segmentationMain1.dim_Z);
 
       // overlay
       overlay2(_V3DPluginCallback2_currentCallback, _QWidget_parent,
-               binarySegImage, gradientImage);
+               this->class_segmentationMain1.binarySegImage, gradientImage);
 
       // save binary image
       // QString savePath = QFileDialog::getSaveFileName(
@@ -2873,15 +2904,16 @@ class cellSegmentation : public QObject {
       // }
 
       // Automatically save binary segmented image to current directory.
-      QString savePath = QDir::currentPath() + "/segmentation_result.tif";
+
+      QString savePath = name_currentWindow + "_seg.tif";
       V3DLONG outSZ[4] = {this->class_segmentationMain1.dim_X,
                           this->class_segmentationMain1.dim_Y,
                           this->class_segmentationMain1.dim_Z, 1};
-      simple_saveimage_wrapper(_V3DPluginCallback2_currentCallback,
-                               savePath.toStdString().c_str(), binarySegImage,
-                               outSZ, 1);
+      simple_saveimage_wrapper(
+          _V3DPluginCallback2_currentCallback, savePath.toStdString().c_str(),
+          this->class_segmentationMain1.binarySegImage, outSZ, 1);
       v3d_msg(QString("Binary segmented image saved to %1.").arg(savePath));
-      delete[] binarySegImage;
+      delete[] this->class_segmentationMain1.binarySegImage;
 
       return true;
     } else {
