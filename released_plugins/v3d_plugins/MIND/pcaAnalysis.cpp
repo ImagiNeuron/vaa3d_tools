@@ -217,7 +217,6 @@ void analyzeSomaPCA(unsigned char *labeledData, V3DLONG N, V3DLONG M, V3DLONG P,
   }
   delete[] img3d;
 
-  // return the results
 }
 
 void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent) {

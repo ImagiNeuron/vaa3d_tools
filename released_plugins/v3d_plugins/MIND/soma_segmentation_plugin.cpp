@@ -6,8 +6,8 @@
  * - isotropic correction - to view 3D imagery of the brain isotropically
  * - soma segmentation - to segment individual somas using a user defined 3D
  * region-growing algorithm, and output a binary segmented image
- * - PCA analysis - to perform PCA analysis on the input image and output the
- * results
+ * - pc_analysis - to perform Principal Component Analysis on the input image
+ * and output the results
  *
  * 2024-11-16: by ImagiNeuron: Shidan Javaheri, Siger Ma, Athmane Benarous and
  * Thibaut Baguette (McGill University)
@@ -125,13 +125,13 @@ MIND_4DImage *reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
  **************************************/
 QStringList SomaSegmentation::menulist() const {
   return QStringList() << tr("isotropic_correction") << tr("soma_segmentation")
-                       << tr("PCA analysis") << tr("Visualize PCA")
+                       << tr("pc_analysis") << tr("Visualize PCA")
                        << tr("about");
 }
 
 QStringList SomaSegmentation::funclist() const {
   return QStringList() << tr("isotropic_correction") << tr("segment_somas")
-                       << tr("PCA analysis") << tr("help");
+                       << tr("pc_analysis") << tr("help");
 }
 
 /**
@@ -152,7 +152,7 @@ void SomaSegmentation::domenu(const QString &menu_name,
     bool bmenu = true;
     input_PARA PARA;
     isotropic_correction_func(callback, parent, PARA, bmenu);
-  } else if (menu_name == tr("PCA analysis")) {
+  } else if (menu_name == tr("pc_analysis")) {
     bool bmenu = true;
     input_PARA PARA;
     pca_func(callback, parent, PARA, bmenu);
@@ -208,7 +208,7 @@ bool SomaSegmentation::dofunc(const QString &func_name,
     k++;
     cellSegmentation cellseg;
     cellseg.interface_run(callback, parent);
-  } else if (func_name == tr("PCA analysis")) {
+  } else if (func_name == tr("pc_analysis")) {
     bool bmenu = false;
     input_PARA PARA;
 
@@ -375,7 +375,7 @@ void isotropic_correction_func(V3DPluginCallback2 &callback, QWidget *parent,
 }
 
 /**************************************
- * PCA analysis for each soma
+ * PC Analysis for each soma
  **************************************/
 void pca_func(V3DPluginCallback2 &callback, QWidget *parent, input_PARA &PARA,
               bool bmenu) {
