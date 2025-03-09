@@ -476,14 +476,9 @@ void simulate_somas(V3DPluginCallback2 &callback, QWidget *parent) {
 
   // If segmentation file still not found, ask the user to select it
   if (!foundSegFile) {
-    segFileName =
-        QFileDialog::getOpenFileName(parent, "Select segmentation file",
-                                     currentImagePath, "TIFF files (*.tif)");
-    if (segFileName.isEmpty()) {
-      v3d_msg("No segmentation file selected. Operation cancelled.", parent);
-      return;
-    }
-    foundSegFile = true;
+    v3d_msg("No segmentation file found. Please segment the image first.",
+            parent);
+    return;
   }
 
   // Load the binary segmentation file
@@ -506,6 +501,36 @@ void simulate_somas(V3DPluginCallback2 &callback, QWidget *parent) {
     return;
   }
 
+  // Get the original image data for intensity extraction
+  unsigned char *originalData = p4DImage->getRawData();
+  int channel = 0;  // Default to first channel
+
+  // If image has multiple channels, ask user which channel to use
+  if (p4DImage->getCDim() > 1) {
+    QDialog dialog(parent);
+    QComboBox channelComboBox;
+    QDialogButtonBox buttonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    QVBoxLayout layout;
+
+    // Build channel selection
+    for (int c = 0; c < p4DImage->getCDim(); c++) {
+      channelComboBox.addItem(QString("Channel %1").arg(c + 1));
+    }
+
+    layout.addWidget(new QLabel("Select channel for intensity extraction:"));
+    layout.addWidget(&channelComboBox);
+    layout.addWidget(&buttonBox);
+    dialog.setLayout(&layout);
+
+    // Connect buttons
+    QObject::connect(&buttonBox, SIGNAL(accepted()), &dialog, SLOT(accept()));
+    QObject::connect(&buttonBox, SIGNAL(rejected()), &dialog, SLOT(reject()));
+
+    if (dialog.exec() == QDialog::Accepted) {
+      channel = channelComboBox.currentIndex();
+    }
+  }
+
   // Randomly select a soma
   int markerCount = markers.size();
   int randIndex = rand() % markerCount;
@@ -514,20 +539,34 @@ void simulate_somas(V3DPluginCallback2 &callback, QWidget *parent) {
          randIndex + 1, selectedMarker.x, selectedMarker.y, selectedMarker.z,
          selectedMarker.radius);
 
-  // Calculate cube size based on the soma radius
+  // Calculate cube size based on the soma radius (ensure adequate space)
   double radius = selectedMarker.radius > 0 ? selectedMarker.radius : 10.0;
   V3DLONG cubeSize = ((V3DLONG)ceil(radius) + 3) *
                      2;  // Same sizing as used in main segmentation
   V3DLONG totalVoxels = cubeSize * cubeSize * cubeSize;
 
-  // Create the somaSegmentation array
+  // Create the somaSegmentation array and somaIntensity array
   int *somaSegmentation = new int[totalVoxels];
+  unsigned char *somaIntensities = new unsigned char[totalVoxels];
   memset(somaSegmentation, 0, totalVoxels * sizeof(int));
+  memset(somaIntensities, 0, totalVoxels * sizeof(unsigned char));
 
   // Get the segmentation dimension information
   V3DLONG dimX = sz[0];
   V3DLONG dimY = sz[1];
   V3DLONG dimZ = sz[2];
+
+  // Make sure the original image dimensions match segmentation
+  if (dimX != p4DImage->getXDim() || dimY != p4DImage->getYDim() ||
+      dimZ != p4DImage->getZDim()) {
+    v3d_msg("Original image and segmentation dimensions don't match.", parent);
+    if (segData) {
+      delete[] segData;
+    }
+    delete[] somaSegmentation;
+    delete[] somaIntensities;
+    return;
+  }
 
   // Calculate center of mass of the soma
   double x_center = 0, y_center = 0, z_center = 0;
@@ -578,9 +617,11 @@ void simulate_somas(V3DPluginCallback2 &callback, QWidget *parent) {
   printf("Computed center of mass: (%f, %f, %f)\n", x_center, y_center,
          z_center);
 
-  // Second pass: copy the binary segmentation into the somaSegmentation array
+  // Second pass: copy both the binary segmentation and intensities into arrays
   // centering the soma at the center of the cube
   int center = cubeSize / 2;
+  V3DLONG sliceSize = dimX * dimY;
+  V3DLONG channelOffset = channel * dimX * dimY * dimZ;
 
   for (V3DLONG z = 0; z < dimZ; z++) {
     for (V3DLONG y = 0; y < dimY; y++) {
@@ -605,10 +646,16 @@ void simulate_somas(V3DPluginCallback2 &callback, QWidget *parent) {
             // Check if coordinates are within the cube bounds
             if (relX >= 0 && relX < cubeSize && relY >= 0 && relY < cubeSize &&
                 relZ >= 0 && relZ < cubeSize) {
-              // Set the voxel in the somaSegmentation array
+              // Get index in cube
               V3DLONG cubeIdx =
                   relZ * cubeSize * cubeSize + relY * cubeSize + relX;
+
+              // Set binary segmentation
               somaSegmentation[cubeIdx] = 1;
+
+              // Copy intensity value from original image
+              V3DLONG origIdx = channelOffset + z * sliceSize + y * dimX + x;
+              somaIntensities[cubeIdx] = originalData[origIdx];
             }
           }
         }
@@ -616,9 +663,10 @@ void simulate_somas(V3DPluginCallback2 &callback, QWidget *parent) {
     }
   }
 
-  // Print the central slice of the extracted soma for verification
-  printf("Extracted soma (central slice):\n");
+  // Print the central slices of both extracted binary segmentation and
+  // intensities
   int centralSlice = cubeSize / 2;
+  printf("\nExtracted soma binary segmentation (central slice):\n");
   for (int y = 0; y < cubeSize; y++) {
     for (int x = 0; x < cubeSize; x++) {
       V3DLONG idx = centralSlice * cubeSize * cubeSize + y * cubeSize + x;
@@ -627,12 +675,67 @@ void simulate_somas(V3DPluginCallback2 &callback, QWidget *parent) {
     printf("\n");
   }
 
-  // Now somaSegmentation contains the binary representation of the selected
-  // soma centered within the cube. This array can be used for further
-  // processing.
+  printf("\nExtracted soma intensities (central slice):\n");
+  for (int y = 0; y < cubeSize; y++) {
+    for (int x = 0; x < cubeSize; x++) {
+      V3DLONG idx = centralSlice * cubeSize * cubeSize + y * cubeSize + x;
+      printf("%3d ", somaIntensities[idx]);
+    }
+    printf("\n");
+  }
+
+  // Generate automatic filename from the base image name
+  QString saveSomaPath =
+      currentImagePath + "/" + baseImageName + "_soma_data.csv";
+
+  // Offer to save the extracted soma information to a CSV file
+  int saveResponse = QMessageBox::question(
+      parent, "Save Extracted Soma Data",
+      QString("Save extracted soma data to %1?").arg(saveSomaPath),
+      QMessageBox::Yes | QMessageBox::No);
+
+  if (saveResponse == QMessageBox::Yes) {
+    std::ofstream csvFile(saveSomaPath.toStdString().c_str());
+    if (csvFile.is_open()) {
+      // Write header with metadata
+      csvFile << "# Soma Data Extraction\n";
+      csvFile << "# Image: " << baseImageName.toStdString() << "\n";
+      csvFile << "# Marker position: " << selectedMarker.x << ","
+              << selectedMarker.y << "," << selectedMarker.z << "\n";
+      csvFile << "# Computed center of mass: " << x_center << "," << y_center
+              << "," << z_center << "\n";
+      csvFile << "# Cube size: " << cubeSize << "\n";
+      csvFile << "# Soma radius: " << radius << "\n";
+      csvFile << "# Center index in cube: " << center << "\n\n";
+
+      // Write data headers
+      csvFile << "x,y,z,segmentation,intensity\n";
+
+      // Write all voxel data
+      for (V3DLONG z = 0; z < cubeSize; z++) {
+        for (V3DLONG y = 0; y < cubeSize; y++) {
+          for (V3DLONG x = 0; x < cubeSize; x++) {
+            V3DLONG idx = z * cubeSize * cubeSize + y * cubeSize + x;
+            // Only save non-zero segmentation or intensity values to save space
+            if (somaSegmentation[idx] > 0 || somaIntensities[idx] > 0) {
+              csvFile << x << "," << y << "," << z << ","
+                      << somaSegmentation[idx] << ","
+                      << (int)somaIntensities[idx] << "\n";
+            }
+          }
+        }
+      }
+
+      csvFile.close();
+      v3d_msg(QString("Soma data saved to %1").arg(saveSomaPath));
+    } else {
+      v3d_msg("Failed to save soma data to CSV file.");
+    }
+  }
 
   // Clean up
   delete[] somaSegmentation;
+  delete[] somaIntensities;
   if (segData) {
     delete[] segData;
   }

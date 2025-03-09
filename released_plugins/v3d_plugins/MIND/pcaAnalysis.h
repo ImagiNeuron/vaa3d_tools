@@ -4,8 +4,13 @@
 #include <v3d_interface.h>
 
 #include <QApplication>
+#include <QComboBox>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QFileDialog>
+#include <QLabel>
 #include <QMessageBox>
+#include <QVBoxLayout>
 #include <QtGui>
 #include <fstream>
 
