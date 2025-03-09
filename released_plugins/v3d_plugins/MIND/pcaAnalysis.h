@@ -23,7 +23,7 @@ void savePCAResultsToCSV(const QString &filename, int somaIndex,
                          const double *vec3, double x_center, double y_center,
                          double z_center, QWidget *parent, bool *saveEnabled);
 
-void drawLine(Image4DSimple *image, double *from, double *to);
+void drawLine(Image4DSimple *image, int channel, double *from, double *to);
 
 void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent);
 

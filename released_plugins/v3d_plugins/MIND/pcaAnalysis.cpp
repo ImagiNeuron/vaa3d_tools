@@ -163,7 +163,7 @@ void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent) {
   }
   Image4DSimple *pcaVisualization = new Image4DSimple();
   pcaVisualization->createBlankImage(p4DImage->getXDim(), p4DImage->getYDim(),
-                                     p4DImage->getZDim(), p4DImage->getCDim(),
+                                     p4DImage->getZDim(), 3,
                                      V3D_UINT8);
   pcaVisualization->setOriginX(p4DImage->getOriginX());
   pcaVisualization->setOriginY(p4DImage->getOriginY());
@@ -171,6 +171,10 @@ void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent) {
   pcaVisualization->setRezX(p4DImage->getRezX());
   pcaVisualization->setRezY(p4DImage->getRezY());
   pcaVisualization->setRezZ(p4DImage->getRezZ());
+
+  // copy original image to channel 1
+  memcpy(pcaVisualization->getRawData(), p4DImage->getRawData(),
+         p4DImage->getTotalUnitNumber() * p4DImage->getUnitBytes());
 
   // load pca data from csv
   QString filename = QFileDialog::getOpenFileName(parent, "Open PCA Results",
@@ -266,9 +270,20 @@ void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent) {
         vec3Pos[1], vec3Pos[2]);
 
     // Visualize
-    drawLine(pcaVisualization, center, vec1Pos);
-    drawLine(pcaVisualization, center, vec2Pos);
-    drawLine(pcaVisualization, center, vec3Pos);
+    if (pc1 > pc2 && pc1 > pc3) {
+      drawLine(pcaVisualization, 1, center, vec1Pos);
+      drawLine(pcaVisualization, 2, center, vec2Pos);
+      drawLine(pcaVisualization, 2, center, vec3Pos);
+    } else if (pc2 > pc1 && pc2 > pc3) {
+      drawLine(pcaVisualization, 1, center, vec2Pos);
+      drawLine(pcaVisualization, 2, center, vec1Pos);
+      drawLine(pcaVisualization, 2, center, vec3Pos);
+    } else {
+      drawLine(pcaVisualization, 1, center, vec3Pos);
+      drawLine(pcaVisualization, 2, center, vec1Pos);
+      drawLine(pcaVisualization, 2, center, vec2Pos);
+    }
+
   }
 
   inFile.close();
@@ -278,7 +293,7 @@ void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent) {
   callback.setImage(newwin, pcaVisualization);
 }
 
-void drawLine(Image4DSimple *image, double *from, double *to) {
+void drawLine(Image4DSimple *image, int channel, double *from, double *to) {
   // convert points from world space to image space
   int x1 = (int)((from[0] - image->getOriginX()) / image->getRezX());
   int y1 = (int)((from[1] - image->getOriginY()) / image->getRezY());
@@ -292,8 +307,8 @@ void drawLine(Image4DSimple *image, double *from, double *to) {
   auto fillPixel = [&](int x, int y, int z) {
     if (x >= 0 && x < image->getXDim() && y >= 0 && y < image->getYDim() &&
         z >= 0 && z < image->getZDim()) {
-      imgData[z * image->getYDim() * image->getXDim() + y * image->getXDim() +
-              x] = 255;
+      imgData[z * image->getCDim() * image->getYDim() * image->getXDim() +
+              channel * image->getYDim() * image->getXDim() + y * image->getXDim() + x] = 255;
     }
   };
 
