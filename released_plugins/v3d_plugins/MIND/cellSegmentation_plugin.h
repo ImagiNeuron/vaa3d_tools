@@ -1241,10 +1241,9 @@ class cellSegmentation : public QObject {
       memcpy(segmentation, rotated.data(), totalVoxels * sizeof(int));
     }
 
-    // Helper function to save the probability model as a binary file.
-    // filename: the full path where you want to save the file.
-    // probabilityModel: pointer to the array to save.
-    // totalVoxels: number of elements in the probabilityModel array.
+    /**
+     * @brief Helper function to save the probability model to a binary file.
+     */
     bool saveProbabilityModel(const std::string &filename,
                               const int *probabilityModel,
                               V3DLONG totalVoxels) {
@@ -1266,11 +1265,9 @@ class cellSegmentation : public QObject {
       return true;
     }
 
-    // Helper function to load the probability model from a binary file.
-    // filename: the full path to the saved binary file.
-    // probabilityModel: pointer to an allocated array where data will be
-    // loaded. totalVoxels: number of elements expected to be read into the
-    // probabilityModel array.
+    /**
+     * @brief Helper function to load a probability model from a binary file.
+     */
     bool loadProbabilityModel(const std::string &filename,
                               int *probabilityModel, V3DLONG totalVoxels) {
       std::ifstream inFile(filename, std::ios::binary);
