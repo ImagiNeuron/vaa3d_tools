@@ -51,4 +51,9 @@ void drawLine(Image4DSimple *image, double *from, double *to);
  */
 void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent);
 
+/**
+ * @brief Simulate somas based on segmentation
+ */
+void simulate_somas(V3DPluginCallback2 &callback, QWidget *parent);
+
 #endif  // __MIND_PCA_ANALYSIS_H__

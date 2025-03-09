@@ -64,6 +64,7 @@ void savePCAResultsToCSV(const QString &filename, int somaIndex,
               << "eigenvector2_x,eigenvector2_y,eigenvector2_z,"
               << "eigenvector3_x,eigenvector3_y,eigenvector3_z\n";
       outFile.close();
+
     } else {
       return;  // User chose not to save
     }
@@ -448,21 +449,49 @@ void simulate_somas(V3DPluginCallback2 &callback, QWidget *parent) {
     return;
   }
 
-  // Get the current image name and construct the segmentation filename
+  // Get the current image name and path to construct the segmentation filename
   QString imageName = callback.getImageName(curwin);
-  QString segFileName = imageName + "_seg.tif";
+  QString currentImagePath = QFileInfo(imageName).absolutePath();
+  QString baseImageName = QFileInfo(imageName).baseName();
 
-  // Check if the segmentation file exists
-  if (!QFile::exists(segFileName)) {
-    v3d_msg("Segmentation file not found. Please segment the image first.",
-            parent);
-    return;
+  // Construct segmentation filename (try different options)
+  QStringList possibleSegFiles;
+  possibleSegFiles << imageName + "_seg.tif"  // Original approach
+                   << currentImagePath + "/" + baseImageName +
+                          "_seg.tif"               // Full path + basename
+                   << baseImageName + "_seg.tif";  // Just basename
+
+  QString segFileName;
+  bool foundSegFile = false;
+
+  for (int i = 0; i < possibleSegFiles.size(); i++) {
+    if (QFile::exists(possibleSegFiles[i])) {
+      segFileName = possibleSegFiles[i];
+      foundSegFile = true;
+      printf("Found segmentation file: %s\n",
+             segFileName.toStdString().c_str());
+      break;
+    }
+  }
+
+  // If segmentation file still not found, ask the user to select it
+  if (!foundSegFile) {
+    segFileName =
+        QFileDialog::getOpenFileName(parent, "Select segmentation file",
+                                     currentImagePath, "TIFF files (*.tif)");
+    if (segFileName.isEmpty()) {
+      v3d_msg("No segmentation file selected. Operation cancelled.", parent);
+      return;
+    }
+    foundSegFile = true;
   }
 
   // Load the binary segmentation file
-  Image4DSimple segImage;
+  unsigned char *segData = nullptr;
+  V3DLONG sz[4];
+  int datatype = 0;
   if (!simple_loadimage_wrapper(callback, segFileName.toStdString().c_str(),
-                                segImage)) {
+                                segData, sz, datatype)) {
     v3d_msg("Failed to load segmentation file.", parent);
     return;
   }
@@ -471,6 +500,9 @@ void simulate_somas(V3DPluginCallback2 &callback, QWidget *parent) {
   LandmarkList markers = callback.getLandmark(curwin);
   if (markers.isEmpty()) {
     v3d_msg("No markers found. Please add markers to identify somas.", parent);
+    if (segData) {
+      delete[] segData;
+    }
     return;
   }
 
@@ -493,10 +525,9 @@ void simulate_somas(V3DPluginCallback2 &callback, QWidget *parent) {
   memset(somaSegmentation, 0, totalVoxels * sizeof(int));
 
   // Get the segmentation dimension information
-  V3DLONG dimX = segImage.getXDim();
-  V3DLONG dimY = segImage.getYDim();
-  V3DLONG dimZ = segImage.getZDim();
-  unsigned char *segData = segImage.getRawData();
+  V3DLONG dimX = sz[0];
+  V3DLONG dimY = sz[1];
+  V3DLONG dimZ = sz[2];
 
   // Calculate center of mass of the soma
   double x_center = 0, y_center = 0, z_center = 0;
@@ -602,5 +633,8 @@ void simulate_somas(V3DPluginCallback2 &callback, QWidget *parent) {
 
   // Clean up
   delete[] somaSegmentation;
+  if (segData) {
+    delete[] segData;
+  }
   v3d_msg("Soma extraction complete.");
 }

@@ -126,7 +126,7 @@ MIND_4DImage *reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
 QStringList SomaSegmentation::menulist() const {
   return QStringList() << tr("isotropic_correction") << tr("soma_segmentation")
                        << tr("pc_analysis") << tr("Visualize PCA")
-                       << tr("about");
+                       << tr("Simulate Somas") << tr("about");
 }
 
 QStringList SomaSegmentation::funclist() const {
@@ -158,6 +158,8 @@ void SomaSegmentation::domenu(const QString &menu_name,
     pca_func(callback, parent, PARA, bmenu);
   } else if (menu_name == tr("Visualize PCA")) {
     visualizePCA_func(callback, parent);
+  } else if (menu_name == tr("Simulate Somas")) {
+    simulate_somas(callback, parent);
   } else {
     v3d_msg(tr("This plugin segments individual somas using a 3D "
                "region-growing algorithm "
