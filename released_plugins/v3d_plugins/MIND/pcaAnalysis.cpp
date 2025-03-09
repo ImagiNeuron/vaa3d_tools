@@ -216,7 +216,6 @@ void analyzeSomaPCA(unsigned char *labeledData, V3DLONG N, V3DLONG M, V3DLONG P,
     delete[] img3d[k];
   }
   delete[] img3d;
-
 }
 
 void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent) {
@@ -434,4 +433,174 @@ void drawLine(Image4DSimple *image, double *from, double *to) {
       fillPixel(x1, y1, z1);
     }
   }
+}
+
+void simulate_somas(V3DPluginCallback2 &callback, QWidget *parent) {
+  v3dhandle curwin = callback.currentImageWindow();
+  if (!curwin) {
+    v3d_msg("No image opened.", parent);
+    return;
+  }
+
+  Image4DSimple *p4DImage = callback.getImage(curwin);
+  if (!p4DImage) {
+    v3d_msg("No image opened.", parent);
+    return;
+  }
+
+  // Get the current image name and construct the segmentation filename
+  QString imageName = callback.getImageName(curwin);
+  QString segFileName = imageName + "_seg.tif";
+
+  // Check if the segmentation file exists
+  if (!QFile::exists(segFileName)) {
+    v3d_msg("Segmentation file not found. Please segment the image first.",
+            parent);
+    return;
+  }
+
+  // Load the binary segmentation file
+  Image4DSimple segImage;
+  if (!simple_loadimage_wrapper(callback, segFileName.toStdString().c_str(),
+                                segImage)) {
+    v3d_msg("Failed to load segmentation file.", parent);
+    return;
+  }
+
+  // Get current landmarks (soma markers)
+  LandmarkList markers = callback.getLandmark(curwin);
+  if (markers.isEmpty()) {
+    v3d_msg("No markers found. Please add markers to identify somas.", parent);
+    return;
+  }
+
+  // Randomly select a soma
+  int markerCount = markers.size();
+  int randIndex = rand() % markerCount;
+  LocationSimple selectedMarker = markers[randIndex];
+  printf("Selected marker #%d at position (%f, %f, %f) with radius %f\n",
+         randIndex + 1, selectedMarker.x, selectedMarker.y, selectedMarker.z,
+         selectedMarker.radius);
+
+  // Calculate cube size based on the soma radius
+  double radius = selectedMarker.radius > 0 ? selectedMarker.radius : 10.0;
+  V3DLONG cubeSize = ((V3DLONG)ceil(radius) + 3) *
+                     2;  // Same sizing as used in main segmentation
+  V3DLONG totalVoxels = cubeSize * cubeSize * cubeSize;
+
+  // Create the somaSegmentation array
+  int *somaSegmentation = new int[totalVoxels];
+  memset(somaSegmentation, 0, totalVoxels * sizeof(int));
+
+  // Get the segmentation dimension information
+  V3DLONG dimX = segImage.getXDim();
+  V3DLONG dimY = segImage.getYDim();
+  V3DLONG dimZ = segImage.getZDim();
+  unsigned char *segData = segImage.getRawData();
+
+  // Calculate center of mass of the soma
+  double x_center = 0, y_center = 0, z_center = 0;
+  double totalMass = 0;
+
+  // First pass: find center of mass of the segmented soma
+  for (V3DLONG z = 0; z < dimZ; z++) {
+    for (V3DLONG y = 0; y < dimY; y++) {
+      for (V3DLONG x = 0; x < dimX; x++) {
+        V3DLONG idx = z * dimX * dimY + y * dimX + x;
+        // Check if the voxel is part of the soma (value is 255 in the binary
+        // segmentation)
+        if (segData[idx] > 0) {
+          // Calculate squared distance to the marker
+          double dx = x - selectedMarker.x;
+          double dy = y - selectedMarker.y;
+          double dz = z - selectedMarker.z;
+          double distSq = dx * dx + dy * dy + dz * dz;
+
+          // Include this voxel if it's close to the selected marker (within
+          // twice the radius)
+          if (distSq <= 4 * radius * radius) {
+            x_center += x;
+            y_center += y;
+            z_center += z;
+            totalMass += 1;
+          }
+        }
+      }
+    }
+  }
+
+  // Compute center of mass
+  if (totalMass > 0) {
+    x_center /= totalMass;
+    y_center /= totalMass;
+    z_center /= totalMass;
+  } else {
+    // If no soma voxels were found, use the marker position
+    x_center = selectedMarker.x;
+    y_center = selectedMarker.y;
+    z_center = selectedMarker.z;
+    v3d_msg(
+        "Warning: No soma voxels found near the marker. Using marker position "
+        "as center.");
+  }
+
+  printf("Computed center of mass: (%f, %f, %f)\n", x_center, y_center,
+         z_center);
+
+  // Second pass: copy the binary segmentation into the somaSegmentation array
+  // centering the soma at the center of the cube
+  int center = cubeSize / 2;
+
+  for (V3DLONG z = 0; z < dimZ; z++) {
+    for (V3DLONG y = 0; y < dimY; y++) {
+      for (V3DLONG x = 0; x < dimX; x++) {
+        V3DLONG idx = z * dimX * dimY + y * dimX + x;
+
+        // Check if the voxel is part of the soma
+        if (segData[idx] > 0) {
+          // Calculate squared distance to the marker
+          double dx = x - selectedMarker.x;
+          double dy = y - selectedMarker.y;
+          double dz = z - selectedMarker.z;
+          double distSq = dx * dx + dy * dy + dz * dz;
+
+          // Include this voxel if it's close to the selected marker
+          if (distSq <= 4 * radius * radius) {
+            // Compute coordinates relative to the center of mass
+            int relX = x - (int)round(x_center) + center;
+            int relY = y - (int)round(y_center) + center;
+            int relZ = z - (int)round(z_center) + center;
+
+            // Check if coordinates are within the cube bounds
+            if (relX >= 0 && relX < cubeSize && relY >= 0 && relY < cubeSize &&
+                relZ >= 0 && relZ < cubeSize) {
+              // Set the voxel in the somaSegmentation array
+              V3DLONG cubeIdx =
+                  relZ * cubeSize * cubeSize + relY * cubeSize + relX;
+              somaSegmentation[cubeIdx] = 1;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Print the central slice of the extracted soma for verification
+  printf("Extracted soma (central slice):\n");
+  int centralSlice = cubeSize / 2;
+  for (int y = 0; y < cubeSize; y++) {
+    for (int x = 0; x < cubeSize; x++) {
+      V3DLONG idx = centralSlice * cubeSize * cubeSize + y * cubeSize + x;
+      printf("%d ", somaSegmentation[idx]);
+    }
+    printf("\n");
+  }
+
+  // Now somaSegmentation contains the binary representation of the selected
+  // soma centered within the cube. This array can be used for further
+  // processing.
+
+  // Clean up
+  delete[] somaSegmentation;
+  v3d_msg("Soma extraction complete.");
 }
