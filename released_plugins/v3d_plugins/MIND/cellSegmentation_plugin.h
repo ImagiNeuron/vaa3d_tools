@@ -501,6 +501,9 @@ class cellSegmentation : public QObject {
       // create list of indexes of successfully segmented labels
       vector<int> segmentedLabels;
 
+      // keep track of the largest labelled radius
+      double largestRadius = 0;
+
       // main loop - iterating over each exemplar
       for (V3DLONG idx_exemplar = 0; idx_exemplar < count_exemplar;
            idx_exemplar++) {
@@ -529,6 +532,11 @@ class cellSegmentation : public QObject {
         double value_centerMovement2 = 0;
 
         double radius_marker = _LandmarkList_exemplar[idx_exemplar].radius;
+
+        // update the largest radius
+        if (radius_marker > largestRadius) {
+          largestRadius = radius_marker;
+        }
 
         // Retrieve the current landmark comment.
         std::string comment = _LandmarkList_exemplar[idx_exemplar].comments;
@@ -600,6 +608,7 @@ class cellSegmentation : public QObject {
               pos_massCenterOld = pos_massCenterNew;
               poss_exemplarRegionOld = poss_exemplarRegionNew;
             }
+            // global otsu method
           } else if (segmentationMode == 2) {
             threshold_exemplarRegion = globalOtsuThreshold();
             printf("Global Otsu threshold computed: %d\n",
@@ -909,19 +918,341 @@ class cellSegmentation : public QObject {
         }
       }
 
-      // perform PCA analysis on the binary segmentation
-      // for each index inside the segmentedLabels vector
-
       QString savePath = _name_currentWindow + "_seg_pca.csv";
+
+      // make an array to store the counts of each voxel being part of a soma
+      // size of the array is based on the largest radius bounding the somas
+      V3DLONG cubeSize = ((V3DLONG)ceil(largestRadius) + 3) * 2;
+      V3DLONG totalVoxels = cubeSize * cubeSize * cubeSize;
+
+      // store the binary segmentation of each soma
+      int *somaSegmentation = new int[totalVoxels];
+      memset(somaSegmentation, 0, totalVoxels * sizeof(int));
+
+      // store the counts of each voxel being part of a soma
+      int *probabilityModel = new int[totalVoxels];
+      memset(probabilityModel, 0, totalVoxels * sizeof(int));
+
+      // for each index inside the segmentedLabels vector
+      int segmentationCount = 0;
       for (int idx_exemplar : segmentedLabels) {
-        analyzeSomaPCA(this->binarySegImage, this->dim_X, this->dim_Y,
-                       this->dim_Z, _LandmarkList_exemplar[idx_exemplar],
-                       idx_exemplar + 1, savePath);
+        // perform PCA analysis on the binary segmentation
+
+        // results of PCA for alignment of soma
+        double pc1, pc2, pc3;
+        double vec1[3], vec2[3], vec3[3];
+        double x_center, y_center, z_center;
+
+        analyzeSomaPCAReturnResults(
+            this->binarySegImage, this->dim_X, this->dim_Y, this->dim_Z,
+            _LandmarkList_exemplar[idx_exemplar], idx_exemplar + 1, savePath,
+            pc1, pc2, pc3, vec1, vec2, vec3, x_center, y_center, z_center);
+
+        // for the label at idx_exemplar, get the segmentation (sqaure around
+        // marker center)
+        vector<V3DLONG> binarySomaIndicies =
+            possVct_exemplarRegion[segmentationCount];
+        segmentationCount++;
+
+        // Adjust the segmentation indices so that the center-of-mass aligns
+        // with the volume center.
+        adjustSegmentationCenter(binarySomaIndicies, cubeSize, x_center,
+                                 y_center, z_center, somaSegmentation);
+
+        // Compute the central slice index
+        V3DLONG centralSlice = (cubeSize / 2) - 1;
+        if (centralSlice < 0 || centralSlice >= cubeSize) {
+          printf("Central slice out of bounds\n");
+        } else {
+          // Print the central slice of the soma segmentation.
+          printf("Soma segmentation (central slice) before rotation: \n");
+          for (V3DLONG y = 0; y < cubeSize; y++) {
+            for (V3DLONG x = 0; x < cubeSize; x++) {
+              V3DLONG idx =
+                  (centralSlice * cubeSize * cubeSize) + (y * cubeSize) + x;
+              // Ensure idx is within bounds:
+              if (idx < totalVoxels)
+                printf("%d ", somaSegmentation[idx]);
+              else
+                printf("ERR ");
+            }
+            printf("\n");
+          }
+          printf("\n");
+        }
+
+        // Rotate the segmentation so that its principal axes align with the x,
+        // y, and z axes.
+        rotateSegmentation(somaSegmentation, cubeSize, pc1, pc2, pc3, vec1,
+                           vec2, vec3);
+
+        // Accumulate the binary segmentation into the probability model.
+        for (V3DLONG i = 0; i < totalVoxels; i++) {
+          probabilityModel[i] += somaSegmentation[i];
+        }
+
+        // Compute the central slice index
+        if (centralSlice < 0 || centralSlice >= cubeSize) {
+          printf("Central slice out of bounds\n");
+        } else {
+          // Print the central slice of the soma segmentation.
+          printf("Soma segmentation (central slice) after rotation: \n");
+          for (V3DLONG y = 0; y < cubeSize; y++) {
+            for (V3DLONG x = 0; x < cubeSize; x++) {
+              V3DLONG idx =
+                  (centralSlice * cubeSize * cubeSize) + (y * cubeSize) + x;
+              // Ensure idx is within bounds:
+              if (idx < totalVoxels)
+                printf("%d ", somaSegmentation[idx]);
+              else
+                printf("ERR ");
+            }
+            printf("\n");
+          }
+          printf("\n");
+          // Print the central slice of the probability model.
+          printf("Probability model (central slice): \n");
+          for (V3DLONG y = 0; y < cubeSize; y++) {
+            for (V3DLONG x = 0; x < cubeSize; x++) {
+              V3DLONG idx =
+                  (centralSlice * cubeSize * cubeSize) + (y * cubeSize) + x;
+              if (idx < totalVoxels)
+                printf("%d ", probabilityModel[idx]);
+              else
+                printf("ERR ");
+            }
+            printf("\n");
+          }
+          printf("\n");
+        }
+
+        // Clear somaSegmentation for the next exemplar.
+        memset(somaSegmentation, 0, totalVoxels * sizeof(int));
       }
 
+      // print value at the center of the probability model to see if it is
+      // working
+
+      printf("Final probability model:\n");
+      for (V3DLONG z = 0; z < cubeSize; z++) {
+        printf("Slice %ld:\n", z);
+        for (V3DLONG y = 0; y < cubeSize; y++) {
+          for (V3DLONG x = 0; x < cubeSize; x++) {
+            V3DLONG idx = z * cubeSize * cubeSize + y * cubeSize + x;
+            printf("%d ", probabilityModel[idx]);
+          }
+          printf("\n");
+        }
+        printf("\n");
+      }
+
+      // Free the allocated memory for the probability model and segmentation.
+      delete[] somaSegmentation;
+      delete[] probabilityModel;
       this->memory_free_uchar2D(masks_page, count_exemplar);
       return true;
     }
+
+    /**
+     * @brief Helper function to adjust coordinates of a segmented soma to align
+     * with the center of mass.
+     */
+    void adjustSegmentationCenter(const vector<V3DLONG> &indices,
+                                  V3DLONG cubeSize, double x_center,
+                                  double y_center, double z_center,
+                                  int *segmentation) {
+      // Calculate the target center index of the cube.
+      int center = cubeSize / 2;
+      // Compute integer shifts (rounding the center-of-mass coordinates).
+      int x_shift = center - static_cast<int>(round(x_center));
+      int y_shift = center - static_cast<int>(round(y_center));
+      int z_shift = center - static_cast<int>(round(z_center));
+
+      // Loop over each voxel index in the provided segmentation region.
+      for (size_t i = 0; i < indices.size(); i++) {
+        V3DLONG idx = indices[i];
+        // Convert the flat index to (x, y, z)
+        int x = idx % dim_X;
+        int y = (idx / dim_X) % dim_Y;
+        int z = idx / (dim_X * dim_Y);
+
+        // Adjust coordinates based on the computed shift. -1 for indexes
+        int newX = x + x_shift;
+        int newY = y + y_shift;
+        int newZ = z + z_shift;
+
+        // Check that the new coordinates lie within bounds.
+        if (newX >= 0 && newX < cubeSize && newY >= 0 && newY < cubeSize &&
+            newZ >= 0 && newZ < cubeSize) {
+          V3DLONG newIdx = newZ * cubeSize * cubeSize + newY * cubeSize + newX;
+          segmentation[newIdx] = 1;
+          // optional debugging
+          // printf(
+          //     "Index %zu: original (%d, %d, %d) adjusted to (%d, %d, %d) -> "
+          //     "newIdx = %ld\n",
+          //     i, x, y, z, newX, newY, newZ, newIdx);
+        }
+      }
+    }
+
+    // A helper structure to hold an eigenvalue and its associated eigenvector.
+    struct EigenComponent {
+      double eigenvalue;
+      double vector[3];
+    };
+
+    void rotateSegmentation(int *segmentation, V3DLONG cubeSize, double pc1,
+                            double pc2, double pc3, double vec1[3],
+                            double vec2[3], double vec3[3]) {
+      V3DLONG totalVoxels = cubeSize * cubeSize * cubeSize;
+      // Use a std::vector for temporary storage instead of raw new[]:
+      std::vector<int> rotated(totalVoxels, 0);
+      int center = cubeSize / 2;
+
+      // Pack the eigenvalues and vectors into an array.
+      EigenComponent components[3];
+      components[0] = {pc1, {vec1[0], vec1[1], vec1[2]}};
+      components[1] = {pc2, {vec2[0], vec2[1], vec2[2]}};
+      components[2] = {pc3, {vec3[0], vec3[1], vec3[2]}};
+
+      // Sort components by eigenvalue in increasing order.
+      // After sorting:
+      //   components[0] = shortest principal component (x-axis)
+      //   components[1] = second longest (y-axis)
+      //   components[2] = longest (z-axis)
+      std::sort(components, components + 3,
+                [](const EigenComponent &a, const EigenComponent &b) {
+                  return a.eigenvalue < b.eigenvalue;
+                });
+
+      // Inverse mapping: iterate over every voxel in the output (rotated)
+      // volume.
+      for (int z = 0; z < cubeSize; z++) {
+        for (int y = 0; y < cubeSize; y++) {
+          for (int x = 0; x < cubeSize; x++) {
+            V3DLONG outIdx = z * cubeSize * cubeSize + y * cubeSize + x;
+            // Compute the target voxel's coordinate relative to the center.
+            double nx = x - center;
+            double ny = y - center;
+            double nz = z - center;
+
+            // Compute the corresponding source coordinate using the inverse
+            // rotation:
+            double ox = nx * components[0].vector[0] +
+                        ny * components[1].vector[0] +
+                        nz * components[2].vector[0];
+            double oy = nx * components[0].vector[1] +
+                        ny * components[1].vector[1] +
+                        nz * components[2].vector[1];
+            double oz = nx * components[0].vector[2] +
+                        ny * components[1].vector[2] +
+                        nz * components[2].vector[2];
+
+            int src_x = static_cast<int>(round(ox)) + center;
+            int src_y = static_cast<int>(round(oy)) + center;
+            int src_z = static_cast<int>(round(oz)) + center;
+
+            // If the computed source coordinates are valid, sample the input
+            // segmentation.
+            if (src_x >= 0 && src_x < cubeSize && src_y >= 0 &&
+                src_y < cubeSize && src_z >= 0 && src_z < cubeSize) {
+              V3DLONG srcIdx =
+                  src_z * cubeSize * cubeSize + src_y * cubeSize + src_x;
+              rotated[outIdx] = segmentation[srcIdx];
+            } else {
+              rotated[outIdx] = 0;
+            }
+          }
+        }
+      }
+
+      // Instead of memcpy, we copy using std::vector::data() which ensures the
+      // correct size.
+      memcpy(segmentation, rotated.data(), totalVoxels * sizeof(int));
+    }
+
+    // // Revised rotateSegmentation using inverse (backward) mapping.
+    // void rotateSegmentation(int *segmentation, V3DLONG cubeSize, double pc1,
+    //                         double pc2, double pc3, double vec1[3],
+    //                         double vec2[3], double vec3[3]) {
+    //   V3DLONG totalVoxels = cubeSize * cubeSize * cubeSize;
+    //   int *rotated = new int[totalVoxels];
+    //   memset(rotated, 0, totalVoxels * sizeof(int));
+    //   int center = cubeSize / 2;
+
+    //   // Pack the eigenvalues and vectors into an array.
+    //   EigenComponent components[3];
+    //   components[0] = {pc1, {vec1[0], vec1[1], vec1[2]}};
+    //   components[1] = {pc2, {vec2[0], vec2[1], vec2[2]}};
+    //   components[2] = {pc3, {vec3[0], vec3[1], vec3[2]}};
+
+    //   // Sort components by eigenvalue in increasing order.
+    //   // After sorting:
+    //   //   components[0] = shortest principal component (x-axis)
+    //   //   components[1] = second longest (y-axis)
+    //   //   components[2] = longest (z-axis)
+    //   std::sort(components, components + 3,
+    //             [](const EigenComponent &a, const EigenComponent &b) {
+    //               return a.eigenvalue < b.eigenvalue;
+    //             });
+
+    //   // For inverse mapping, define the rotation matrix R whose rows are the
+    //   // sorted eigenvectors. Since R is orthonormal, its inverse is R^T. We
+    //   // don’t explicitly form matrices; instead, we use the fact that:
+    //   //    [ox oy oz]^T = R^T * [nx ny nz]^T
+    //   // which expands to:
+    //   //    ox = nx * r0[0] + ny * r1[0] + nz * r2[0]
+    //   //    oy = nx * r0[1] + ny * r1[1] + nz * r2[1]
+    //   //    oz = nx * r0[2] + ny * r1[2] + nz * r2[2]
+    //   // where r0, r1, r2 are the sorted eigenvectors stored in
+    //   // components[0].vector, etc.
+
+    //   // Iterate over every voxel in the output (rotated) volume.
+    //   for (int z = 0; z < cubeSize; z++) {
+    //     for (int y = 0; y < cubeSize; y++) {
+    //       for (int x = 0; x < cubeSize; x++) {
+    //         V3DLONG outIdx = z * cubeSize * cubeSize + y * cubeSize + x;
+    //         // Compute the target voxel's coordinate relative to the center.
+    //         double nx = x - center;
+    //         double ny = y - center;
+    //         double nz = z - center;
+
+    //         // Compute the corresponding source coordinate using the inverse
+    //         // rotation:
+    //         double ox = nx * components[0].vector[0] +
+    //                     ny * components[1].vector[0] +
+    //                     nz * components[2].vector[0];
+    //         double oy = nx * components[0].vector[1] +
+    //                     ny * components[1].vector[1] +
+    //                     nz * components[2].vector[1];
+    //         double oz = nx * components[0].vector[2] +
+    //                     ny * components[1].vector[2] +
+    //                     nz * components[2].vector[2];
+
+    //         // Map back to the input coordinate system.
+    //         int src_x = static_cast<int>(round(ox)) + center;
+    //         int src_y = static_cast<int>(round(oy)) + center;
+    //         int src_z = static_cast<int>(round(oz)) + center;
+
+    //         // If the computed source coordinates are valid, sample the input
+    //         // segmentation.
+    //         if (src_x >= 0 && src_x < cubeSize && src_y >= 0 &&
+    //             src_y < cubeSize && src_z >= 0 && src_z < cubeSize) {
+    //           V3DLONG srcIdx =
+    //               src_z * cubeSize * cubeSize + src_y * cubeSize + src_x;
+    //           rotated[outIdx] = segmentation[srcIdx];
+    //         } else {
+    //           rotated[outIdx] = 0;
+    //         }
+    //       }
+    //     }
+    //   }
+
+    //   // Copy the rotated volume back into the original segmentation array.
+    //   memcpy(segmentation, rotated, totalVoxels * sizeof(int));
+    //   delete[] rotated;
+    // }
+
 #pragma endregion
 
     /**
