@@ -61,4 +61,9 @@ void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent);
  */
 void simulate_somas(V3DPluginCallback2 &callback, QWidget *parent);
 
+/**
+ * @brief Create a background image based on segmentation threshold
+ */
+void create_background(V3DPluginCallback2 &callback, QWidget *parent);
+
 #endif  // __MIND_PCA_ANALYSIS_H__

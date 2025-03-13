@@ -503,41 +503,106 @@ void simulate_somas(V3DPluginCallback2 &callback, QWidget *parent) {
 
   // Get the original image data for intensity extraction
   unsigned char *originalData = p4DImage->getRawData();
-  int channel = 0;  // Default to first channel
+  int channel = 0;  // Default to first channel (index 0)
 
-  // If image has multiple channels, ask user which channel to use
-  if (p4DImage->getCDim() > 1) {
-    QDialog dialog(parent);
-    QComboBox channelComboBox;
-    QDialogButtonBox buttonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    QVBoxLayout layout;
+  // Use the PCA file created by analyzeSomaPCA (same naming convention)
+  QString pcaFileName = imageName + "_pca.csv";
 
-    // Build channel selection
-    for (int c = 0; c < p4DImage->getCDim(); c++) {
-      channelComboBox.addItem(QString("Channel %1").arg(c + 1));
+  // Check if the PCA file exists
+  if (!QFile::exists(pcaFileName)) {
+    v3d_msg(QString("PCA file not found: %1\nPlease run PC Analysis first.")
+                .arg(pcaFileName),
+            parent);
+    if (segData) {
+      delete[] segData;
     }
-
-    layout.addWidget(new QLabel("Select channel for intensity extraction:"));
-    layout.addWidget(&channelComboBox);
-    layout.addWidget(&buttonBox);
-    dialog.setLayout(&layout);
-
-    // Connect buttons
-    QObject::connect(&buttonBox, SIGNAL(accepted()), &dialog, SLOT(accept()));
-    QObject::connect(&buttonBox, SIGNAL(rejected()), &dialog, SLOT(reject()));
-
-    if (dialog.exec() == QDialog::Accepted) {
-      channel = channelComboBox.currentIndex();
-    }
+    return;
   }
 
-  // Randomly select a soma
-  int markerCount = markers.size();
-  int randIndex = rand() % markerCount;
-  LocationSimple selectedMarker = markers[randIndex];
-  printf("Selected marker #%d at position (%f, %f, %f) with radius %f\n",
-         randIndex + 1, selectedMarker.x, selectedMarker.y, selectedMarker.z,
-         selectedMarker.radius);
+  printf("Using PCA file: %s\n", pcaFileName.toStdString().c_str());
+
+  // Read the PCA CSV file to get the center of mass
+  std::ifstream pcaFile(pcaFileName.toStdString().c_str());
+  if (!pcaFile.is_open()) {
+    v3d_msg("Failed to open PCA file.", parent);
+    if (segData) {
+      delete[] segData;
+    }
+    return;
+  }
+
+  // Skip header line
+  std::string line;
+  std::getline(pcaFile, line);
+
+  // Variables to store center of mass and selected marker info
+  double x_center = 0, y_center = 0, z_center = 0;
+  int somaIndex = -1;
+  LocationSimple selectedMarker;
+  bool foundMarker = false;
+
+  // Read data lines
+  while (std::getline(pcaFile, line)) {
+    std::istringstream ss(line);
+    std::string token;
+    std::vector<double> values;
+
+    // Parse each column from CSV
+    while (std::getline(ss, token, ',')) {
+      values.push_back(std::stod(token));
+    }
+
+    // Check if we have enough columns
+    if (values.size() >= 8) {
+      somaIndex = static_cast<int>(values[0]);
+
+      // Find the corresponding marker
+      for (int i = 0; i < markers.size(); i++) {
+        double dx = markers[i].x - values[1];  // marker x - csv x
+        double dy = markers[i].y - values[2];  // marker y - csv y
+        double dz = markers[i].z - values[3];  // marker z - csv z
+
+        // If this marker is close to the position in CSV
+        if (dx * dx + dy * dy + dz * dz < 25) {  // Within 5 pixel distance
+          selectedMarker = markers[i];
+          foundMarker = true;
+
+          // Get center of mass from columns 5, 6, 7
+          x_center = values[5];  // CenterMassX
+          y_center = values[6];  // CenterMassY
+          z_center = values[7];  // CenterMassZ
+
+          printf("Found soma #%d with center of mass (%f, %f, %f)\n", somaIndex,
+                 x_center, y_center, z_center);
+          break;
+        }
+      }
+
+      if (foundMarker) break;  // Exit after finding the first matching marker
+    }
+  }
+  pcaFile.close();
+
+  // If no center of mass was found, select a random marker
+  if (!foundMarker) {
+    v3d_msg(
+        "Could not find matching marker in PCA file. Selecting a random "
+        "marker.",
+        parent);
+    int randIndex = rand() % markers.size();
+    selectedMarker = markers[randIndex];
+    somaIndex = randIndex + 1;
+
+    // Use marker position as center of mass
+    x_center = selectedMarker.x;
+    y_center = selectedMarker.y;
+    z_center = selectedMarker.z;
+
+    printf(
+        "Selected random marker #%d at position (%f, %f, %f) with radius %f\n",
+        somaIndex, selectedMarker.x, selectedMarker.y, selectedMarker.z,
+        selectedMarker.radius);
+  }
 
   // Calculate cube size based on the soma radius (ensure adequate space)
   double radius = selectedMarker.radius > 0 ? selectedMarker.radius : 10.0;
@@ -568,56 +633,9 @@ void simulate_somas(V3DPluginCallback2 &callback, QWidget *parent) {
     return;
   }
 
-  // Calculate center of mass of the soma
-  double x_center = 0, y_center = 0, z_center = 0;
-  double totalMass = 0;
+  printf("Using center of mass: (%f, %f, %f)\n", x_center, y_center, z_center);
 
-  // First pass: find center of mass of the segmented soma
-  for (V3DLONG z = 0; z < dimZ; z++) {
-    for (V3DLONG y = 0; y < dimY; y++) {
-      for (V3DLONG x = 0; x < dimX; x++) {
-        V3DLONG idx = z * dimX * dimY + y * dimX + x;
-        // Check if the voxel is part of the soma (value is 255 in the binary
-        // segmentation)
-        if (segData[idx] > 0) {
-          // Calculate squared distance to the marker
-          double dx = x - selectedMarker.x;
-          double dy = y - selectedMarker.y;
-          double dz = z - selectedMarker.z;
-          double distSq = dx * dx + dy * dy + dz * dz;
-
-          // Include this voxel if it's close to the selected marker (within
-          // twice the radius)
-          if (distSq <= 4 * radius * radius) {
-            x_center += x;
-            y_center += y;
-            z_center += z;
-            totalMass += 1;
-          }
-        }
-      }
-    }
-  }
-
-  // Compute center of mass
-  if (totalMass > 0) {
-    x_center /= totalMass;
-    y_center /= totalMass;
-    z_center /= totalMass;
-  } else {
-    // If no soma voxels were found, use the marker position
-    x_center = selectedMarker.x;
-    y_center = selectedMarker.y;
-    z_center = selectedMarker.z;
-    v3d_msg(
-        "Warning: No soma voxels found near the marker. Using marker position "
-        "as center.");
-  }
-
-  printf("Computed center of mass: (%f, %f, %f)\n", x_center, y_center,
-         z_center);
-
-  // Second pass: copy both the binary segmentation and intensities into arrays
+  // Copy both the binary segmentation and intensities into arrays
   // centering the soma at the center of the cube
   int center = cubeSize / 2;
   V3DLONG sliceSize = dimX * dimY;
@@ -740,4 +758,174 @@ void simulate_somas(V3DPluginCallback2 &callback, QWidget *parent) {
     delete[] segData;
   }
   v3d_msg("Soma extraction complete.");
+}
+
+void create_background(V3DPluginCallback2 &callback, QWidget *parent) {
+  // Get current image
+  v3dhandle curwin = callback.currentImageWindow();
+  if (!curwin) {
+    v3d_msg("No image opened.", parent);
+    return;
+  }
+
+  Image4DSimple *p4DImage = callback.getImage(curwin);
+  if (!p4DImage) {
+    v3d_msg("No image opened.", parent);
+    return;
+  }
+
+  // Get image dimensions and data
+  V3DLONG xDim = p4DImage->getXDim();
+  V3DLONG yDim = p4DImage->getYDim();
+  V3DLONG zDim = p4DImage->getZDim();
+  V3DLONG cDim = p4DImage->getCDim();
+  V3DLONG totalSize = xDim * yDim * zDim;
+  unsigned char *originalData = p4DImage->getRawData();
+
+  // Get segmentation file
+  QString imageName = callback.getImageName(curwin);
+  QString currentImagePath = QFileInfo(imageName).absolutePath();
+  QString baseImageName = QFileInfo(imageName).baseName();
+
+  // Try different possible locations for segmentation file
+  QStringList possibleSegFiles;
+  possibleSegFiles << imageName + "_seg.tif"
+                   << currentImagePath + "/" + baseImageName + "_seg.tif"
+                   << baseImageName + "_seg.tif";
+
+  QString segFileName;
+  bool foundSegFile = false;
+
+  for (int i = 0; i < possibleSegFiles.size(); i++) {
+    if (QFile::exists(possibleSegFiles[i])) {
+      segFileName = possibleSegFiles[i];
+      foundSegFile = true;
+      printf("Found segmentation file: %s\n",
+             segFileName.toStdString().c_str());
+      break;
+    }
+  }
+
+  if (!foundSegFile) {
+    v3d_msg("No segmentation file found. Please segment the image first.",
+            parent);
+    return;
+  }
+
+  // Load segmentation file
+  unsigned char *segData = nullptr;
+  V3DLONG sz[4];
+  int datatype = 0;
+  if (!simple_loadimage_wrapper(callback, segFileName.toStdString().c_str(),
+                                segData, sz, datatype)) {
+    v3d_msg("Failed to load segmentation file.", parent);
+    return;
+  }
+
+  // Check dimensions match
+  if (sz[0] != xDim || sz[1] != yDim || sz[2] != zDim) {
+    v3d_msg("Segmentation dimensions don't match the original image.", parent);
+    delete[] segData;
+    return;
+  }
+
+  // Find lowest threshold value in segmented regions
+  unsigned char lowestThreshold = 255;  // Start with max value
+  for (V3DLONG i = 0; i < totalSize; i++) {
+    if (segData[i] > 0) {
+      if (originalData[i] < lowestThreshold) {
+        lowestThreshold = originalData[i];
+      }
+    }
+  }
+
+  // If no segmentation found (unlikely), use default value
+  if (lowestThreshold == 255) {
+    lowestThreshold = 10;  // Arbitrary low value
+    v3d_msg(
+        "Warning: Could not determine threshold from segmentation, using "
+        "default value.",
+        parent);
+  }
+
+  printf("Lowest threshold used for segmentation: %d\n", lowestThreshold);
+
+  // Background threshold is slightly 1 lower than the lowest threshold
+  unsigned char backgroundThreshold = lowestThreshold - 1;
+  printf("Using %d  as background threshold\n");
+
+  // Calculate mean and standard deviation of background voxels
+  double sum = 0.0;
+  double sumSq = 0.0;
+  V3DLONG backgroundCount = 0;
+
+  for (V3DLONG i = 0; i < totalSize; i++) {
+    if (originalData[i] < backgroundThreshold) {
+      sum += originalData[i];
+      sumSq += originalData[i] * originalData[i];
+      backgroundCount++;
+    }
+  }
+
+  if (backgroundCount == 0) {
+    v3d_msg(
+        "No background voxels found below threshold. Try a different "
+        "threshold.",
+        parent);
+    delete[] segData;
+    return;
+  }
+
+  double mean = sum / backgroundCount;
+  double variance = (sumSq / backgroundCount) - (mean * mean);
+  double stdDev = sqrt(variance);
+
+  printf("Background statistics: count=%ld, mean=%.2f, stddev=%.2f\n",
+         backgroundCount, mean, stdDev);
+
+  // Create new image for background
+  Image4DSimple *backgroundImage = new Image4DSimple();
+  backgroundImage->createBlankImage(xDim, yDim, zDim, cDim, V3D_UINT8);
+  unsigned char *backgroundData = backgroundImage->getRawData();
+
+  // Set image properties from original image
+  backgroundImage->setOriginX(p4DImage->getOriginX());
+  backgroundImage->setOriginY(p4DImage->getOriginY());
+  backgroundImage->setOriginZ(p4DImage->getOriginZ());
+  backgroundImage->setRezX(p4DImage->getRezX());
+  backgroundImage->setRezY(p4DImage->getRezY());
+  backgroundImage->setRezZ(p4DImage->getRezZ());
+
+  // Fill with random values from normal distribution
+  std::srand(std::time(nullptr));  // Seed random generator
+
+  for (V3DLONG i = 0; i < totalSize; i++) {
+    // Use Box-Muller transform to generate Gaussian distributed random numbers
+    double u1 = std::rand() / (RAND_MAX + 1.0);
+    double u2 = std::rand() / (RAND_MAX + 1.0);
+
+    // Avoid log(0)
+    if (u1 < 1e-10) u1 = 1e-10;
+
+    double randStdNormal =
+        std::sqrt(-2.0 * std::log(u1)) * std::cos(2.0 * M_PI * u2);
+    double randNormal = mean + stdDev * randStdNormal;
+
+    // Clamp to valid unsigned char range [0,255]
+    int value = std::round(randNormal);
+    value = std::max(0, std::min(255, value));
+
+    backgroundData[i] = (unsigned char)value;
+  }
+
+  // Show the generated background
+  v3dhandle newwin = callback.newImageWindow();
+  callback.setImage(newwin, backgroundImage);
+  callback.setImageName(newwin, imageName + "_background");
+  callback.updateImageWindow(newwin);
+
+  // Clean up
+  delete[] segData;
+
+  v3d_msg("Background image generated successfully.");
 }
