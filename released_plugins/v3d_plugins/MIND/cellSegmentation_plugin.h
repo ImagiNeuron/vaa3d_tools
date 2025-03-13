@@ -82,7 +82,6 @@ class dialogRun : public QDialog {
   QLineEdit *QLineEdit_localOtsuRadius;     // line edit for local Otsu radius
   QLineEdit *
       QLineEdit_medianFilteringRadius;  // line edit for median filtering radius
-  double localOtsuRadius;               // radius for local Otsu radius
   double medianFilteringRadius;         // radius for median filtering radius
   dialogRun(V3DPluginCallback2 &V3DPluginCallback2_currentCallback,
             QWidget *QWidget_parent, int int_channelDim) {
@@ -176,13 +175,6 @@ class dialogRun : public QDialog {
     QComboBox_mode_selection->addItem("Global Otsu");
     QComboBox_mode_selection->addItem("Iterative Threshold");
     hLayout_segmentationTop->addWidget(QComboBox_mode_selection, 2);
-    // Local Otsu Radius Label
-    QLabel *label_localOtsuRadius =
-        new QLabel("Local Otsu Radius: (Voxels)", this);
-    hLayout_segmentationTop->addWidget(label_localOtsuRadius, 0);
-    // Local Otsu Radius Input
-    QLineEdit_localOtsuRadius = new QLineEdit("10", this);  // default value
-    hLayout_segmentationTop->addWidget(QLineEdit_localOtsuRadius, 1);
     // Manual Thresholding Checkbox
     QCheckBox_manualThresholding = new QCheckBox("Manual Thresholding", this);
     QCheckBox_manualThresholding->setChecked(false);  // default off
@@ -276,14 +268,7 @@ class dialogRun : public QDialog {
         this->QLineEdit_exemplar_maxMovement2->text().toUInt();
     // retrieve the segmentation mode:
     segmentationMode = QComboBox_mode_selection->currentIndex() + 1;
-    if (segmentationMode == 1) {
-      localOtsuRadius = QLineEdit_localOtsuRadius->text().toDouble();
-      // Enforce a valid range of 3 to 50.
-      if (localOtsuRadius < 3)
-        localOtsuRadius = 3;
-      else if (localOtsuRadius > 50)
-        localOtsuRadius = 50;
-    }
+
     // retrieve the median filtering flag
     applyMedianFiltering = QCheckBox_medianFiltering->isChecked();
     // Retrieve the median filtering radius only if median filtering is enabled.
@@ -381,8 +366,6 @@ class cellSegmentation : public QObject {
 
     // segmentation mode
     int segmentationMode;  // 1: local otsu, 2: global Otsu, 3: iterative
-    // Local Otsu radius input
-    double localOtsuRadius;
     // median filtering check
     bool applyMedianFiltering;
     // median filtering radius input
@@ -611,9 +594,9 @@ class cellSegmentation : public QObject {
             value_centerMovement2 =
                 this->getEuclideanDistance2(pos_exemplar, pos_massCenterOld);
           } else if (segmentationMode == 1) {
-            // Use the local Otsu radius provided by the user.
-            threshold_exemplarRegion = localOtsuThreshold(
-                pos_exemplar, (V3DLONG)(this->localOtsuRadius));
+            // Get the otsu threshold around the soma
+            threshold_exemplarRegion =
+                localOtsuThreshold(pos_exemplar, (V3DLONG)(radius_marker));
             vector<V3DLONG> xyz_exemplar = this->index2Coordinate(pos_exemplar);
             printf(
                 "Local Otsu threshold computed at landmark (%ld, %ld, %ld): "
@@ -2745,9 +2728,6 @@ class cellSegmentation : public QObject {
       if (dialogRun1.exec() != QDialog::Accepted) {
         return false;
       }
-      // Set the local Otsu radius from the dialog
-      this->class_segmentationMain1.localOtsuRadius =
-          dialogRun1.localOtsuRadius;
       // Set the median filtering flag from the dialog
       this->class_segmentationMain1.applyMedianFiltering =
           dialogRun1.applyMedianFiltering;
