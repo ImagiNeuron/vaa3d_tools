@@ -307,8 +307,8 @@ void drawLine(Image4DSimple *image, int channel, double *from, double *to) {
   auto fillPixel = [&](int x, int y, int z) {
     if (x >= 0 && x < image->getXDim() && y >= 0 && y < image->getYDim() &&
         z >= 0 && z < image->getZDim()) {
-      imgData[z * image->getCDim() * image->getYDim() * image->getXDim() +
-              channel * image->getYDim() * image->getXDim() + y * image->getXDim() + x] = 255;
+      imgData[channel * image->getXDim() * image->getYDim() * image->getZDim() +
+              z * image->getXDim() * image->getYDim() + y * image->getXDim() + x] = 255;
     }
   };
 
