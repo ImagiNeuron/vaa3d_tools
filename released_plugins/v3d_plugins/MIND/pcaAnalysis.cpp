@@ -210,17 +210,17 @@ void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent) {
         case 0:
           somaID = std::stoi(token);
           break;
-        case 1:
+        // case 1,2,3: // marker position
+        // case 4: // radius
+        case 5:
           center[0] = std::stod(token);
           break;
-        case 2:
+        case 6:
           center[1] = std::stod(token);
           break;
-        case 3:
+        case 7:
           center[2] = std::stod(token);
           break;
-        // case 4: // radius
-        // case 5,6,7: // center of mass
         case 8:
           pc1 = std::stod(token);
           break;
