@@ -674,9 +674,14 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
          modelPath.toStdString().c_str());
   printf("Model cube size: %ld x %ld x %ld\n", cubeSize, cubeSize, cubeSize);
 
-  // Calculate mean and standard deviation of center coordinates
+  // Calculate mean and standard deviation of center of mass coordinates,
+  // eigenvalues and eigenvectors
   std::vector<double> meanCenter(3, 0.0);
   std::vector<double> stdCenter(3, 0.0);
+  std::vector<double> meanEigenvalues(3, 0.0);
+  std::vector<double> stdEigenvalues(3, 0.0);
+  std::vector<double> meanEigenvectors(9, 0.0);
+  std::vector<double> stdEigenvectors(9, 0.0);
 
   for (size_t i = 0; i < centerCoords.size(); i += 3) {
     for (int j = 0; j < 3; j++) {
@@ -699,19 +704,6 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
     stdCenter[j] = sqrt(stdCenter[j] / numSomas);
   }
 
-  printf("\nPCA Statistics:\n");
-  printf("Mean center: (%.2f, %.2f, %.2f)\n", meanCenter[0], meanCenter[1],
-         meanCenter[2]);
-  printf("Std dev: (%.2f, %.2f, %.2f)\n\n", stdCenter[0], stdCenter[1],
-         stdCenter[2]);
-
-  // Also calculate means and std devs for eigenvalues and eigenvectors
-  std::vector<double> meanEigenvalues(3, 0.0);
-  std::vector<double> stdEigenvalues(3, 0.0);
-  std::vector<double> meanEigenvectors(9, 0.0);
-  std::vector<double> stdEigenvectors(9, 0.0);
-
-  // Calculate means
   for (size_t i = 0; i < pcValues.size(); i += 3) {
     for (int j = 0; j < 3; j++) {
       meanEigenvalues[j] += pcValues[i + j];
@@ -753,10 +745,14 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
     stdEigenvectors[j] = sqrt(stdEigenvectors[j] / numSomas);
   }
 
-  printf("\nEigenvalue Statistics:\n");
+  printf("\nPCA Statistics:\n");
+  printf("Mean center: (%.2f, %.2f, %.2f)\n", meanCenter[0], meanCenter[1],
+         meanCenter[2]);
+  printf("Std dev: (%.2f, %.2f, %.2f)\n", stdCenter[0], stdCenter[1],
+         stdCenter[2]);
   printf("Mean eigenvalues: (%.2f, %.2f, %.2f)\n", meanEigenvalues[0],
          meanEigenvalues[1], meanEigenvalues[2]);
-  printf("Std dev eigenvalues: (%.2f, %.2f, %.2f)\n", stdEigenvalues[0],
+  printf("Std dev eigenvalues: (%.2f, %.2f, %.2f)\n\n", stdEigenvalues[0],
          stdEigenvalues[1], stdEigenvalues[2]);
 
   // Create output image
