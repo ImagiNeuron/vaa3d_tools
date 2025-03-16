@@ -801,8 +801,12 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
 
   // Create output image
   V3DLONG totalSize = xDim * yDim * zDim;
-  unsigned char *outData = new unsigned char[totalSize];
-  memset(outData, 0, totalSize);
+  unsigned char *outSegData = new unsigned char[totalSize];
+  memset(outSegData, 0, totalSize);
+  
+  // Create output image with original intensity values
+  unsigned char *outIntensityData = new unsigned char[totalSize];
+  memset(outIntensityData, 0, totalSize);
 
   // Generate random positions and place synthetic somas
   std::random_device rd;
@@ -920,9 +924,11 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
     
     V3DLONG totalVoxels = cubeSize * cubeSize * cubeSize;
     int *tempSegmentation = new int[totalVoxels];
+    unsigned char *tempIntensity = new unsigned char[totalVoxels];
     memset(tempSegmentation, 0, totalVoxels * sizeof(int));
+    memset(tempIntensity, 0, totalVoxels * sizeof(unsigned char));
     
-    // Extract the soma from the segmentation image
+    // Extract both segmentation and intensity data for the soma
     for (int z = 0; z < cubeSize; z++) {
       for (int y = 0; y < cubeSize; y++) {
         for (int x = 0; x < cubeSize; x++) {
@@ -934,14 +940,19 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
           // Target index in temporary buffer
           int targetIdx = z * cubeSize * cubeSize + y * cubeSize + x;
           
-          // Check if coordinates are within the segmentation image bounds
+          // Check if coordinates are within the image bounds
           if (sourceX >= 0 && sourceX < xDim && sourceY >= 0 && 
               sourceY < yDim && sourceZ >= 0 && sourceZ < zDim) {
-            // Calculate index in the segmentation image
+            // Calculate index in the source images
             V3DLONG sourceIdx = sourceZ * xDim * yDim + sourceY * xDim + sourceX;
             
             // Copy the segmentation value (0 or 255 for binary image)
             tempSegmentation[targetIdx] = segData[sourceIdx] > 0 ? 1 : 0;
+            
+            // Copy the original intensity value if this voxel is part of the soma
+            if (segData[sourceIdx] > 0) {
+              tempIntensity[targetIdx] = originalData[sourceIdx];
+            }
           }
         }
       }
@@ -957,7 +968,7 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
     int centerY = static_cast<int>(newCenter[1]);
     int centerZ = static_cast<int>(newCenter[2]);
 
-    // Copy rotated soma to output image
+    // Copy rotated soma to both output images
     for (int z = 0; z < cubeSize; z++) {
       for (int y = 0; y < cubeSize; y++) {
         for (int x = 0; x < cubeSize; x++) {
@@ -975,7 +986,8 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
 
             // Only set voxel if rotated model indicates soma presence
             if (tempSegmentation[sourceIdx] > 0) {
-              outData[targetIdx] = 255;
+              outSegData[targetIdx] = 255;  // Binary segmentation
+              outIntensityData[targetIdx] = tempIntensity[sourceIdx];  // Original intensity
             }
           }
         }
@@ -983,6 +995,7 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
     }
 
     delete[] tempSegmentation;
+    delete[] tempIntensity;
   }
 
   printf("\nSimulation complete:\n");
@@ -993,12 +1006,21 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
 
   delete[] segData;
 
-  // Create and show new window with simulated data
+  // Create and show new window with binary simulated data
   Image4DSimple outImage;
-  outImage.setData(outData, xDim, yDim, zDim, 1, V3D_UINT8);
+  outImage.setData(outSegData, xDim, yDim, zDim, 1, V3D_UINT8);
 
   v3dhandle newwin = callback.newImageWindow();
   callback.setImage(newwin, &outImage);
-  callback.setImageName(newwin, imageName + "_simulated");
+  callback.setImageName(newwin, imageName + "_simulated_seg");
   callback.updateImageWindow(newwin);
+
+  // Create and show new window with intensity simulated data
+  Image4DSimple outIntensityImage;
+  outIntensityImage.setData(outIntensityData, xDim, yDim, zDim, 1, V3D_UINT8);
+
+  v3dhandle intensityWin = callback.newImageWindow();
+  callback.setImage(intensityWin, &outIntensityImage);
+  callback.setImageName(intensityWin, imageName + "_simulated_intensity");
+  callback.updateImageWindow(intensityWin);
 }
