@@ -563,47 +563,104 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
   V3DLONG xDim = p4DImage->getXDim();
   V3DLONG yDim = p4DImage->getYDim();
   V3DLONG zDim = p4DImage->getZDim();
-  QString imageName = callback.getImageName(curwin);
 
   printf("\nStarting soma simulation...\n");
   printf("Image dimensions: X=%ld, Y=%ld, Z=%ld\n", xDim, yDim, zDim);
 
-  // Let user choose PCA file
-  QString pcaPath = QFileDialog::getOpenFileName(parent, "Select PCA Data File",
-                                                 "", "CSV Files (*.csv)");
-  if (pcaPath.isEmpty()) {
-    v3d_msg("No PCA file selected!");
+  // Get the current image name and path
+  QString imageName = callback.getImageName(curwin);
+  QString currentImagePath = QFileInfo(imageName).absolutePath();
+  QString baseImageName = QFileInfo(imageName).baseName();
+
+  /*
+   * Load original image data
+   */
+
+  unsigned char *originalData = p4DImage->getRawData();
+  int channel = 0;  // Default to first channel (index 0)
+
+  /*
+   * Load soma segmentation data
+   */
+
+  // Construct segmentation filename (try different options)
+  QStringList possibleSegFiles;
+  possibleSegFiles << imageName + "_seg.tif"  // Original approach
+                   << currentImagePath + "/" + baseImageName +
+                          "_seg.tif"               // Full path + basename
+                   << baseImageName + "_seg.tif";  // Just basename
+
+  QString segFileName;
+  bool foundSegFile = false;
+
+  for (int i = 0; i < possibleSegFiles.size(); i++) {
+    if (QFile::exists(possibleSegFiles[i])) {
+      segFileName = possibleSegFiles[i];
+      foundSegFile = true;
+      printf("Found segmentation file: %s\n",
+             segFileName.toStdString().c_str());
+      break;
+    }
+  }
+
+  // If segmentation file still not found, ask the user to select it
+  if (!foundSegFile) {
+    v3d_msg("No segmentation file found. Please segment the image first.",
+            parent);
     return;
   }
 
-  printf("\nLoading PCA data from: %s\n", pcaPath.toStdString().c_str());
-
-  // Let user choose probability model file
-  QString modelPath = QFileDialog::getOpenFileName(
-      parent, "Select Probability Model File", "", "Binary Files (*.bin)");
-  if (modelPath.isEmpty()) {
-    v3d_msg("No probability model file selected!");
+  // Load the binary segmentation file
+  unsigned char *segData = nullptr;
+  V3DLONG sz[4];
+  int datatype = 0;
+  if (!simple_loadimage_wrapper(callback, segFileName.toStdString().c_str(),
+                                segData, sz, datatype)) {
+    v3d_msg("Failed to load segmentation file.", parent);
     return;
   }
+
+  /*
+   * Load segmentation image PCA and get distribution of soma properties
+   */
+
+  // Find the segmentation image PCA file
+  QString segPcaFileName = imageName + "_seg_pca.csv";
+
+  // Check if the PCA file exists
+  if (!QFile::exists(segPcaFileName)) {
+    v3d_msg(QString("segmentation image PCA file not found: %1\nPlease run soma "
+                    "segmentation first.")
+                .arg(segPcaFileName),
+            parent);
+    delete[] segData;
+    return;
+  }
+
+  printf("\nLoading segmentation image PCA data from: %s\n",
+         segPcaFileName.toStdString().c_str());
 
   // Load PCA data from CSV file
   std::vector<double> pcValues;      // eigenvalues
   std::vector<double> eigenVectors;  // 9 eigenvector components
   std::vector<double> centerCoords;  // CenterMassX, CenterMassY, CenterMassZ
+  std::vector<double> markerCoords;  // X, Y, Z
+  std::vector<double> somaRadii;     // Soma radii
 
-  std::ifstream pcaFile(pcaPath.toStdString());
-  if (!pcaFile.is_open()) {
-    v3d_msg("Could not open PCA file!");
+  std::ifstream segPcaFile(segPcaFileName.toStdString().c_str());
+  if (!segPcaFile.is_open()) {
+    v3d_msg("Could not open segmentation image PCA file!");
+    delete[] segData;
     return;
   }
 
   std::string line;
   // Skip header line
-  std::getline(pcaFile, line);
+  std::getline(segPcaFile, line);
 
   // Read PCA data
   int pcaRowCount = 0;
-  while (std::getline(pcaFile, line)) {
+    while (std::getline(segPcaFile, line)) {
     std::stringstream ss(line);
     std::string value;
     std::vector<double> row;
@@ -634,7 +691,12 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
     // 18: eigenvector3_y
     // 19: eigenvector3_z
 
-    // Use columns for new format
+    markerCoords.push_back(row[1]);  // X
+    markerCoords.push_back(row[2]);  // Y
+    markerCoords.push_back(row[3]);  // Z
+
+    somaRadii.push_back(row[4]);     // Radius
+    
     centerCoords.push_back(row[5]);  // CenterMassX
     centerCoords.push_back(row[6]);  // CenterMassY
     centerCoords.push_back(row[7]);  // CenterMassZ
@@ -650,34 +712,7 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
     pcaRowCount++;
   }
 
-  printf("Loaded %d soma PCA records\n", pcaRowCount);
-
-  // Load probability model
-  V3DLONG cubeSize = 0;
-  std::vector<int> probModel;
-
-  std::ifstream modelFile(modelPath.toStdString(), std::ios::binary);
-  if (!modelFile.is_open()) {
-    v3d_msg("Could not open probability model file!");
-    return;
-  }
-
-  // Get file size to determine cube dimensions
-  modelFile.seekg(0, std::ios::end);
-  std::streampos fileSize = modelFile.tellg();
-  modelFile.seekg(0, std::ios::beg);
-
-  cubeSize = std::cbrt(fileSize / sizeof(int));
-  V3DLONG totalVoxels = cubeSize * cubeSize * cubeSize;
-
-  // Read probability model data
-  probModel.resize(totalVoxels);
-  modelFile.read(reinterpret_cast<char *>(probModel.data()),
-                 totalVoxels * sizeof(int));
-
-  printf("\nLoading probability model from: %s\n",
-         modelPath.toStdString().c_str());
-  printf("Model cube size: %ld x %ld x %ld\n", cubeSize, cubeSize, cubeSize);
+  printf("Loaded %d soma segmentation image PCA records\n", pcaRowCount);
 
   // Calculate mean and standard deviation of center of mass coordinates,
   // eigenvalues and eigenvectors
@@ -760,6 +795,10 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
   printf("Std dev eigenvalues: (%.2f, %.2f, %.2f)\n\n", stdEigenvalues[0],
          stdEigenvalues[1], stdEigenvalues[2]);
 
+  /*
+   * Create synthetic somas and image
+   */
+
   // Create output image
   V3DLONG totalSize = xDim * yDim * zDim;
   unsigned char *outData = new unsigned char[totalSize];
@@ -775,9 +814,21 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
   v3d_msg(QString("Generating %1 synthetic somas...").arg(numSynthetic));
 
   int successfulPlacements = 0;
-  int boundaryMargin = cubeSize / 2;
 
   for (int i = 0; i < numSynthetic; i++) {
+    // Choose a random soma from the available ones for this synthetic soma
+    int randomSomaIndex = gen() % numSomas;
+    
+    // Get the radius and calculate appropriate cube size
+    double radius = somaRadii[randomSomaIndex];
+    V3DLONG cubeSize = static_cast<V3DLONG>(2.5 * radius); // Use 2.5x radius to ensure we capture the whole soma
+    
+    // Make sure cubeSize is odd for centering purposes
+    if (cubeSize % 2 == 0) cubeSize += 1;
+    
+    // Set boundary margin based on the cube size
+    int boundaryMargin = cubeSize / 2;
+    
     // Generate random position using normal distribution
     std::vector<double> newCenter(3);
     bool validPosition = false;
@@ -811,8 +862,8 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
       continue;
     }
 
-    printf("Placed soma %d/%d at (%.1f, %.1f, %.1f)\n", i + 1, numSynthetic,
-           newCenter[0], newCenter[1], newCenter[2]);
+    printf("Placed soma %d/%d at (%.1f, %.1f, %.1f) with radius %.2f and cube size %ld\n", 
+           i + 1, numSynthetic, newCenter[0], newCenter[1], newCenter[2], radius, cubeSize);
     successfulPlacements++;
 
     // Generate random PCA values based on the distribution
@@ -861,19 +912,45 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
       randomVec3[j] /= norm3;
     }
 
-    // Create temporary buffer for the soma model
+    // Extract a soma from segmentation data
+    // Get center of mass for the selected soma
+    V3DLONG sourceCenterX = static_cast<V3DLONG>(centerCoords[randomSomaIndex * 3]);
+    V3DLONG sourceCenterY = static_cast<V3DLONG>(centerCoords[randomSomaIndex * 3 + 1]);
+    V3DLONG sourceCenterZ = static_cast<V3DLONG>(centerCoords[randomSomaIndex * 3 + 2]);
+    
+    V3DLONG totalVoxels = cubeSize * cubeSize * cubeSize;
     int *tempSegmentation = new int[totalVoxels];
     memset(tempSegmentation, 0, totalVoxels * sizeof(int));
-
-    // Copy probability model to temporary buffer
-    for (int idx = 0; idx < totalVoxels; idx++) {
-      tempSegmentation[idx] = probModel[idx] > 0 ? 1 : 0;
+    
+    // Extract the soma from the segmentation image
+    for (int z = 0; z < cubeSize; z++) {
+      for (int y = 0; y < cubeSize; y++) {
+        for (int x = 0; x < cubeSize; x++) {
+          // Calculate positions relative to the soma's center
+          V3DLONG sourceX = sourceCenterX + x - cubeSize / 2;
+          V3DLONG sourceY = sourceCenterY + y - cubeSize / 2;
+          V3DLONG sourceZ = sourceCenterZ + z - cubeSize / 2;
+          
+          // Target index in temporary buffer
+          int targetIdx = z * cubeSize * cubeSize + y * cubeSize + x;
+          
+          // Check if coordinates are within the segmentation image bounds
+          if (sourceX >= 0 && sourceX < xDim && sourceY >= 0 && 
+              sourceY < yDim && sourceZ >= 0 && sourceZ < zDim) {
+            // Calculate index in the segmentation image
+            V3DLONG sourceIdx = sourceZ * xDim * yDim + sourceY * xDim + sourceX;
+            
+            // Copy the segmentation value (0 or 255 for binary image)
+            tempSegmentation[targetIdx] = segData[sourceIdx] > 0 ? 1 : 0;
+          }
+        }
+      }
     }
 
     // Apply random rotation based on PCA values
-    cellSegmentation::class_segmentationMain segMain;
-    segMain.rotateSegmentation(tempSegmentation, cubeSize, randomPC1, randomPC2,
-                               randomPC3, randomVec1, randomVec2, randomVec3);
+    // cellSegmentation::class_segmentationMain segMain;
+    // segMain.rotateSegmentation(tempSegmentation, cubeSize, randomPC1, randomPC2,
+    //                            randomPC3, randomVec1, randomVec2, randomVec3);
 
     // Place rotated synthetic soma at generated position
     int centerX = static_cast<int>(newCenter[0]);
@@ -913,6 +990,8 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
          numSynthetic);
   v3d_msg(QString("Simulation complete. Generated %1 synthetic somas.")
               .arg(successfulPlacements));
+
+  delete[] segData;
 
   // Create and show new window with simulated data
   Image4DSimple outImage;
