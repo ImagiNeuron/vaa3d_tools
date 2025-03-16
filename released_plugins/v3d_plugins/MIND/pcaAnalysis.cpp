@@ -929,3 +929,237 @@ void create_background(V3DPluginCallback2 &callback, QWidget *parent) {
 
   v3d_msg("Background image generated successfully.");
 }
+
+bool get_PCA_info(int somaID, const QString &imageName, double &pc1,
+                  double &pc2, double &pc3, double vec1[3], double vec2[3],
+                  double vec3[3], double &x_center, double &y_center,
+                  double &z_center) {
+  // Construct the PCA CSV filename
+  QString pcaFileName = imageName + "_pca.csv";
+
+  // Check if the PCA file exists
+  if (!QFile::exists(pcaFileName)) {
+    printf("PCA file not found: %s\n", pcaFileName.toStdString().c_str());
+    return false;
+  }
+
+  // Open the CSV file
+  std::ifstream inFile(pcaFileName.toStdString().c_str());
+  if (!inFile.is_open()) {
+    printf("Failed to open PCA file: %s\n", pcaFileName.toStdString().c_str());
+    return false;
+  }
+
+  // Skip the header row
+  std::string line;
+  std::getline(inFile, line);
+
+  // Read each row until we find the matching soma ID
+  bool found = false;
+  while (std::getline(inFile, line)) {
+    std::istringstream ss(line);
+    std::string token;
+    std::vector<double> values;
+
+    // Parse the comma-separated values
+    while (std::getline(ss, token, ',')) {
+      values.push_back(std::stod(token));
+    }
+
+    // Check if we have enough columns and if this is the soma we want
+    if (values.size() >= 20 && static_cast<int>(values[0]) == somaID) {
+      // Extract values from the CSV columns
+      // Format: SomaID,X,Y,Z,Radius,CenterMassX,CenterMassY,CenterMassZ,
+      //         eigenvalue1,eigenvalue2,eigenvalue3,
+      //         eigenvector1_x,eigenvector1_y,eigenvector1_z,
+      //         eigenvector2_x,eigenvector2_y,eigenvector2_z,
+      //         eigenvector3_x,eigenvector3_y,eigenvector3_z
+
+      // Get center of mass (columns 5,6,7)
+      x_center = values[5];
+      y_center = values[6];
+      z_center = values[7];
+
+      // Get eigenvalues (columns 8,9,10)
+      pc1 = values[8];
+      pc2 = values[9];
+      pc3 = values[10];
+
+      // Get eigenvectors (columns 11-19)
+      vec1[0] = values[11];
+      vec1[1] = values[12];
+      vec1[2] = values[13];
+
+      vec2[0] = values[14];
+      vec2[1] = values[15];
+      vec2[2] = values[16];
+
+      vec3[0] = values[17];
+      vec3[1] = values[18];
+      vec3[2] = values[19];
+
+      found = true;
+      break;
+    }
+  }
+
+  // Close the file
+  inFile.close();
+
+  if (!found) {
+    printf("Soma ID %d not found in PCA file: %s\n", somaID,
+           pcaFileName.toStdString().c_str());
+    return false;
+  }
+
+  printf("Successfully loaded PCA info for soma #%d:\n", somaID);
+  printf("  Center of mass: (%f, %f, %f)\n", x_center, y_center, z_center);
+  printf("  Eigenvalues: %f, %f, %f\n", pc1, pc2, pc3);
+  printf("  Eigenvector 1: [%f, %f, %f]\n", vec1[0], vec1[1], vec1[2]);
+  printf("  Eigenvector 2: [%f, %f, %f]\n", vec2[0], vec2[1], vec2[2]);
+  printf("  Eigenvector 3: [%f, %f, %f]\n", vec3[0], vec3[1], vec3[2]);
+
+  return true;
+}
+
+bool map_intensities(V3DPluginCallback2 &callback,
+                     unsigned char ***&intensities,
+                     unsigned char ***&segmentation, V3DLONG &dim_X,
+                     V3DLONG &dim_Y, V3DLONG &dim_Z, int channel) {
+  // Get the current image window
+  v3dhandle curwin = callback.currentImageWindow();
+  if (!curwin) {
+    v3d_msg("No image window is open!");
+    return false;
+  }
+
+  // Get the image name and path to find the segmentation file
+  QString imageName = callback.getImageName(curwin);
+  QString currentImagePath = QFileInfo(imageName).absolutePath();
+  QString baseImageName = QFileInfo(imageName).baseName();
+
+  // Get the image data
+  Image4DSimple *p4DImage = callback.getImage(curwin);
+  if (!p4DImage) {
+    v3d_msg("Failed to get the image data!");
+    return false;
+  }
+
+  // Get image dimensions
+  dim_X = p4DImage->getXDim();
+  dim_Y = p4DImage->getYDim();
+  dim_Z = p4DImage->getZDim();
+  V3DLONG dim_C = p4DImage->getCDim();
+
+  // Check if the channel is valid
+  if (channel < 0 || channel >= dim_C) {
+    v3d_msg("Invalid channel index!");
+    return false;
+  }
+
+  // Construct segmentation filename (try different options)
+  QStringList possibleSegFiles;
+  possibleSegFiles << imageName + "_seg.tif"  // Original approach
+                   << currentImagePath + "/" + baseImageName +
+                          "_seg.tif"               // Full path + basename
+                   << baseImageName + "_seg.tif";  // Just basename
+
+  QString segFileName;
+  bool foundSegFile = false;
+
+  for (int i = 0; i < possibleSegFiles.size(); i++) {
+    if (QFile::exists(possibleSegFiles[i])) {
+      segFileName = possibleSegFiles[i];
+      foundSegFile = true;
+      printf("Found segmentation file: %s\n",
+             segFileName.toStdString().c_str());
+      break;
+    }
+  }
+
+  if (!foundSegFile) {
+    v3d_msg("No segmentation file found. Please segment the image first.");
+    return false;
+  }
+
+  // Load the binary segmentation file
+  unsigned char *segData = nullptr;
+  V3DLONG sz[4];
+  int datatype = 0;
+  if (!simple_loadimage_wrapper(callback, segFileName.toStdString().c_str(),
+                                segData, sz, datatype)) {
+    v3d_msg("Failed to load segmentation file.");
+    return false;
+  }
+
+  // Check if segmentation dimensions match original image dimensions
+  if (sz[0] != dim_X || sz[1] != dim_Y || sz[2] != dim_Z) {
+    v3d_msg("Segmentation dimensions don't match the original image.");
+    if (segData) delete[] segData;
+    return false;
+  }
+
+  // Allocate memory for 3D arrays
+  intensities = new unsigned char **[dim_Z];
+  segmentation = new unsigned char **[dim_Z];
+  for (V3DLONG z = 0; z < dim_Z; z++) {
+    intensities[z] = new unsigned char *[dim_Y];
+    segmentation[z] = new unsigned char *[dim_Y];
+    for (V3DLONG y = 0; y < dim_Y; y++) {
+      intensities[z][y] = new unsigned char[dim_X];
+      segmentation[z][y] = new unsigned char[dim_X];
+    }
+  }
+
+  // Get raw data from original image
+  unsigned char *data1d = p4DImage->getRawData();
+
+  // Copy data to 3D arrays
+  V3DLONG offset_channel = dim_X * dim_Y * dim_Z * channel;
+  for (V3DLONG z = 0; z < dim_Z; z++) {
+    for (V3DLONG y = 0; y < dim_Y; y++) {
+      for (V3DLONG x = 0; x < dim_X; x++) {
+        V3DLONG idx = offset_channel + z * dim_X * dim_Y + y * dim_X + x;
+        V3DLONG segIdx = z * dim_X * dim_Y + y * dim_X + x;
+
+        intensities[z][y][x] = data1d[idx];
+        segmentation[z][y][x] = segData[segIdx];
+      }
+    }
+  }
+
+  // Free the segmentation data as it's been copied to the 3D array
+  if (segData) delete[] segData;
+
+  return true;
+}
+
+void free_mapped_arrays(unsigned char ***intensities,
+                        unsigned char ***segmentation, V3DLONG dim_Z,
+                        V3DLONG dim_Y) {
+  // Free intensities array
+  if (intensities) {
+    for (V3DLONG z = 0; z < dim_Z; z++) {
+      if (intensities[z]) {
+        for (V3DLONG y = 0; y < dim_Y; y++) {
+          if (intensities[z][y]) delete[] intensities[z][y];
+        }
+        delete[] intensities[z];
+      }
+    }
+    delete[] intensities;
+  }
+
+  // Free segmentation array
+  if (segmentation) {
+    for (V3DLONG z = 0; z < dim_Z; z++) {
+      if (segmentation[z]) {
+        for (V3DLONG y = 0; y < dim_Y; y++) {
+          if (segmentation[z][y]) delete[] segmentation[z][y];
+        }
+        delete[] segmentation[z];
+      }
+    }
+    delete[] segmentation;
+  }
+}
