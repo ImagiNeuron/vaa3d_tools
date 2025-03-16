@@ -401,6 +401,17 @@ class cellSegmentation : public QObject {
     }
     ~class_segmentationMain() {}
 
+    void printSomaSlice(int *data, int size){
+      for (int y = 0; y < size; y++) {
+        for (int x = 0; x < size; x++){
+          int idx = y * size + x;
+          printf("%4d", data[idx]);
+        }
+        printf("\n");
+      }
+      printf("\n");
+    }
+
 #pragma region "control-run"
     /**
      * @brief - Main function that goes over landmarks and floods them
@@ -967,19 +978,7 @@ class cellSegmentation : public QObject {
         } else {
           // Print the central slice of the soma segmentation.
           printf("Soma segmentation (central slice) before rotation: \n");
-          for (V3DLONG y = 0; y < cubeSize; y++) {
-            for (V3DLONG x = 0; x < cubeSize; x++) {
-              V3DLONG idx =
-                  (centralSlice * cubeSize * cubeSize) + (y * cubeSize) + x;
-              // Ensure idx is within bounds:
-              if (idx < totalVoxels)
-                printf("%d ", somaSegmentation[idx]);
-              else
-                printf("ERR ");
-            }
-            printf("\n");
-          }
-          printf("\n");
+          printSomaSlice(somaSegmentation + (centralSlice * cubeSize * cubeSize), cubeSize);
 
           // printf("Unrotated soma:\n");
           // for (V3DLONG z = 0; z < cubeSize; z++) {
@@ -1039,18 +1038,7 @@ class cellSegmentation : public QObject {
           // }
           // Print the central slice of the probability model.
           printf("Probability model (central slice): \n");
-          for (V3DLONG y = 0; y < cubeSize; y++) {
-            for (V3DLONG x = 0; x < cubeSize; x++) {
-              V3DLONG idx =
-                  (centralSlice * cubeSize * cubeSize) + (y * cubeSize) + x;
-              if (idx < totalVoxels)
-                printf("%d ", probabilityModel[idx]);
-              else
-                printf("ERR ");
-            }
-            printf("\n");
-          }
-          printf("\n");
+          printSomaSlice(probabilityModel + (centralSlice * cubeSize * cubeSize), cubeSize);
         }
 
         // Clear somaSegmentation for the next exemplar.
