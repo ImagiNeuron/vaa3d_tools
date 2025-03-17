@@ -629,10 +629,11 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
 
   // Check if the PCA file exists
   if (!QFile::exists(segPcaFileName)) {
-    v3d_msg(QString("segmentation image PCA file not found: %1\nPlease run soma "
-                    "segmentation first.")
-                .arg(segPcaFileName),
-            parent);
+    v3d_msg(
+        QString("segmentation image PCA file not found: %1\nPlease run soma "
+                "segmentation first.")
+            .arg(segPcaFileName),
+        parent);
     delete[] segData;
     return;
   }
@@ -660,7 +661,7 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
 
   // Read PCA data
   int pcaRowCount = 0;
-    while (std::getline(segPcaFile, line)) {
+  while (std::getline(segPcaFile, line)) {
     std::stringstream ss(line);
     std::string value;
     std::vector<double> row;
@@ -695,8 +696,8 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
     markerCoords.push_back(row[2]);  // Y
     markerCoords.push_back(row[3]);  // Z
 
-    somaRadii.push_back(row[4]);     // Radius
-    
+    somaRadii.push_back(row[4]);  // Radius
+
     centerCoords.push_back(row[5]);  // CenterMassX
     centerCoords.push_back(row[6]);  // CenterMassY
     centerCoords.push_back(row[7]);  // CenterMassZ
@@ -803,7 +804,7 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
   V3DLONG totalSize = xDim * yDim * zDim;
   unsigned char *outSegData = new unsigned char[totalSize];
   memset(outSegData, 0, totalSize);
-  
+
   // Create output image with original intensity values
   unsigned char *outIntensityData = new unsigned char[totalSize];
   memset(outIntensityData, 0, totalSize);
@@ -822,17 +823,18 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
   for (int i = 0; i < numSynthetic; i++) {
     // Choose a random soma from the available ones for this synthetic soma
     int randomSomaIndex = gen() % numSomas;
-    
+
     // Get the radius and calculate appropriate cube size
     double radius = somaRadii[randomSomaIndex];
-    V3DLONG cubeSize = static_cast<V3DLONG>(2.5 * radius); // Use 2.5x radius to ensure we capture the whole soma
-    
+    V3DLONG cubeSize = static_cast<V3DLONG>(
+        2.5 * radius);  // Use 2.5x radius to ensure we capture the whole soma
+
     // Make sure cubeSize is odd for centering purposes
     if (cubeSize % 2 == 0) cubeSize += 1;
-    
+
     // Set boundary margin based on the cube size
     int boundaryMargin = cubeSize / 2;
-    
+
     // Generate random position using normal distribution
     std::vector<double> newCenter(3);
     bool validPosition = false;
@@ -866,8 +868,11 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
       continue;
     }
 
-    printf("Placed soma %d/%d at (%.1f, %.1f, %.1f) with radius %.2f and cube size %ld\n", 
-           i + 1, numSynthetic, newCenter[0], newCenter[1], newCenter[2], radius, cubeSize);
+    printf(
+        "Placed soma %d/%d at (%.1f, %.1f, %.1f) with radius %.2f and cube "
+        "size %ld\n",
+        i + 1, numSynthetic, newCenter[0], newCenter[1], newCenter[2], radius,
+        cubeSize);
     successfulPlacements++;
 
     // Generate random PCA values based on the distribution
@@ -918,16 +923,19 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
 
     // Extract a soma from segmentation data
     // Get center of mass for the selected soma
-    V3DLONG sourceCenterX = static_cast<V3DLONG>(centerCoords[randomSomaIndex * 3]);
-    V3DLONG sourceCenterY = static_cast<V3DLONG>(centerCoords[randomSomaIndex * 3 + 1]);
-    V3DLONG sourceCenterZ = static_cast<V3DLONG>(centerCoords[randomSomaIndex * 3 + 2]);
-    
+    V3DLONG sourceCenterX =
+        static_cast<V3DLONG>(centerCoords[randomSomaIndex * 3]);
+    V3DLONG sourceCenterY =
+        static_cast<V3DLONG>(centerCoords[randomSomaIndex * 3 + 1]);
+    V3DLONG sourceCenterZ =
+        static_cast<V3DLONG>(centerCoords[randomSomaIndex * 3 + 2]);
+
     V3DLONG totalVoxels = cubeSize * cubeSize * cubeSize;
     int *tempSegmentation = new int[totalVoxels];
     unsigned char *tempIntensity = new unsigned char[totalVoxels];
     memset(tempSegmentation, 0, totalVoxels * sizeof(int));
     memset(tempIntensity, 0, totalVoxels * sizeof(unsigned char));
-    
+
     // Extract both segmentation and intensity data for the soma
     for (int z = 0; z < cubeSize; z++) {
       for (int y = 0; y < cubeSize; y++) {
@@ -936,20 +944,22 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
           V3DLONG sourceX = sourceCenterX + x - cubeSize / 2;
           V3DLONG sourceY = sourceCenterY + y - cubeSize / 2;
           V3DLONG sourceZ = sourceCenterZ + z - cubeSize / 2;
-          
+
           // Target index in temporary buffer
           int targetIdx = z * cubeSize * cubeSize + y * cubeSize + x;
-          
+
           // Check if coordinates are within the image bounds
-          if (sourceX >= 0 && sourceX < xDim && sourceY >= 0 && 
+          if (sourceX >= 0 && sourceX < xDim && sourceY >= 0 &&
               sourceY < yDim && sourceZ >= 0 && sourceZ < zDim) {
             // Calculate index in the source images
-            V3DLONG sourceIdx = sourceZ * xDim * yDim + sourceY * xDim + sourceX;
-            
+            V3DLONG sourceIdx =
+                sourceZ * xDim * yDim + sourceY * xDim + sourceX;
+
             // Copy the segmentation value (0 or 255 for binary image)
             tempSegmentation[targetIdx] = segData[sourceIdx] > 0 ? 1 : 0;
-            
-            // Copy the original intensity value if this voxel is part of the soma
+
+            // Copy the original intensity value if this voxel is part of the
+            // soma
             if (segData[sourceIdx] > 0) {
               tempIntensity[targetIdx] = originalData[sourceIdx];
             }
@@ -960,8 +970,10 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
 
     // Apply random rotation based on PCA values
     // cellSegmentation::class_segmentationMain segMain;
-    // segMain.rotateSegmentation(tempSegmentation, cubeSize, randomPC1, randomPC2,
-    //                            randomPC3, randomVec1, randomVec2, randomVec3);
+    // segMain.rotateSegmentation(tempSegmentation, cubeSize, randomPC1,
+    // randomPC2,
+    //                            randomPC3, randomVec1, randomVec2,
+    //                            randomVec3);
 
     // Place rotated synthetic soma at generated position
     int centerX = static_cast<int>(newCenter[0]);
@@ -987,7 +999,8 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
             // Only set voxel if rotated model indicates soma presence
             if (tempSegmentation[sourceIdx] > 0) {
               outSegData[targetIdx] = 255;  // Binary segmentation
-              outIntensityData[targetIdx] = tempIntensity[sourceIdx];  // Original intensity
+              outIntensityData[targetIdx] =
+                  tempIntensity[sourceIdx];  // Original intensity
             }
           }
         }
@@ -998,29 +1011,59 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
     delete[] tempIntensity;
   }
 
+  /*
+   * Save the synthetic soma segmentation images
+   */
+  QString outSegFileName = imageName + "_simulated_seg.tif";
+  QString outIntensityFileName = imageName + "_simulated_intensity.tif";
+
+  // Create dimension array for saving images
+  V3DLONG out_sz[4];
+  out_sz[0] = xDim;
+  out_sz[1] = yDim;
+  out_sz[2] = zDim;
+  out_sz[3] = 1;  // Single channel
+
+  // Save the binary segmentation image
+  simple_saveimage_wrapper(callback, outSegFileName.toStdString().c_str(),
+                           outSegData, out_sz, V3D_UINT8);
+
+  // Save the intensity image
+  simple_saveimage_wrapper(callback, outIntensityFileName.toStdString().c_str(),
+                           outIntensityData, out_sz, V3D_UINT8);
+
   printf("\nSimulation complete:\n");
   printf("Successfully placed %d/%d somas\n", successfulPlacements,
          numSynthetic);
-  v3d_msg(QString("Simulation complete. Generated %1 synthetic somas.")
-              .arg(successfulPlacements));
+  v3d_msg(QString("Simulation complete. Generated %1/%2 synthetic "
+                  "somas.\nSaved images as %3 and %4.")
+              .arg(successfulPlacements)
+              .arg(numSynthetic)
+              .arg(outSegFileName)
+              .arg(outIntensityFileName),
+          parent);
 
   delete[] segData;
 
-  // Create and show new window with binary simulated data
-  Image4DSimple outImage;
-  outImage.setData(outSegData, xDim, yDim, zDim, 1, V3D_UINT8);
+  /*
+   * Open new windows and display the synthetic soma data
+   */
 
-  v3dhandle newwin = callback.newImageWindow();
-  callback.setImage(newwin, &outImage);
-  callback.setImageName(newwin, imageName + "_simulated_seg");
-  callback.updateImageWindow(newwin);
+  // Create and show new window with binary simulated data
+  Image4DSimple outSegImage;
+  outSegImage.setData(outSegData, out_sz[0], out_sz[1], out_sz[2], out_sz[3],
+                      V3D_UINT8);
+  v3dhandle segWin = callback.newImageWindow();
+  callback.setImage(segWin, &outSegImage);
+  callback.setImageName(segWin, outSegFileName);
+  callback.updateImageWindow(segWin);
 
   // Create and show new window with intensity simulated data
   Image4DSimple outIntensityImage;
-  outIntensityImage.setData(outIntensityData, xDim, yDim, zDim, 1, V3D_UINT8);
-
+  outIntensityImage.setData(outIntensityData, out_sz[0], out_sz[1], out_sz[2],
+                            out_sz[3], V3D_UINT8);
   v3dhandle intensityWin = callback.newImageWindow();
   callback.setImage(intensityWin, &outIntensityImage);
-  callback.setImageName(intensityWin, imageName + "_simulated_intensity");
+  callback.setImageName(intensityWin, outIntensityFileName);
   callback.updateImageWindow(intensityWin);
 }
