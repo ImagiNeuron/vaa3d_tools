@@ -760,26 +760,28 @@ void simulate_somas(V3DPluginCallback2 &callback, QWidget *parent) {
   v3d_msg("Soma extraction complete.");
 }
 
-void create_background(V3DPluginCallback2 &callback, QWidget *parent) {
+unsigned char ***create_background(V3DPluginCallback2 &callback,
+                                   QWidget *parent, V3DLONG &dim_X,
+                                   V3DLONG &dim_Y, V3DLONG &dim_Z) {
   // Get current image
   v3dhandle curwin = callback.currentImageWindow();
   if (!curwin) {
     v3d_msg("No image opened.", parent);
-    return;
+    return nullptr;
   }
 
   Image4DSimple *p4DImage = callback.getImage(curwin);
   if (!p4DImage) {
     v3d_msg("No image opened.", parent);
-    return;
+    return nullptr;
   }
 
   // Get image dimensions and data
-  V3DLONG xDim = p4DImage->getXDim();
-  V3DLONG yDim = p4DImage->getYDim();
-  V3DLONG zDim = p4DImage->getZDim();
+  dim_X = p4DImage->getXDim();
+  dim_Y = p4DImage->getYDim();
+  dim_Z = p4DImage->getZDim();
   V3DLONG cDim = p4DImage->getCDim();
-  V3DLONG totalSize = xDim * yDim * zDim;
+  V3DLONG totalSize = dim_X * dim_Y * dim_Z;
   unsigned char *originalData = p4DImage->getRawData();
 
   // Get segmentation file
@@ -809,7 +811,7 @@ void create_background(V3DPluginCallback2 &callback, QWidget *parent) {
   if (!foundSegFile) {
     v3d_msg("No segmentation file found. Please segment the image first.",
             parent);
-    return;
+    return nullptr;
   }
 
   // Load segmentation file
@@ -819,14 +821,14 @@ void create_background(V3DPluginCallback2 &callback, QWidget *parent) {
   if (!simple_loadimage_wrapper(callback, segFileName.toStdString().c_str(),
                                 segData, sz, datatype)) {
     v3d_msg("Failed to load segmentation file.", parent);
-    return;
+    return nullptr;
   }
 
   // Check dimensions match
-  if (sz[0] != xDim || sz[1] != yDim || sz[2] != zDim) {
+  if (sz[0] != dim_X || sz[1] != dim_Y || sz[2] != dim_Z) {
     v3d_msg("Segmentation dimensions don't match the original image.", parent);
     delete[] segData;
-    return;
+    return nullptr;
   }
 
   // Find lowest threshold value in segmented regions
@@ -852,7 +854,7 @@ void create_background(V3DPluginCallback2 &callback, QWidget *parent) {
 
   // Background threshold is slightly 1 lower than the lowest threshold
   unsigned char backgroundThreshold = lowestThreshold - 1;
-  printf("Using %d  as background threshold\n");
+  printf("Using %d as background threshold\n", backgroundThreshold);
 
   // Calculate mean and standard deviation of background voxels
   double sum = 0.0;
@@ -873,7 +875,7 @@ void create_background(V3DPluginCallback2 &callback, QWidget *parent) {
         "threshold.",
         parent);
     delete[] segData;
-    return;
+    return nullptr;
   }
 
   double mean = sum / backgroundCount;
@@ -883,51 +885,61 @@ void create_background(V3DPluginCallback2 &callback, QWidget *parent) {
   printf("Background statistics: count=%ld, mean=%.2f, stddev=%.2f\n",
          backgroundCount, mean, stdDev);
 
-  // Create new image for background
-  Image4DSimple *backgroundImage = new Image4DSimple();
-  backgroundImage->createBlankImage(xDim, yDim, zDim, cDim, V3D_UINT8);
-  unsigned char *backgroundData = backgroundImage->getRawData();
-
-  // Set image properties from original image
-  backgroundImage->setOriginX(p4DImage->getOriginX());
-  backgroundImage->setOriginY(p4DImage->getOriginY());
-  backgroundImage->setOriginZ(p4DImage->getOriginZ());
-  backgroundImage->setRezX(p4DImage->getRezX());
-  backgroundImage->setRezY(p4DImage->getRezY());
-  backgroundImage->setRezZ(p4DImage->getRezZ());
+  // Allocate 3D array for background
+  unsigned char ***backgroundArray = new unsigned char **[dim_Z];
+  for (V3DLONG z = 0; z < dim_Z; z++) {
+    backgroundArray[z] = new unsigned char *[dim_Y];
+    for (V3DLONG y = 0; y < dim_Y; y++) {
+      backgroundArray[z][y] = new unsigned char[dim_X];
+    }
+  }
 
   // Fill with random values from normal distribution
   std::srand(std::time(nullptr));  // Seed random generator
 
-  for (V3DLONG i = 0; i < totalSize; i++) {
-    // Use Box-Muller transform to generate Gaussian distributed random numbers
-    double u1 = std::rand() / (RAND_MAX + 1.0);
-    double u2 = std::rand() / (RAND_MAX + 1.0);
+  for (V3DLONG z = 0; z < dim_Z; z++) {
+    for (V3DLONG y = 0; y < dim_Y; y++) {
+      for (V3DLONG x = 0; x < dim_X; x++) {
+        // Use Box-Muller transform to generate Gaussian distributed random
+        // numbers
+        double u1 = std::rand() / (RAND_MAX + 1.0);
+        double u2 = std::rand() / (RAND_MAX + 1.0);
 
-    // Avoid log(0)
-    if (u1 < 1e-10) u1 = 1e-10;
+        // Avoid log(0)
+        if (u1 < 1e-10) u1 = 1e-10;
 
-    double randStdNormal =
-        std::sqrt(-2.0 * std::log(u1)) * std::cos(2.0 * M_PI * u2);
-    double randNormal = mean + stdDev * randStdNormal;
+        double randStdNormal =
+            std::sqrt(-2.0 * std::log(u1)) * std::cos(2.0 * M_PI * u2);
+        double randNormal = mean + stdDev * randStdNormal;
 
-    // Clamp to valid unsigned char range [0,255]
-    int value = std::round(randNormal);
-    value = std::max(0, std::min(255, value));
+        // Clamp to valid unsigned char range [0,255]
+        int value = std::round(randNormal);
+        value = std::max(0, std::min(255, value));
 
-    backgroundData[i] = (unsigned char)value;
+        backgroundArray[z][y][x] = (unsigned char)value;
+      }
+    }
   }
-
-  // Show the generated background
-  v3dhandle newwin = callback.newImageWindow();
-  callback.setImage(newwin, backgroundImage);
-  callback.setImageName(newwin, imageName + "_background");
-  callback.updateImageWindow(newwin);
 
   // Clean up
   delete[] segData;
 
-  v3d_msg("Background image generated successfully.");
+  printf("Background generation complete.\n");
+  return backgroundArray;
+}
+
+void free_3d_array(unsigned char ***array, V3DLONG dim_Z, V3DLONG dim_Y) {
+  if (array) {
+    for (V3DLONG z = 0; z < dim_Z; z++) {
+      if (array[z]) {
+        for (V3DLONG y = 0; y < dim_Y; y++) {
+          if (array[z][y]) delete[] array[z][y];
+        }
+        delete[] array[z];
+      }
+    }
+    delete[] array;
+  }
 }
 
 bool get_PCA_info(int somaID, const QString &imageName, double &pc1,
@@ -1162,4 +1174,59 @@ void free_mapped_arrays(unsigned char ***intensities,
     }
     delete[] segmentation;
   }
+}
+
+void create_background(V3DPluginCallback2 &callback, QWidget *parent) {
+  // Old version that creates and displays an image directly for debugging
+
+  // Call the new version to get the background intensities
+  V3DLONG dimX, dimY, dimZ;
+  unsigned char ***backgroundIntensities =
+      create_background(callback, parent, dimX, dimY, dimZ);
+
+  if (!backgroundIntensities) {
+    v3d_msg("Failed to generate background intensities.", parent);
+    return;
+  }
+
+  // Create new image for display
+  Image4DSimple *backgroundImage = new Image4DSimple();
+  backgroundImage->createBlankImage(dimX, dimY, dimZ, 1, V3D_UINT8);
+
+  // Get image properties from current image for consistency
+  v3dhandle curwin = callback.currentImageWindow();
+  if (curwin) {
+    Image4DSimple *p4DImage = callback.getImage(curwin);
+    if (p4DImage) {
+      backgroundImage->setOriginX(p4DImage->getOriginX());
+      backgroundImage->setOriginY(p4DImage->getOriginY());
+      backgroundImage->setOriginZ(p4DImage->getOriginZ());
+      backgroundImage->setRezX(p4DImage->getRezX());
+      backgroundImage->setRezY(p4DImage->getRezY());
+      backgroundImage->setRezZ(p4DImage->getRezZ());
+    }
+  }
+
+  // Copy the background intensities to the new image
+  unsigned char *backgroundData = backgroundImage->getRawData();
+  for (V3DLONG z = 0; z < dimZ; z++) {
+    for (V3DLONG y = 0; y < dimY; y++) {
+      for (V3DLONG x = 0; x < dimX; x++) {
+        V3DLONG idx = z * dimX * dimY + y * dimX + x;
+        backgroundData[idx] = backgroundIntensities[z][y][x];
+      }
+    }
+  }
+
+  // Free the 3D array now that we've copied the data
+  free_3d_array(backgroundIntensities, dimZ, dimY);
+
+  // Show the generated background
+  QString imageName = callback.getImageName(curwin);
+  v3dhandle newwin = callback.newImageWindow();
+  callback.setImage(newwin, backgroundImage);
+  callback.setImageName(newwin, imageName + "_background");
+  callback.updateImageWindow(newwin);
+
+  v3d_msg("Background image generated successfully.");
 }
