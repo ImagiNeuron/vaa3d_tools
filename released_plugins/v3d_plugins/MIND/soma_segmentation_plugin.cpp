@@ -806,19 +806,60 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
   memset(outSegData, 0, totalSize);
 
   // Create output image with original intensity values
+  // unsigned char *outIntensityData = new unsigned char[totalSize];
+  // memset(outIntensityData, 0, totalSize);
+  unsigned char ***intensityBackground =
+      create_background(callback, parent, xDim, yDim, zDim);
+  // Convert intensityBackground to 1D array
   unsigned char *outIntensityData = new unsigned char[totalSize];
-  memset(outIntensityData, 0, totalSize);
+  for (V3DLONG k = 0; k < zDim; k++) {      // z dimension
+    for (V3DLONG j = 0; j < yDim; j++) {    // y dimension
+      for (V3DLONG i = 0; i < xDim; i++) {  // x dimension
+        outIntensityData[i + j * xDim + k * xDim * yDim] =
+            intensityBackground[k][j][i];
+      }
+    }
+  }
+
+  // Deallocation
+  for (V3DLONG k = 0; k < zDim; k++) {
+    for (V3DLONG j = 0; j < yDim; j++) {
+      delete[] intensityBackground[k][j];
+    }
+    delete[] intensityBackground[k];
+  }
+  delete[] intensityBackground;
 
   // Generate random positions and place synthetic somas
   std::random_device rd;
   std::mt19937 gen(rd());
 
   // Number of synthetic somas to generate
-  int numSynthetic = 20;
+  int numSynthetic = 400;
 
   v3d_msg(QString("Generating %1 synthetic somas...").arg(numSynthetic));
 
   int successfulPlacements = 0;
+
+  // Structure to keep track of placed somas for overlap detection
+  struct PlacedSoma {
+    double x, y, z;  // Center coordinates
+    double radius;   // Soma radius
+  };
+  std::vector<PlacedSoma> placedSomas;
+
+  // Helper function to check if two somas overlap
+  auto somasOverlap = [](const PlacedSoma &s1, const PlacedSoma &s2) -> bool {
+    // Calculate squared distance between centers
+    double dx = s1.x - s2.x;
+    double dy = s1.y - s2.y;
+    double dz = s1.z - s2.z;
+    double distSq = dx * dx + dy * dy + dz * dz;
+
+    // If distance is less than sum of radii, they overlap
+    double minDist = s1.radius + s2.radius;
+    return distSq < (minDist * minDist);
+  };
 
   for (int i = 0; i < numSynthetic; i++) {
     // Choose a random soma from the available ones for this synthetic soma
@@ -845,28 +886,55 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
       attempts++;
       validPosition = true;
 
+      // Generate new potential position
       for (int j = 0; j < 3; j++) {
         std::normal_distribution<> d(meanCenter[j], stdCenter[j]);
         newCenter[j] = d(gen);
 
+        // Check if position is within image boundaries
         if (j == 0 && (newCenter[j] < boundaryMargin ||
                        newCenter[j] > xDim - boundaryMargin)) {
           validPosition = false;
+          break;
         } else if (j == 1 && (newCenter[j] < boundaryMargin ||
                               newCenter[j] > yDim - boundaryMargin)) {
           validPosition = false;
+          break;
         } else if (j == 2 && (newCenter[j] < boundaryMargin ||
                               newCenter[j] > zDim - boundaryMargin)) {
           validPosition = false;
+          break;
+        }
+      }
+
+      // If position is within boundaries, check for overlap with existing somas
+      if (validPosition) {
+        PlacedSoma newSoma = {newCenter[0], newCenter[1], newCenter[2], radius};
+
+        // Check against all previously placed somas
+        for (const auto &existingSoma : placedSomas) {
+          if (somasOverlap(newSoma, existingSoma)) {
+            validPosition = false;
+            printf(
+                "Soma %d position attempt %d: Overlap detected with existing "
+                "soma\n",
+                i + 1, attempts);
+            break;
+          }
         }
       }
     }
 
     if (!validPosition) {
-      printf("Failed to find valid position for soma %d after %d attempts\n",
-             i + 1, maxAttempts);
+      printf(
+          "Failed to find valid non-overlapping position for soma %d after %d "
+          "attempts\n",
+          i + 1, maxAttempts);
       continue;
     }
+
+    // Add this soma to our placed somas list for future overlap checking
+    placedSomas.push_back({newCenter[0], newCenter[1], newCenter[2], radius});
 
     printf(
         "Placed soma %d/%d at (%.1f, %.1f, %.1f) with radius %.2f and cube "
@@ -968,10 +1036,16 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
       }
     }
 
-    // Apply random rotation based on PCA values
+    // Apply random rotation to the synthetic soma
+    // TODO: Implement rotation of tempSegmentation and tempIntensity
+    //       For the rotation values, we can use randomPC1, randomPC2,
+    //       randomPC3, randomVec1, randomVec2, randomVec3
+
     // cellSegmentation::class_segmentationMain segMain;
     // segMain.rotateSegmentation(tempSegmentation, cubeSize, randomPC1,
-    // randomPC2,
+    //                            randomPC2, randomPC3, randomVec1, randomVec2,
+    //                            randomVec3);
+    // segMain.rotateSegmentation(tempIntensity, cubeSize, randomPC1, randomPC2,
     //                            randomPC3, randomVec1, randomVec2,
     //                            randomVec3);
 
@@ -1036,7 +1110,7 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
   printf("Successfully placed %d/%d somas\n", successfulPlacements,
          numSynthetic);
   v3d_msg(QString("Simulation complete. Generated %1/%2 synthetic "
-                  "somas.\nSaved images as %3 and %4.")
+                  "somas. Saved images as %3 and %4.")
               .arg(successfulPlacements)
               .arg(numSynthetic)
               .arg(outSegFileName)
