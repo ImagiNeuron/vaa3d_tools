@@ -201,8 +201,9 @@ void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent) {
 
     int somaID;
     double center[3];
-    double pc1, pc2, pc3;
+    // double pc1, pc2, pc3;
     double vec1Pos[3], vec2Pos[3], vec3Pos[3];
+    double radius;
 
     int col = 0;
     while (std::getline(ss, token, ',')) {
@@ -211,7 +212,9 @@ void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent) {
           somaID = std::stoi(token);
           break;
         // case 1,2,3: // marker position
-        // case 4: // radius
+        case 4:
+          radius = std::stod(token);
+          break;
         case 5:
           center[0] = std::stod(token);
           break;
@@ -221,69 +224,50 @@ void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent) {
         case 7:
           center[2] = std::stod(token);
           break;
-        case 8:
-          pc1 = std::stod(token);
-          break;
-        case 9:
-          pc2 = std::stod(token);
-          break;
-        case 10:
-          pc3 = std::stod(token);
-          break;
+        // case 8:
+        //   pc1 = std::stod(token);
+        //   break;
+        // case 9:
+        //   pc2 = std::stod(token);
+        //   break;
+        // case 10:
+        //   pc3 = std::stod(token);
+        //   break;
         case 11:
-          vec1Pos[0] = pc1 * std::stod(token) + center[0];
+          vec1Pos[0] = radius * std::stod(token) + center[0];
           break;
         case 12:
-          vec1Pos[1] = pc1 * std::stod(token) + center[1];
+          vec1Pos[1] = radius * std::stod(token) + center[1];
           break;
         case 13:
-          vec1Pos[2] = pc1 * std::stod(token) + center[2];
+          vec1Pos[2] = radius * std::stod(token) + center[2];
           break;
         case 14:
-          vec2Pos[0] = pc2 * std::stod(token) + center[0];
+          vec2Pos[0] = 0.5 * radius * std::stod(token) + center[0];
           break;
         case 15:
-          vec2Pos[1] = pc2 * std::stod(token) + center[1];
+          vec2Pos[1] = 0.5 * radius * std::stod(token) + center[1];
           break;
         case 16:
-          vec2Pos[2] = pc2 * std::stod(token) + center[2];
+          vec2Pos[2] = 0.5 * radius * std::stod(token) + center[2];
           break;
         case 17:
-          vec3Pos[0] = pc3 * std::stod(token) + center[0];
+          vec3Pos[0] = 0.5 * radius * std::stod(token) + center[0];
           break;
         case 18:
-          vec3Pos[1] = pc3 * std::stod(token) + center[1];
+          vec3Pos[1] = 0.5 * radius * std::stod(token) + center[1];
           break;
         case 19:
-          vec3Pos[2] = pc3 * std::stod(token) + center[2];
+          vec3Pos[2] = 0.5 * radius * std::stod(token) + center[2];
           break;
       }
       col++;
     }
 
-    printf(
-        "Soma #%d PCA Results. Center (%f, %f, %f) | eigenvals (%f, %f, %f) | "
-        "vec1Pos (%f, %f, %f) | vec2Pos (%f, %f, %f) | vec3Pos (%f, %f, "
-        "%f)\n\n",
-        somaID, center[0], center[1], center[2], pc1, pc2, pc3, vec1Pos[0],
-        vec1Pos[1], vec1Pos[2], vec2Pos[0], vec2Pos[1], vec2Pos[2], vec3Pos[0],
-        vec3Pos[1], vec3Pos[2]);
-
     // Visualize
-    if (pc1 > pc2 && pc1 > pc3) {
-      drawLine(pcaVisualization, 1, center, vec1Pos);
-      drawLine(pcaVisualization, 2, center, vec2Pos);
-      drawLine(pcaVisualization, 2, center, vec3Pos);
-    } else if (pc2 > pc1 && pc2 > pc3) {
-      drawLine(pcaVisualization, 1, center, vec2Pos);
-      drawLine(pcaVisualization, 2, center, vec1Pos);
-      drawLine(pcaVisualization, 2, center, vec3Pos);
-    } else {
-      drawLine(pcaVisualization, 1, center, vec3Pos);
-      drawLine(pcaVisualization, 2, center, vec1Pos);
-      drawLine(pcaVisualization, 2, center, vec2Pos);
-    }
-
+    drawLine(pcaVisualization, 1, center, vec1Pos);
+    drawLine(pcaVisualization, 2, center, vec2Pos);
+    drawLine(pcaVisualization, 2, center, vec3Pos);
   }
 
   inFile.close();
