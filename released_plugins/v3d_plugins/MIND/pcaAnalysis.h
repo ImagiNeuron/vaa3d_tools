@@ -62,9 +62,50 @@ void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent);
 void simulate_somas(V3DPluginCallback2 &callback, QWidget *parent);
 
 /**
+ * @brief Create a background image based on segmentation threshold and return
+ * as 3D array
+ * @param callback V3DPluginCallback2 reference
+ * @param parent Parent widget
+ * @param dim_X Output parameter for X dimension
+ * @param dim_Y Output parameter for Y dimension
+ * @param dim_Z Output parameter for Z dimension
+ * @return 3D array of background intensities, or nullptr on failure
+ */
+unsigned char ***create_background(V3DPluginCallback2 &callback,
+                                   QWidget *parent, V3DLONG &dim_X,
+                                   V3DLONG &dim_Y, V3DLONG &dim_Z);
+
+/**
+ * @brief Create background intensity values based on segmentation threshold
+ * @param callback V3DPluginCallback2 reference
+ * @param parent Parent widget
+ * @param dimX Output parameter for X dimension
+ * @param dimY Output parameter for Y dimension
+ * @param dimZ Output parameter for Z dimension
+ * @return 3D array of background intensity values (not binary segmentation).
+ *         The values follow Gaussian distribution with mean and standard
+ * deviation calculated from background voxels in the original image. The caller
+ * is responsible for freeing this memory using free_3d_array(array, dimZ, dimY)
+ */
+unsigned char ***create_background(V3DPluginCallback2 &callback,
+                                   QWidget *parent, V3DLONG &dimX,
+                                   V3DLONG &dimY, V3DLONG &dimZ);
+
+/**
  * @brief Create a background image based on segmentation threshold
+ * @param callback V3DPluginCallback2 reference
+ * @param parent Parent widget
+ * @deprecated Use the version that returns unsigned char*** instead
  */
 void create_background(V3DPluginCallback2 &callback, QWidget *parent);
+
+/**
+ * @brief Free memory allocated for a single 3D array
+ * @param array 3D array to free
+ * @param dim_Z Number of Z slices
+ * @param dim_Y Number of rows
+ */
+void free_3d_array(unsigned char ***array, V3DLONG dim_Z, V3DLONG dim_Y);
 
 /**
  * @brief Retrieve PCA information for a specific soma from a CSV file
