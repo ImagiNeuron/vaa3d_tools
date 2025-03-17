@@ -834,8 +834,23 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
   std::random_device rd;
   std::mt19937 gen(rd());
 
-  // Number of synthetic somas to generate
-  int numSynthetic = 400;
+  // Ask user for the number of synthetic somas to generate
+  bool ok;
+  int numSynthetic = QInputDialog::getInt(
+      parent, "Synthetic Soma Generation",
+      "Enter the number of synthetic somas to generate:", 
+      20, // Default value
+      1,  // Minimum value
+      1000, // Maximum value
+      1,  // Step
+      &ok);
+      
+  if (!ok) {
+    // User canceled the dialog
+    v3d_msg("Synthetic soma generation canceled.", parent);
+    delete[] segData;
+    return;
+  }
 
   v3d_msg(QString("Generating %1 synthetic somas...").arg(numSynthetic));
 
