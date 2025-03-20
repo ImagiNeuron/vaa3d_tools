@@ -780,110 +780,24 @@ unsigned char ***create_background(V3DPluginCallback2 &callback,
   dim_X = p4DImage->getXDim();
   dim_Y = p4DImage->getYDim();
   dim_Z = p4DImage->getZDim();
-  V3DLONG cDim = p4DImage->getCDim();
   V3DLONG totalSize = dim_X * dim_Y * dim_Z;
   unsigned char *originalData = p4DImage->getRawData();
 
-  // Get segmentation file
-  QString imageName = callback.getImageName(curwin);
-  QString currentImagePath = QFileInfo(imageName).absolutePath();
-  QString baseImageName = QFileInfo(imageName).baseName();
+  // Calculate chunk dimensions (ensure at least 1)
+  V3DLONG chunk_X = std::max(1L, dim_X / 4);
+  V3DLONG chunk_Y = std::max(1L, dim_Y / 4);
+  V3DLONG chunk_Z = std::max(1L, dim_Z / 4);
 
-  // Try different possible locations for segmentation file
-  QStringList possibleSegFiles;
-  possibleSegFiles << imageName + "_seg.tif"
-                   << currentImagePath + "/" + baseImageName + "_seg.tif"
-                   << baseImageName + "_seg.tif";
+  // Calculate number of chunks in each dimension
+  V3DLONG num_chunks_X = (dim_X + chunk_X - 1) / chunk_X;
+  V3DLONG num_chunks_Y = (dim_Y + chunk_Y - 1) / chunk_Y;
+  V3DLONG num_chunks_Z = (dim_Z + chunk_Z - 1) / chunk_Z;
 
-  QString segFileName;
-  bool foundSegFile = false;
-
-  for (int i = 0; i < possibleSegFiles.size(); i++) {
-    if (QFile::exists(possibleSegFiles[i])) {
-      segFileName = possibleSegFiles[i];
-      foundSegFile = true;
-      printf("Found segmentation file: %s\n",
-             segFileName.toStdString().c_str());
-      break;
-    }
-  }
-
-  if (!foundSegFile) {
-    v3d_msg("No segmentation file found. Please segment the image first.",
-            parent);
-    return nullptr;
-  }
-
-  // Load segmentation file
-  unsigned char *segData = nullptr;
-  V3DLONG sz[4];
-  int datatype = 0;
-  if (!simple_loadimage_wrapper(callback, segFileName.toStdString().c_str(),
-                                segData, sz, datatype)) {
-    v3d_msg("Failed to load segmentation file.", parent);
-    return nullptr;
-  }
-
-  // Check dimensions match
-  if (sz[0] != dim_X || sz[1] != dim_Y || sz[2] != dim_Z) {
-    v3d_msg("Segmentation dimensions don't match the original image.", parent);
-    delete[] segData;
-    return nullptr;
-  }
-
-  // Find lowest threshold value in segmented regions
-  unsigned char lowestThreshold = 255;  // Start with max value
-  for (V3DLONG i = 0; i < totalSize; i++) {
-    if (segData[i] > 0) {
-      if (originalData[i] < lowestThreshold) {
-        lowestThreshold = originalData[i];
-      }
-    }
-  }
-
-  // If no segmentation found (unlikely), use default value
-  if (lowestThreshold == 255) {
-    lowestThreshold = 10;  // Arbitrary low value
-    v3d_msg(
-        "Warning: Could not determine threshold from segmentation, using "
-        "default value.",
-        parent);
-  }
-
-  printf("Lowest threshold used for segmentation: %d\n", lowestThreshold);
-
-  // Background threshold is slightly 1 lower than the lowest threshold
-  unsigned char backgroundThreshold = lowestThreshold - 1;
-  printf("Using %d as background threshold\n", backgroundThreshold);
-
-  // Calculate mean and standard deviation of background voxels
-  double sum = 0.0;
-  double sumSq = 0.0;
-  V3DLONG backgroundCount = 0;
-
-  for (V3DLONG i = 0; i < totalSize; i++) {
-    if (originalData[i] < backgroundThreshold) {
-      sum += originalData[i];
-      sumSq += originalData[i] * originalData[i];
-      backgroundCount++;
-    }
-  }
-
-  if (backgroundCount == 0) {
-    v3d_msg(
-        "No background voxels found below threshold. Try a different "
-        "threshold.",
-        parent);
-    delete[] segData;
-    return nullptr;
-  }
-
-  double mean = sum / backgroundCount;
-  double variance = (sumSq / backgroundCount) - (mean * mean);
-  double stdDev = sqrt(variance);
-
-  printf("Background statistics: count=%ld, mean=%.2f, stddev=%.2f\n",
-         backgroundCount, mean, stdDev);
+  printf("Image dimensions: %ld x %ld x %ld\n", dim_X, dim_Y, dim_Z);
+  printf("Chunk dimensions: %ld x %ld x %ld\n", chunk_X, chunk_Y, chunk_Z);
+  printf("Number of chunks: %ld x %ld x %ld = %ld chunks total\n", num_chunks_X,
+         num_chunks_Y, num_chunks_Z,
+         num_chunks_X * num_chunks_Y * num_chunks_Z);
 
   // Allocate 3D array for background
   unsigned char ***backgroundArray = new unsigned char **[dim_Z];
@@ -891,38 +805,111 @@ unsigned char ***create_background(V3DPluginCallback2 &callback,
     backgroundArray[z] = new unsigned char *[dim_Y];
     for (V3DLONG y = 0; y < dim_Y; y++) {
       backgroundArray[z][y] = new unsigned char[dim_X];
+      // Initialize to zero
+      memset(backgroundArray[z][y], 0, dim_X * sizeof(unsigned char));
     }
   }
 
-  // Fill with random values from normal distribution
-  std::srand(std::time(nullptr));  // Seed random generator
+  // Seed random generator
+  std::srand(std::time(nullptr));
 
-  for (V3DLONG z = 0; z < dim_Z; z++) {
-    for (V3DLONG y = 0; y < dim_Y; y++) {
-      for (V3DLONG x = 0; x < dim_X; x++) {
-        // Use Box-Muller transform to generate Gaussian distributed random
-        // numbers
-        double u1 = std::rand() / (RAND_MAX + 1.0);
-        double u2 = std::rand() / (RAND_MAX + 1.0);
+  // Process each chunk
+  for (V3DLONG cz = 0; cz < num_chunks_Z; cz++) {
+    V3DLONG z_start = cz * chunk_Z;
+    V3DLONG z_end = std::min(z_start + chunk_Z, dim_Z);
 
-        // Avoid log(0)
-        if (u1 < 1e-10) u1 = 1e-10;
+    for (V3DLONG cy = 0; cy < num_chunks_Y; cy++) {
+      V3DLONG y_start = cy * chunk_Y;
+      V3DLONG y_end = std::min(y_start + chunk_Y, dim_Y);
 
-        double randStdNormal =
-            std::sqrt(-2.0 * std::log(u1)) * std::cos(2.0 * M_PI * u2);
-        double randNormal = mean + stdDev * randStdNormal;
+      for (V3DLONG cx = 0; cx < num_chunks_X; cx++) {
+        V3DLONG x_start = cx * chunk_X;
+        V3DLONG x_end = std::min(x_start + chunk_X, dim_X);
 
-        // Clamp to valid unsigned char range [0,255]
-        int value = std::round(randNormal);
-        value = std::max(0, std::min(255, value));
+        // Create histogram for this chunk
+        int hist[256] = {0};
+        int chunkSize = 0;
 
-        backgroundArray[z][y][x] = (unsigned char)value;
+        for (V3DLONG z = z_start; z < z_end; z++) {
+          for (V3DLONG y = y_start; y < y_end; y++) {
+            for (V3DLONG x = x_start; x < x_end; x++) {
+              V3DLONG idx = z * dim_X * dim_Y + y * dim_X + x;
+              hist[originalData[idx]]++;
+              chunkSize++;
+            }
+          }
+        }
+
+        // Calculate Otsu threshold for this chunk using the new function
+        int threshold = calculateOtsuThreshold(hist, chunkSize);
+
+        // Calculate statistics for background voxels (below threshold)
+        double mean = 0.0;
+        double stdDev = 0.0;
+        V3DLONG backgroundCount = 0;
+        double sum_bg = 0.0;
+        double sumSq_bg = 0.0;
+
+        for (V3DLONG z = z_start; z < z_end; z++) {
+          for (V3DLONG y = y_start; y < y_end; y++) {
+            for (V3DLONG x = x_start; x < x_end; x++) {
+              V3DLONG idx = z * dim_X * dim_Y + y * dim_X + x;
+              if (originalData[idx] < threshold) {
+                sum_bg += originalData[idx];
+                sumSq_bg += originalData[idx] * originalData[idx];
+                backgroundCount++;
+              }
+            }
+          }
+        }
+
+        // If we found background voxels, calculate statistics
+        if (backgroundCount > 0) {
+          mean = sum_bg / backgroundCount;
+          double variance = (sumSq_bg / backgroundCount) - (mean * mean);
+          stdDev = sqrt(variance);
+
+          // Ensure minimum stdDev to avoid issues with uniform regions
+          if (stdDev < 1.0) stdDev = 1.0;
+        } else {
+          // If no background voxels found, use default values
+          mean = 10.0;
+          stdDev = 3.0;
+        }
+
+        // Generate background values for this chunk using normal distribution
+        for (V3DLONG z = z_start; z < z_end; z++) {
+          for (V3DLONG y = y_start; y < y_end; y++) {
+            for (V3DLONG x = x_start; x < x_end; x++) {
+              // Use Box-Muller transform to generate Gaussian distributed
+              // random numbers
+              double u1 = std::rand() / (RAND_MAX + 1.0);
+              double u2 = std::rand() / (RAND_MAX + 1.0);
+
+              // Avoid log(0)
+              if (u1 < 1e-10) u1 = 1e-10;
+
+              double randStdNormal =
+                  std::sqrt(-2.0 * std::log(u1)) * std::cos(2.0 * M_PI * u2);
+              double randNormal = mean + stdDev * randStdNormal;
+
+              // Clamp to valid unsigned char range [0,255]
+              int value = std::round(randNormal);
+              value = std::max(0, std::min(255, value));
+
+              backgroundArray[z][y][x] = (unsigned char)value;
+            }
+          }
+        }
+
+        // Print chunk info
+        printf(
+            "Chunk [%ld,%ld,%ld]: Threshold=%d, Background mean=%.2f, "
+            "stddev=%.2f\n",
+            cx, cy, cz, threshold, mean, stdDev);
       }
     }
   }
-
-  // Clean up
-  delete[] segData;
 
   printf("Background generation complete.\n");
   return backgroundArray;
@@ -1229,4 +1216,42 @@ void create_background(V3DPluginCallback2 &callback, QWidget *parent) {
   callback.updateImageWindow(newwin);
 
   v3d_msg("Background image generated successfully.");
+}
+
+/**
+ * @brief Calculate Otsu threshold for a histogram
+ * @param hist Array of 256 histogram values
+ * @param totalPixels Total number of pixels in the region
+ * @return The calculated Otsu threshold value
+ */
+int calculateOtsuThreshold(const int hist[256], int totalPixels) {
+  double sum = 0;
+  for (int t = 0; t < 256; t++) {
+    sum += t * hist[t];
+  }
+
+  double sumB = 0;
+  int wB = 0;
+  double varMax = 0;
+  int threshold = 0;
+
+  for (int t = 0; t < 256; t++) {
+    wB += hist[t];
+    if (wB == 0) continue;
+
+    int wF = totalPixels - wB;
+    if (wF == 0) break;
+
+    sumB += t * hist[t];
+    double mB = sumB / wB;
+    double mF = (sum - sumB) / wF;
+    double varBetween = (double)wB * wF * (mB - mF) * (mB - mF);
+
+    if (varBetween > varMax) {
+      varMax = varBetween;
+      threshold = t;
+    }
+  }
+
+  return threshold;
 }

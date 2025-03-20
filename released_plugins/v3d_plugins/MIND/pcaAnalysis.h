@@ -156,4 +156,12 @@ void free_mapped_arrays(unsigned char ***intensities,
                         unsigned char ***segmentation, V3DLONG dim_Z,
                         V3DLONG dim_Y);
 
+/**
+ * @brief Calculate Otsu threshold for a histogram
+ * @param hist Array of 256 histogram values
+ * @param totalPixels Total number of pixels in the region
+ * @return The calculated Otsu threshold value
+ */
+int calculateOtsuThreshold(const int hist[256], int totalPixels);
+
 #endif  // __MIND_PCA_ANALYSIS_H__
