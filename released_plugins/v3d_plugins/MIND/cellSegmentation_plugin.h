@@ -401,9 +401,9 @@ class cellSegmentation : public QObject {
     }
     ~class_segmentationMain() {}
 
-    void printSomaSlice(double *data, int size, int padding = 2){
+    void printSomaSlice(double *data, int size, int padding = 2) {
       for (int y = 0; y < size; y++) {
-        for (int x = 0; x < size; x++){
+        for (int x = 0; x < size; x++) {
           int idx = y * size + x;
           switch (padding) {
             case 0:
@@ -970,7 +970,7 @@ class cellSegmentation : public QObject {
             _LandmarkList_exemplar[idx_exemplar], idx_exemplar + 1, savePath,
             pc1, pc2, pc3, vec1, vec2, vec3, x_center, y_center, z_center);
 
-        // for the label at idx_exemplar, get the segmentation (sqaure around
+        // for the label at idx_exemplar, get the segmentation (square around
         // marker center)
         vector<V3DLONG> binarySomaIndicies =
             possVct_exemplarRegion[segmentationCount];
@@ -988,7 +988,9 @@ class cellSegmentation : public QObject {
         } else {
           // Print the central slice of the soma segmentation.
           printf("Soma segmentation (central slice) before rotation: \n");
-          printSomaSlice(somaSegmentation + (centralSlice * cubeSize * cubeSize), cubeSize, 1);
+          printSomaSlice(
+              somaSegmentation + (centralSlice * cubeSize * cubeSize), cubeSize,
+              1);
 
           // printf("Unrotated soma:\n");
           // for (V3DLONG z = 0; z < cubeSize; z++) {
@@ -1020,7 +1022,9 @@ class cellSegmentation : public QObject {
         } else {
           // Print the central slice of the soma segmentation.
           printf("Soma segmentation (central slice) after rotation: \n");
-          printSomaSlice(somaSegmentation + (centralSlice * cubeSize * cubeSize), cubeSize, 1);
+          printSomaSlice(
+              somaSegmentation + (centralSlice * cubeSize * cubeSize), cubeSize,
+              1);
 
           // printf("Rotated soma:\n");
           // for (V3DLONG z = 0; z < cubeSize; z++) {
@@ -1036,7 +1040,9 @@ class cellSegmentation : public QObject {
           // }
           // Print the central slice of the probability model.
           printf("Probability model (central slice): \n");
-          printSomaSlice(probabilityModel + (centralSlice * cubeSize * cubeSize), cubeSize);
+          printSomaSlice(
+              probabilityModel + (centralSlice * cubeSize * cubeSize),
+              cubeSize);
         }
 
         // Clear somaSegmentation for the next exemplar.
@@ -1096,7 +1102,7 @@ class cellSegmentation : public QObject {
         int y = (idx / dim_X) % dim_Y;
         int z = idx / (dim_X * dim_Y);
 
-        // Adjust coordinates based on the computed shift. -1 for indexes
+        // Adjust coordinates based on the computed
         int newX = x + x_shift;
         int newY = y + y_shift;
         int newZ = z + z_shift;
@@ -1124,15 +1130,17 @@ class cellSegmentation : public QObject {
     /**
      * @brief Helper function to rotate a segmented soma using PCA results.
      */
-    void rotateSegmentationToAxes(double *segmentation, V3DLONG cubeSize, double pc1, double pc2, double pc3, double ev1[3],
-                            double ev2[3], double ev3[3], double ax1[3], double ax2[3], double ax3[3]) {
+    void rotateSegmentationToAxes(double *segmentation, V3DLONG cubeSize,
+                                  double pc1, double pc2, double pc3,
+                                  double ev1[3], double ev2[3], double ev3[3],
+                                  double ax1[3], double ax2[3], double ax3[3]) {
       V3DLONG totalVoxels = cubeSize * cubeSize * cubeSize;
       // Use a std::vector for temporary storage instead of raw new[]:
       std::vector<double> rotated(totalVoxels, 0);
       int center = cubeSize / 2;
 
       // normalize vectors
-      auto normalize = [](double* vec) {
+      auto normalize = [](double *vec) {
         double norm = sqrt(vec[0] * vec[0] + vec[1] * vec[1] + vec[2] * vec[2]);
         vec[0] /= norm;
         vec[1] /= norm;
@@ -1157,9 +1165,15 @@ class cellSegmentation : public QObject {
       // A = [ax1[1] ax2[1] ax3[1]] A^T = [ax2[0] ax2[1] ax2[2]]
       //     [ax1[2] ax2[2] ax3[2]]       [ax3[0] ax3[1] ax3[2]]
       double R[3][3] = {
-        {ev1[0] * ax1[0] + ev2[0] * ax2[0] + ev3[0] * ax3[0], ev1[0] * ax1[1] + ev2[0] * ax2[1] + ev3[0] * ax3[1], ev1[0] * ax1[2] + ev2[0] * ax2[2] + ev3[0] * ax3[2]},
-        {ev1[1] * ax1[0] + ev2[1] * ax2[0] + ev3[1] * ax3[0], ev1[1] * ax1[1] + ev2[1] * ax2[1] + ev3[1] * ax3[1], ev1[1] * ax1[2] + ev2[1] * ax2[2] + ev3[1] * ax3[2]},
-        {ev1[2] * ax1[0] + ev2[2] * ax2[0] + ev3[2] * ax3[0], ev1[2] * ax1[1] + ev2[2] * ax2[1] + ev3[2] * ax3[1], ev1[2] * ax1[2] + ev2[2] * ax2[2] + ev3[2] * ax3[2]},
+          {ev1[0] * ax1[0] + ev2[0] * ax2[0] + ev3[0] * ax3[0],
+           ev1[0] * ax1[1] + ev2[0] * ax2[1] + ev3[0] * ax3[1],
+           ev1[0] * ax1[2] + ev2[0] * ax2[2] + ev3[0] * ax3[2]},
+          {ev1[1] * ax1[0] + ev2[1] * ax2[0] + ev3[1] * ax3[0],
+           ev1[1] * ax1[1] + ev2[1] * ax2[1] + ev3[1] * ax3[1],
+           ev1[1] * ax1[2] + ev2[1] * ax2[2] + ev3[1] * ax3[2]},
+          {ev1[2] * ax1[0] + ev2[2] * ax2[0] + ev3[2] * ax3[0],
+           ev1[2] * ax1[1] + ev2[2] * ax2[1] + ev3[2] * ax3[1],
+           ev1[2] * ax1[2] + ev2[2] * ax2[2] + ev3[2] * ax3[2]},
       };
 
       // Define supersampling resolution per axis.
@@ -1190,13 +1204,13 @@ class cellSegmentation : public QObject {
 
                   // the rotated (output) basis. This is the vector r =
                   // [rx,ry,rz]. We will consider the original vector in the
-                  // unrotated basisas o = [ox, oy, oz]
+                  // unrotated basis as o = [ox, oy, oz]
                   double rx = sampleX - center;
                   double ry = sampleY - center;
                   double rz = sampleZ - center;
 
-                  // The rotation matix A has the eigenvectors as its columns
-                  // We know that o = A * r and r = A^T * r
+                  // The rotation matrix A has the eigenvectors as its columns
+                  // We know that o = A * r and r = A^T * o
                   // Horizontal axis (new X axis) (first col of A): Second
                   // longest PC Vertical axis (new Y axis) (second col of A):
                   // Longest PC Depth axis (new Z axis) (last col of A):
@@ -1236,14 +1250,17 @@ class cellSegmentation : public QObject {
     }
 
     /**
-      * @brief Helper function to rotate a segmented soma using PCA results.
-      */
-    void rotateSegmentation(double *segmentation, V3DLONG cubeSize, double pc1, double pc2, double pc3, double vec1[3], double vec2[3], double vec3[3]) {
+     * @brief Helper function to rotate a segmented soma using PCA results.
+     */
+    void rotateSegmentation(double *segmentation, V3DLONG cubeSize, double pc1,
+                            double pc2, double pc3, double vec1[3],
+                            double vec2[3], double vec3[3]) {
       // align first (longest) principal component with the y-axis
       double ax1[] = {0.0, 1.0, 0.0};
       double ax2[] = {1.0, 0.0, 0.0};
       double ax3[] = {0.0, 0.0, 1.0};
-      rotateSegmentationToAxes(segmentation, cubeSize, pc1, pc2, pc3, vec1, vec2, vec3, ax1, ax2, ax3);
+      rotateSegmentationToAxes(segmentation, cubeSize, pc1, pc2, pc3, vec1,
+                               vec2, vec3, ax1, ax2, ax3);
     }
 
     /**
