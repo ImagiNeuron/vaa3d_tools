@@ -814,7 +814,13 @@ unsigned char ***create_background(V3DPluginCallback2 &callback,
   // Seed random generator
   std::srand(std::time(nullptr));
 
-  // Process each chunk
+  // Store statistics for each chunk for blending
+  std::vector<std::vector<std::vector<std::pair<double, double>>>> chunkStats(
+      num_chunks_Z, std::vector<std::vector<std::pair<double, double>>>(
+                        num_chunks_Y, std::vector<std::pair<double, double>>(
+                                          num_chunks_X, {0.0, 0.0})));
+
+  // Calculate statistics for each chunk first
   for (V3DLONG cz = 0; cz < num_chunks_Z; cz++) {
     V3DLONG z_start = cz * chunk_Z;
     V3DLONG z_end = std::min(z_start + chunk_Z, dim_Z);
@@ -878,41 +884,50 @@ unsigned char ***create_background(V3DPluginCallback2 &callback,
           stdDev = 3.0;
         }
 
-        // Generate background values for this chunk using normal distribution
-        for (V3DLONG z = z_start; z < z_end; z++) {
-          for (V3DLONG y = y_start; y < y_end; y++) {
-            for (V3DLONG x = x_start; x < x_end; x++) {
-              // Use Box-Muller transform to generate Gaussian distributed
-              // random numbers
-              double u1 = std::rand() / (RAND_MAX + 1.0);
-              double u2 = std::rand() / (RAND_MAX + 1.0);
-
-              // Avoid log(0)
-              if (u1 < 1e-10) u1 = 1e-10;
-
-              double randStdNormal =
-                  std::sqrt(-2.0 * std::log(u1)) * std::cos(2.0 * M_PI * u2);
-              double randNormal = mean + stdDev * randStdNormal;
-
-              // Clamp to valid unsigned char range [0,255]
-              int value = std::round(randNormal);
-              value = std::max(0, std::min(255, value));
-
-              backgroundArray[z][y][x] = (unsigned char)value;
-            }
-          }
-        }
-
-        // Print chunk info
-        // printf(
-        //     "Chunk [%ld,%ld,%ld]: Threshold=%d, Background mean=%.2f, "
-        //     "stddev=%.2f\n",
-        //     cx, cy, cz, threshold, mean, stdDev);
+        // Store the mean and stdDev for this chunk
+        chunkStats[cz][cy][cx] = {mean, stdDev};
       }
     }
   }
 
-  printf("Background generation complete.\n");
+  // Define blending parameters - use a smaller radius for more localized
+  // blending
+  double blendRadius = 1.0;
+
+  // Generate background values with blending between chunks
+  for (V3DLONG z = 0; z < dim_Z; z++) {
+    for (V3DLONG y = 0; y < dim_Y; y++) {
+      for (V3DLONG x = 0; x < dim_X; x++) {
+        // Get blended distribution parameters for this voxel
+        double blendedMean, blendedStdDev;
+        getBlendedDistributionParams(x, y, z, chunkStats, chunk_X, chunk_Y,
+                                     chunk_Z, num_chunks_X, num_chunks_Y,
+                                     num_chunks_Z, blendRadius, blendedMean,
+                                     blendedStdDev);
+
+        // Generate random value from the blended distribution
+        double u1 = std::rand() / (RAND_MAX + 1.0);
+        double u2 = std::rand() / (RAND_MAX + 1.0);
+
+        // Avoid log(0)
+        if (u1 < 1e-10) u1 = 1e-10;
+
+        double randStdNormal =
+            std::sqrt(-2.0 * std::log(u1)) * std::cos(2.0 * M_PI * u2);
+        double randNormal = blendedMean + blendedStdDev * randStdNormal;
+
+        // Clamp to valid unsigned char range [0,255]
+        int value = std::round(randNormal);
+        value = std::max(0, std::min(255, value));
+
+        backgroundArray[z][y][x] = (unsigned char)value;
+      }
+    }
+  }
+
+  printf(
+      "Background generation complete with smooth blending (radius = %.1f).\n",
+      blendRadius);
   return backgroundArray;
 }
 
@@ -1255,4 +1270,73 @@ int calculateOtsuThreshold(const int hist[256], int totalPixels) {
   }
 
   return threshold;
+}
+
+void getBlendedDistributionParams(
+    V3DLONG x, V3DLONG y, V3DLONG z,
+    const std::vector<std::vector<std::vector<std::pair<double, double>>>>
+        &chunkStats,
+    V3DLONG chunk_X, V3DLONG chunk_Y, V3DLONG chunk_Z, V3DLONG num_chunks_X,
+    V3DLONG num_chunks_Y, V3DLONG num_chunks_Z, double blendRadius,
+    double &blendedMean, double &blendedStdDev) {
+  // Calculate chunk coordinates and relative position
+  double cx_pos = (double)x / chunk_X;
+  V3DLONG cx = std::min(num_chunks_X - 1, (V3DLONG)cx_pos);
+
+  double cy_pos = (double)y / chunk_Y;
+  V3DLONG cy = std::min(num_chunks_Y - 1, (V3DLONG)cy_pos);
+
+  double cz_pos = (double)z / chunk_Z;
+  V3DLONG cz = std::min(num_chunks_Z - 1, (V3DLONG)cz_pos);
+
+  // Variables for weighted blending
+  double totalWeight = 0.0;
+  double weightedMean = 0.0;
+  double weightedVar = 0.0;
+
+  // Iterate over neighboring chunks within blend radius
+  for (int nz = std::max(0L, cz - (V3DLONG)blendRadius);
+       nz <= std::min(num_chunks_Z - 1, cz + (V3DLONG)blendRadius); nz++) {
+    for (int ny = std::max(0L, cy - (V3DLONG)blendRadius);
+         ny <= std::min(num_chunks_Y - 1, cy + (V3DLONG)blendRadius); ny++) {
+      for (int nx = std::max(0L, cx - (V3DLONG)blendRadius);
+           nx <= std::min(num_chunks_X - 1, cx + (V3DLONG)blendRadius); nx++) {
+        // Calculate distance to chunk center in chunk-space
+        double dx = (cx_pos - nx - 0.5);
+        double dy = (cy_pos - ny - 0.5);
+        double dz = (cz_pos - nz - 0.5);
+        double distSq = dx * dx + dy * dy + dz * dz;
+
+        // Skip chunks that are too far
+        if (distSq > blendRadius * blendRadius) continue;
+
+        // Calculate weight based on distance (quadratic falloff)
+        double weight = std::max(0.0, 1.0 - std::sqrt(distSq) / blendRadius);
+        weight = weight * weight;  // Square the weight for smoother falloff
+
+        // Get the statistics for this chunk
+        double mean = chunkStats[nz][ny][nx].first;
+        double stdDev = chunkStats[nz][ny][nx].second;
+
+        // Accumulate weighted statistics
+        weightedMean += weight * mean;
+        weightedVar += weight * stdDev * stdDev;  // Weighted variance
+        totalWeight += weight;
+      }
+    }
+  }
+
+  // Normalize by total weight
+  if (totalWeight > 0) {
+    weightedMean /= totalWeight;
+    weightedVar /= totalWeight;
+  } else {
+    // Fallback to central chunk if no weights (should not happen)
+    weightedMean = chunkStats[cz][cy][cx].first;
+    weightedVar = chunkStats[cz][cy][cx].second * chunkStats[cz][cy][cx].second;
+  }
+
+  // Set output parameters
+  blendedMean = weightedMean;
+  blendedStdDev = std::sqrt(weightedVar);
 }

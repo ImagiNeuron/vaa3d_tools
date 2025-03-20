@@ -164,4 +164,28 @@ void free_mapped_arrays(unsigned char ***intensities,
  */
 int calculateOtsuThreshold(const int hist[256], int totalPixels);
 
+/**
+ * @brief Get blended Gaussian distribution parameters for a given position
+ * @param x X coordinate of the voxel
+ * @param y Y coordinate of the voxel
+ * @param z Z coordinate of the voxel
+ * @param chunkStats 3D vector containing mean and stdDev pairs for each chunk
+ * @param chunk_X Chunk size in X dimension
+ * @param chunk_Y Chunk size in Y dimension
+ * @param chunk_Z Chunk size in Z dimension
+ * @param num_chunks_X Number of chunks in X dimension
+ * @param num_chunks_Y Number of chunks in Y dimension
+ * @param num_chunks_Z Number of chunks in Z dimension
+ * @param blendRadius Radius for blending (in chunk units)
+ * @param blendedMean Output parameter for the blended mean value
+ * @param blendedStdDev Output parameter for the blended standard deviation
+ */
+void getBlendedDistributionParams(
+    V3DLONG x, V3DLONG y, V3DLONG z,
+    const std::vector<std::vector<std::vector<std::pair<double, double>>>>
+        &chunkStats,
+    V3DLONG chunk_X, V3DLONG chunk_Y, V3DLONG chunk_Z, V3DLONG num_chunks_X,
+    V3DLONG num_chunks_Y, V3DLONG num_chunks_Z, double blendRadius,
+    double &blendedMean, double &blendedStdDev);
+
 #endif  // __MIND_PCA_ANALYSIS_H__
