@@ -784,9 +784,10 @@ unsigned char ***create_background(V3DPluginCallback2 &callback,
   unsigned char *originalData = p4DImage->getRawData();
 
   // Calculate chunk dimensions (ensure at least 1)
-  V3DLONG chunk_X = std::max(1L, dim_X / 4);
-  V3DLONG chunk_Y = std::max(1L, dim_Y / 4);
-  V3DLONG chunk_Z = std::max(1L, dim_Z / 4);
+  V3DLONG factor = 4;
+  V3DLONG chunk_X = std::max(1L, dim_X / factor);
+  V3DLONG chunk_Y = std::max(1L, dim_Y / factor);
+  V3DLONG chunk_Z = std::max(1L, dim_Z / factor);
 
   // Calculate number of chunks in each dimension
   V3DLONG num_chunks_X = (dim_X + chunk_X - 1) / chunk_X;
@@ -903,10 +904,10 @@ unsigned char ***create_background(V3DPluginCallback2 &callback,
         }
 
         // Print chunk info
-        printf(
-            "Chunk [%ld,%ld,%ld]: Threshold=%d, Background mean=%.2f, "
-            "stddev=%.2f\n",
-            cx, cy, cz, threshold, mean, stdDev);
+        // printf(
+        //     "Chunk [%ld,%ld,%ld]: Threshold=%d, Background mean=%.2f, "
+        //     "stddev=%.2f\n",
+        //     cx, cy, cz, threshold, mean, stdDev);
       }
     }
   }
