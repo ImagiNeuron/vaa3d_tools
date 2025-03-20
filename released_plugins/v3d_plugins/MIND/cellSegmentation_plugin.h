@@ -401,11 +401,21 @@ class cellSegmentation : public QObject {
     }
     ~class_segmentationMain() {}
 
-    void printSomaSlice(int *data, int size){
+    void printSomaSlice(double *data, int size, int padding = 2){
       for (int y = 0; y < size; y++) {
         for (int x = 0; x < size; x++){
           int idx = y * size + x;
-          printf("%4d", data[idx]);
+          switch (padding) {
+            case 0:
+              printf("%f", data[idx]);
+              break;
+            case 1:
+              printf("%4.1f", data[idx]);
+              break;
+            default:
+              printf("%7.2f", data[idx]);
+              break;
+          }
         }
         printf("\n");
       }
@@ -938,12 +948,12 @@ class cellSegmentation : public QObject {
       V3DLONG totalVoxels = cubeSize * cubeSize * cubeSize;
 
       // store the binary segmentation of each soma
-      int *somaSegmentation = new int[totalVoxels];
-      memset(somaSegmentation, 0, totalVoxels * sizeof(int));
+      double *somaSegmentation = new double[totalVoxels];
+      memset(somaSegmentation, 0, totalVoxels * sizeof(double));
 
       // store the counts of each voxel being part of a soma
-      int *probabilityModel = new int[totalVoxels];
-      memset(probabilityModel, 0, totalVoxels * sizeof(int));
+      double *probabilityModel = new double[totalVoxels];
+      memset(probabilityModel, 0, totalVoxels * sizeof(double));
 
       // for each index inside the segmentedLabels vector
       int segmentationCount = 0;
@@ -978,7 +988,7 @@ class cellSegmentation : public QObject {
         } else {
           // Print the central slice of the soma segmentation.
           printf("Soma segmentation (central slice) before rotation: \n");
-          printSomaSlice(somaSegmentation + (centralSlice * cubeSize * cubeSize), cubeSize);
+          printSomaSlice(somaSegmentation + (centralSlice * cubeSize * cubeSize), cubeSize, 1);
 
           // printf("Unrotated soma:\n");
           // for (V3DLONG z = 0; z < cubeSize; z++) {
@@ -1010,19 +1020,7 @@ class cellSegmentation : public QObject {
         } else {
           // Print the central slice of the soma segmentation.
           printf("Soma segmentation (central slice) after rotation: \n");
-          for (V3DLONG y = 0; y < cubeSize; y++) {
-            for (V3DLONG x = 0; x < cubeSize; x++) {
-              V3DLONG idx =
-                  (centralSlice * cubeSize * cubeSize) + (y * cubeSize) + x;
-              // Ensure idx is within bounds:
-              if (idx < totalVoxels)
-                printf("%d ", somaSegmentation[idx]);
-              else
-                printf("ERR ");
-            }
-            printf("\n");
-          }
-          printf("\n");
+          printSomaSlice(somaSegmentation + (centralSlice * cubeSize * cubeSize), cubeSize, 1);
 
           // printf("Rotated soma:\n");
           // for (V3DLONG z = 0; z < cubeSize; z++) {
@@ -1042,7 +1040,7 @@ class cellSegmentation : public QObject {
         }
 
         // Clear somaSegmentation for the next exemplar.
-        memset(somaSegmentation, 0, totalVoxels * sizeof(int));
+        memset(somaSegmentation, 0, totalVoxels * sizeof(double));
       }
 
       // print value at the center of the probability model to see if it is
@@ -1082,7 +1080,7 @@ class cellSegmentation : public QObject {
     void adjustSegmentationCenter(const vector<V3DLONG> &indices,
                                   V3DLONG cubeSize, double x_center,
                                   double y_center, double z_center,
-                                  int *segmentation) {
+                                  double *segmentation) {
       // Calculate the target center index of the cube.
       int center = cubeSize / 2;
       // Compute integer shifts (rounding the center-of-mass coordinates).
@@ -1107,7 +1105,7 @@ class cellSegmentation : public QObject {
         if (newX >= 0 && newX < cubeSize && newY >= 0 && newY < cubeSize &&
             newZ >= 0 && newZ < cubeSize) {
           V3DLONG newIdx = newZ * cubeSize * cubeSize + newY * cubeSize + newX;
-          segmentation[newIdx] = 1;
+          segmentation[newIdx] = 1.0;
           // optional debugging
           // printf(
           //     "Index %zu: original (%d, %d, %d) adjusted to (%d, %d, %d) -> "
@@ -1126,29 +1124,43 @@ class cellSegmentation : public QObject {
     /**
      * @brief Helper function to rotate a segmented soma using PCA results.
      */
-    void rotateSegmentation(int *segmentation, V3DLONG cubeSize, double pc1,
-                            double pc2, double pc3, double vec1[3],
-                            double vec2[3], double vec3[3]) {
+    void rotateSegmentationToAxes(double *segmentation, V3DLONG cubeSize, double pc1, double pc2, double pc3, double ev1[3],
+                            double ev2[3], double ev3[3], double ax1[3], double ax2[3], double ax3[3]) {
       V3DLONG totalVoxels = cubeSize * cubeSize * cubeSize;
       // Use a std::vector for temporary storage instead of raw new[]:
-      std::vector<int> rotated(totalVoxels, 0);
+      std::vector<double> rotated(totalVoxels, 0);
       int center = cubeSize / 2;
 
-      // Pack the eigenvalues and vectors into an array.
-      EigenComponent components[3];
-      components[0] = {pc1, {vec1[0], vec1[1], vec1[2]}};
-      components[1] = {pc2, {vec2[0], vec2[1], vec2[2]}};
-      components[2] = {pc3, {vec3[0], vec3[1], vec3[2]}};
+      // normalize vectors
+      auto normalize = [](double* vec) {
+        double norm = sqrt(vec[0] * vec[0] + vec[1] * vec[1] + vec[2] * vec[2]);
+        vec[0] /= norm;
+        vec[1] /= norm;
+        vec[2] /= norm;
+      };
 
-      // Sort components by eigenvalue in increasing order.
-      // After sorting:
-      //   components[0] = shortest principal component (z-axis)
-      //   components[1] = second longest (x-axis)
-      //   components[2] = longest (y-axis)
-      std::sort(components, components + 3,
-                [](const EigenComponent &a, const EigenComponent &b) {
-                  return a.eigenvalue < b.eigenvalue;
-                });
+      normalize(ev1);
+      normalize(ev2);
+      normalize(ev3);
+      normalize(ax1);
+      normalize(ax2);
+      normalize(ax3);
+
+      // construct the rotation matrix
+      // R = B A^T
+      // where B is the rotation matrix for canonical-to-new
+      // and A is the rotation matrix for canonical-to-eigenvector
+      //     [ev1[0] ev2[0] ev3[0]]
+      // B = [ev1[1] ev2[1] ev3[1]]
+      //     [ev1[2] ev2[2] ev3[2]]
+      //     [ax1[0] ax2[0] ax3[0]]       [ax1[0] ax1[1] ax1[2]]
+      // A = [ax1[1] ax2[1] ax3[1]] A^T = [ax2[0] ax2[1] ax2[2]]
+      //     [ax1[2] ax2[2] ax3[2]]       [ax3[0] ax3[1] ax3[2]]
+      double R[3][3] = {
+        {ev1[0] * ax1[0] + ev2[0] * ax2[0] + ev3[0] * ax3[0], ev1[0] * ax1[1] + ev2[0] * ax2[1] + ev3[0] * ax3[1], ev1[0] * ax1[2] + ev2[0] * ax2[2] + ev3[0] * ax3[2]},
+        {ev1[1] * ax1[0] + ev2[1] * ax2[0] + ev3[1] * ax3[0], ev1[1] * ax1[1] + ev2[1] * ax2[1] + ev3[1] * ax3[1], ev1[1] * ax1[2] + ev2[1] * ax2[2] + ev3[1] * ax3[2]},
+        {ev1[2] * ax1[0] + ev2[2] * ax2[0] + ev3[2] * ax3[0], ev1[2] * ax1[1] + ev2[2] * ax2[1] + ev3[2] * ax3[1], ev1[2] * ax1[2] + ev2[2] * ax2[2] + ev3[2] * ax3[2]},
+      };
 
       // Define supersampling resolution per axis.
       const int samplesPerAxis = 2;  // 2x2x2 grid => 8 samples per voxel.
@@ -1165,7 +1177,7 @@ class cellSegmentation : public QObject {
         for (int y = 0; y < cubeSize; y++) {
           for (int x = 0; x < cubeSize; x++) {
             V3DLONG outIdx = z * cubeSize * cubeSize + y * cubeSize + x;
-            int sum = 0;
+            double sum = 0;
             // Loop over sub-voxel samples.
             for (int dz = 0; dz < samplesPerAxis; dz++) {
               for (int dy = 0; dy < samplesPerAxis; dy++) {
@@ -1192,15 +1204,9 @@ class cellSegmentation : public QObject {
                   // information
 
                   // multiply by the inverse of the rotation matrix
-                  double ox = rx * components[1].vector[0] +
-                              ry * components[2].vector[0] +
-                              rz * components[0].vector[0];
-                  double oy = rx * components[1].vector[1] +
-                              ry * components[2].vector[1] +
-                              rz * components[0].vector[1];
-                  double oz = rx * components[1].vector[2] +
-                              ry * components[2].vector[2] +
-                              rz * components[0].vector[2];
+                  double ox = R[0][0] * rx + R[0][1] * ry + R[0][2] * rz;
+                  double oy = R[1][0] * rx + R[1][1] * ry + R[1][2] * rz;
+                  double oz = R[2][0] * rx + R[2][1] * ry + R[2][2] * rz;
 
                   // Convert back to original volume coordinates.
                   int src_x = static_cast<int>(round(ox)) + center;
@@ -1220,20 +1226,31 @@ class cellSegmentation : public QObject {
               }
             }
             // Set the output voxel to 1 if the majority of sub-samples are 1.
-            rotated[outIdx] = (sum > numSamples / 2) ? 1 : 0;
+            rotated[outIdx] = sum / numSamples;
           }
         }
       }
 
       // Copy the rotated volume back to the original segmentation array.
-      memcpy(segmentation, rotated.data(), totalVoxels * sizeof(int));
+      memcpy(segmentation, rotated.data(), totalVoxels * sizeof(double));
+    }
+
+    /**
+      * @brief Helper function to rotate a segmented soma using PCA results.
+      */
+    void rotateSegmentation(double *segmentation, V3DLONG cubeSize, double pc1, double pc2, double pc3, double vec1[3], double vec2[3], double vec3[3]) {
+      // align first (longest) principal component with the y-axis
+      double ax1[] = {0.0, 1.0, 0.0};
+      double ax2[] = {1.0, 0.0, 0.0};
+      double ax3[] = {0.0, 0.0, 1.0};
+      rotateSegmentationToAxes(segmentation, cubeSize, pc1, pc2, pc3, vec1, vec2, vec3, ax1, ax2, ax3);
     }
 
     /**
      * @brief Helper function to save the probability model to a binary file.
      */
     bool saveProbabilityModel(const std::string &filename,
-                              const int *probabilityModel,
+                              const double *probabilityModel,
                               V3DLONG totalVoxels) {
       std::ofstream outFile(filename, std::ios::binary);
       if (!outFile) {
@@ -1243,7 +1260,7 @@ class cellSegmentation : public QObject {
       }
       // Write the entire array as binary.
       outFile.write(reinterpret_cast<const char *>(probabilityModel),
-                    totalVoxels * sizeof(int));
+                    totalVoxels * sizeof(double));
       if (!outFile.good()) {
         std::cerr << "Error: Failed to write data to file " << filename << "."
                   << std::endl;
