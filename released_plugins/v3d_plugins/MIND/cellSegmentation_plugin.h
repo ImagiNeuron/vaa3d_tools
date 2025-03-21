@@ -909,14 +909,24 @@ class cellSegmentation : public QObject {
         }
       }
 
+      // create the binary mask for PCA
+      unsigned char *pcSegImage = new unsigned char[size_page];
+      memset(pcSegImage, 0,
+             size_page);  // Initialize to background (black)
+      for (const auto &region : this->possVct_segmentationResult) {
+        for (V3DLONG idx : region) {
+          pcSegImage[idx] = 1;  // Set to 1 for PCA
+        }
+      }
+
       // perform PCA analysis on the binary segmentation
       // for each index inside the segmentedLabels vector
 
       QString savePath = _name_currentWindow + "_seg_pca.csv";
       for (int idx_exemplar : segmentedLabels) {
-        analyzeSomaPCA(this->binarySegImage, this->dim_X, this->dim_Y,
-                       this->dim_Z, _LandmarkList_exemplar[idx_exemplar],
-                       idx_exemplar + 1, savePath);
+        analyzeSomaPCA(pcSegImage, this->dim_X, this->dim_Y, this->dim_Z,
+                       _LandmarkList_exemplar[idx_exemplar], idx_exemplar + 1,
+                       savePath);
       }
 
       this->memory_free_uchar2D(masks_page, count_exemplar);
@@ -3052,14 +3062,18 @@ class cellSegmentation : public QObject {
    */
   void sobel3D(unsigned char *data, unsigned char *out, V3DLONG dim_X,
                V3DLONG dim_Y, V3DLONG dim_Z, int threshold = 25) {
-    // Allocate temporary storage for gradient components and direction information
+    // Allocate temporary storage for gradient components and direction
+    // information
     std::vector<cv::Mat> gradX(dim_Z), gradY(dim_Z);
 
     // We'll need these arrays to store 3D gradient information
     short *gradZ = new short[dim_X * dim_Y * dim_Z];
     float *magnitude = new float[dim_X * dim_Y * dim_Z];
-    float *theta = new float[dim_X * dim_Y * dim_Z]; // Azimuthal angle in spherical coordinates
-    float *phi = new float[dim_X * dim_Y * dim_Z];   // Polar angle in spherical coordinates
+    float *theta =
+        new float[dim_X * dim_Y *
+                  dim_Z];  // Azimuthal angle in spherical coordinates
+    float *phi = new float[dim_X * dim_Y *
+                           dim_Z];  // Polar angle in spherical coordinates
 
     // Clear the output buffer
     std::memset(out, 0, dim_X * dim_Y * dim_Z * sizeof(unsigned char));
@@ -3113,12 +3127,11 @@ class cellSegmentation : public QObject {
           int idx = k * dim_X * dim_Y + j * dim_X + i;
 
           // Skip processing if below threshold
-          if (magnitude[idx] < threshold)
-            continue;
+          if (magnitude[idx] < threshold) continue;
 
           // Get the gradient direction in spherical coordinates
-          float t = theta[idx]; // Azimuthal angle
-          float p = phi[idx];   // Polar angle
+          float t = theta[idx];  // Azimuthal angle
+          float p = phi[idx];    // Polar angle
 
           // Determine the voxels to check based on the gradient direction
           // We need to check in the direction of the gradient and its opposite
@@ -3129,7 +3142,8 @@ class cellSegmentation : public QObject {
           float dirZ = std::cos(p);
 
           // Find the closest of the 26 neighboring directions
-          // We'll use a simplified approach: find the dimension with the largest component
+          // We'll use a simplified approach: find the dimension with the
+          // largest component
           float absX = std::abs(dirX);
           float absY = std::abs(dirY);
           float absZ = std::abs(dirZ);
@@ -3137,46 +3151,38 @@ class cellSegmentation : public QObject {
           int offsetX = 0, offsetY = 0, offsetZ = 0;
 
           // Determine the primary direction
-          if (absX >= absY && absX >= absZ)
-          {
+          if (absX >= absY && absX >= absZ) {
             // X is the primary direction
             offsetX = (dirX > 0) ? 1 : -1;
             // Determine secondary directions based on relative magnitudes
-            if (absY > 0.5f * absX)
-              offsetY = (dirY > 0) ? 1 : -1;
-            if (absZ > 0.5f * absX)
-              offsetZ = (dirZ > 0) ? 1 : -1;
-          }
-          else if (absY >= absX && absY >= absZ)
-          {
+            if (absY > 0.5f * absX) offsetY = (dirY > 0) ? 1 : -1;
+            if (absZ > 0.5f * absX) offsetZ = (dirZ > 0) ? 1 : -1;
+          } else if (absY >= absX && absY >= absZ) {
             // Y is the primary direction
             offsetY = (dirY > 0) ? 1 : -1;
             // Determine secondary directions
-            if (absX > 0.5f * absY)
-              offsetX = (dirX > 0) ? 1 : -1;
-            if (absZ > 0.5f * absY)
-              offsetZ = (dirZ > 0) ? 1 : -1;
-          }
-          else
-          {
+            if (absX > 0.5f * absY) offsetX = (dirX > 0) ? 1 : -1;
+            if (absZ > 0.5f * absY) offsetZ = (dirZ > 0) ? 1 : -1;
+          } else {
             // Z is the primary direction
             offsetZ = (dirZ > 0) ? 1 : -1;
             // Determine secondary directions
-            if (absX > 0.5f * absZ)
-              offsetX = (dirX > 0) ? 1 : -1;
-            if (absY > 0.5f * absZ)
-              offsetY = (dirY > 0) ? 1 : -1;
+            if (absX > 0.5f * absZ) offsetX = (dirX > 0) ? 1 : -1;
+            if (absY > 0.5f * absZ) offsetY = (dirY > 0) ? 1 : -1;
           }
 
           // Check the two voxels along the gradient direction
-          int idx1 = (k + offsetZ) * dim_X * dim_Y + (j + offsetY) * dim_X + (i + offsetX);
-          int idx2 = (k - offsetZ) * dim_X * dim_Y + (j - offsetY) * dim_X + (i - offsetX);
+          int idx1 = (k + offsetZ) * dim_X * dim_Y + (j + offsetY) * dim_X +
+                     (i + offsetX);
+          int idx2 = (k - offsetZ) * dim_X * dim_Y + (j - offsetY) * dim_X +
+                     (i - offsetX);
 
           // Perform non-maximum suppression
-          if (magnitude[idx] >= magnitude[idx1] && magnitude[idx] >= magnitude[idx2])
-          {
+          if (magnitude[idx] >= magnitude[idx1] &&
+              magnitude[idx] >= magnitude[idx2]) {
             // This is a local maximum along the gradient direction
-            out[idx] = static_cast<unsigned char>(std::min(255.0f, magnitude[idx]));
+            out[idx] =
+                static_cast<unsigned char>(std::min(255.0f, magnitude[idx]));
           }
         }
       }
