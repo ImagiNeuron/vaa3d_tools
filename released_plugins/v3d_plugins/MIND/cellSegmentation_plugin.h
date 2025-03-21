@@ -22,6 +22,7 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QRadioButton>
+#include <QRegularExpression>
 #include <QtGui>
 #include <algorithm>
 #include <cassert>
@@ -401,19 +402,22 @@ class cellSegmentation : public QObject {
     }
     ~class_segmentationMain() {}
 
-    void printSomaSlice(double *data, int size, int padding = 2) {
+    void printSomaSlice(double *data, int size, int padding = 1) {
       for (int y = 0; y < size; y++) {
         for (int x = 0; x < size; x++) {
           int idx = y * size + x;
+          // Round the data value to the nearest integer
+          int rounded = (int)round(data[idx]);
+
           switch (padding) {
             case 0:
-              printf("%f", data[idx]);
+              printf("%2d", rounded);
               break;
             case 1:
-              printf("%4.1f", data[idx]);
+              printf("%4d", rounded);
               break;
             default:
-              printf("%7.2f", data[idx]);
+              printf("%2d", rounded);
               break;
           }
         }
@@ -433,7 +437,7 @@ class cellSegmentation : public QObject {
                      double _multiplier_thresholdRegionSize,
                      double _multiplier_uThresholdRegionSize,
                      QString _name_currentWindow, V3DLONG _maxMovement1,
-                     V3DLONG _maxMovement2, int mode = 1) {
+                     V3DLONG _maxMovement2, QString fileName, int mode = 1) {
       // if (!this->is_initialized) // Temporally solution for the "parameter
       // window not popped up" problem;
       {
@@ -939,7 +943,7 @@ class cellSegmentation : public QObject {
         }
       }
 
-      QString savePath = _name_currentWindow + "_seg_pca.csv";
+      QString savePath = fileName + "_pca_binary_segmentation.csv";
 
       // make an array to store the counts of each voxel being part of a
       // soma size of the array is based on the largest radius bounding the
@@ -990,7 +994,7 @@ class cellSegmentation : public QObject {
           printf("Soma segmentation (central slice) before rotation: \n");
           printSomaSlice(
               somaSegmentation + (centralSlice * cubeSize * cubeSize), cubeSize,
-              1);
+              0);
 
           // printf("Unrotated soma:\n");
           // for (V3DLONG z = 0; z < cubeSize; z++) {
@@ -1024,7 +1028,7 @@ class cellSegmentation : public QObject {
           printf("Soma segmentation (central slice) after rotation: \n");
           printSomaSlice(
               somaSegmentation + (centralSlice * cubeSize * cubeSize), cubeSize,
-              1);
+              0);
 
           // printf("Rotated soma:\n");
           // for (V3DLONG z = 0; z < cubeSize; z++) {
@@ -1065,7 +1069,7 @@ class cellSegmentation : public QObject {
       //   printf("\n");
       // }
 
-      QString saveModelPath = _name_currentWindow + "_probabilityModel.bin";
+      QString saveModelPath = fileName + "_probability_model.bin";
 
       if (!saveProbabilityModel(saveModelPath.toStdString(), probabilityModel,
                                 totalVoxels)) {
@@ -1121,12 +1125,6 @@ class cellSegmentation : public QObject {
       }
     }
 
-    // A helper structure to hold an eigenvalue and its associated eigenvector.
-    struct EigenComponent {
-      double eigenvalue;
-      double vector[3];
-    };
-
     /**
      * @brief Helper function to rotate a segmented soma using PCA results.
      */
@@ -1138,21 +1136,6 @@ class cellSegmentation : public QObject {
       // Use a std::vector for temporary storage instead of raw new[]:
       std::vector<double> rotated(totalVoxels, 0);
       int center = cubeSize / 2;
-
-      // normalize vectors
-      auto normalize = [](double *vec) {
-        double norm = sqrt(vec[0] * vec[0] + vec[1] * vec[1] + vec[2] * vec[2]);
-        vec[0] /= norm;
-        vec[1] /= norm;
-        vec[2] /= norm;
-      };
-
-      normalize(ev1);
-      normalize(ev2);
-      normalize(ev3);
-      normalize(ax1);
-      normalize(ax2);
-      normalize(ax3);
 
       // construct the rotation matrix
       // R = B A^T
@@ -3060,6 +3043,17 @@ class cellSegmentation : public QObject {
         _V3DPluginCallback2_currentCallback.getImageName(
             v3dhandle_currentWindow);
 
+    // get name of the image
+    QString fileName = Image4DSimple_current->getFileName();
+
+    bool isTeraFly = false;
+    if (fileName.startsWith("ID")) {
+      isTeraFly = true;
+    }
+
+    // modify name if necessary for TeraFly
+    fileName = modifyFileNameForTeraFly(fileName);
+
     // get image and landmarks
     V3DLONG dim_X = Image4DSimple_current->getXDim();
     V3DLONG dim_Y = Image4DSimple_current->getYDim();
@@ -3110,6 +3104,7 @@ class cellSegmentation : public QObject {
     // give the user the dialog
     dialogRun dialogRun1(_V3DPluginCallback2_currentCallback, _QWidget_parent,
                          dim_C);
+
     bool is_success = false;
 
     /*if (this->class_segmentationMain1.is_initialized) //temporary solution
@@ -3168,7 +3163,7 @@ class cellSegmentation : public QObject {
           dialogRun1.shape_multiplier_thresholdRegionSize,
           dialogRun1.shape_multiplier_uThresholdRegionSize, name_currentWindow,
           dialogRun1.exemplar_maxMovement1, dialogRun1.exemplar_maxMovement2,
-          dialogRun1.segmentationMode);
+          fileName, dialogRun1.segmentationMode);
 
       // Then update the original window with the modified landmarks:
       _V3DPluginCallback2_currentCallback.setLandmark(v3dhandle_currentWindow,
@@ -3292,15 +3287,23 @@ class cellSegmentation : public QObject {
       // }
 
       // Automatically save binary segmented image to current directory.
-
-      QString savePath = name_currentWindow + "_seg.tif";
+      QString savePath = fileName + "_binary_segmentation.tif";
       V3DLONG outSZ[4] = {this->class_segmentationMain1.dim_X,
                           this->class_segmentationMain1.dim_Y,
                           this->class_segmentationMain1.dim_Z, 1};
       simple_saveimage_wrapper(
           _V3DPluginCallback2_currentCallback, savePath.toStdString().c_str(),
           this->class_segmentationMain1.binarySegImage, outSZ, 1);
-      v3d_msg(QString("Binary segmented image saved to %1.").arg(savePath));
+
+      // save original image if we are usingt TeraFly
+      if (isTeraFly) {
+        savePath = fileName + "original_image.tif";
+        simple_saveimage_wrapper(_V3DPluginCallback2_currentCallback,
+                                 savePath.toStdString().c_str(),
+                                 Image1D_current, outSZ, 1);
+      }
+
+      v3d_msg(QString("Plugin files saved to %1.").arg(fileName));
       delete[] this->class_segmentationMain1.binarySegImage;
 
       return true;

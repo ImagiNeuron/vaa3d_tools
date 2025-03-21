@@ -4,8 +4,10 @@
 #include <v3d_interface.h>
 
 #include <QApplication>
+#include <QDir>
 #include <QFileDialog>
 #include <QMessageBox>
+#include <QRegularExpression>
 #include <QtGui>
 #include <fstream>
 
@@ -50,5 +52,11 @@ void drawLine(Image4DSimple *image, double *from, double *to);
  * @brief Visualize PCA results
  */
 void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent);
+
+/**
+ * @brief change names according to folder structure for storing things when
+ * TeraFly data is used
+ */
+QString modifyFileNameForTeraFly(const QString &filename);
 
 #endif  // __MIND_PCA_ANALYSIS_H__
