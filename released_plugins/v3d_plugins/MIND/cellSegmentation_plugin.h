@@ -347,6 +347,7 @@ class cellSegmentation : public QObject {
 
     // Input or directly derived;
     bool is_initialized;
+    bool errorOccurred = false;
     unsigned char *Image1D_page;
     unsigned char *Image1D_mask;
     unsigned char ***Image3D_page;
@@ -949,6 +950,7 @@ class cellSegmentation : public QObject {
       // soma size of the array is based on the largest radius bounding the
       // somas
       V3DLONG cubeSize = ((V3DLONG)ceil(largestRadius) + 3) * 2;
+      V3DLONG centralSlice = (cubeSize / 2) - 1;
       V3DLONG totalVoxels = cubeSize * cubeSize * cubeSize;
 
       // store the binary segmentation of each soma
@@ -961,6 +963,7 @@ class cellSegmentation : public QObject {
 
       // for each index inside the segmentedLabels vector
       int segmentationCount = 0;
+
       for (int idx_exemplar : segmentedLabels) {
         // perform PCA analysis on the binary segmentation
 
@@ -985,31 +988,6 @@ class cellSegmentation : public QObject {
         adjustSegmentationCenter(binarySomaIndicies, cubeSize, x_center,
                                  y_center, z_center, somaSegmentation);
 
-        // Compute the central slice index
-        V3DLONG centralSlice = (cubeSize / 2) - 1;
-        if (centralSlice < 0 || centralSlice >= cubeSize) {
-          printf("Central slice out of bounds\n");
-        } else {
-          // Print the central slice of the soma segmentation.
-          printf("Soma segmentation (central slice) before rotation: \n");
-          printSomaSlice(
-              somaSegmentation + (centralSlice * cubeSize * cubeSize), cubeSize,
-              0);
-
-          // printf("Unrotated soma:\n");
-          // for (V3DLONG z = 0; z < cubeSize; z++) {
-          //   printf("Slice %ld:\n", z);
-          //   for (V3DLONG y = 0; y < cubeSize; y++) {
-          //     for (V3DLONG x = 0; x < cubeSize; x++) {
-          //       V3DLONG idx = z * cubeSize * cubeSize + y * cubeSize + x;
-          //       printf("%d ", somaSegmentation[idx]);
-          //     }
-          //     printf("\n");
-          //   }
-          //   printf("\n");
-          // }
-        }
-
         // Rotate the segmentation so that its principal axes align with the x,
         // y, and z axes.
         rotateSegmentation(somaSegmentation, cubeSize, pc1, pc2, pc3, vec1,
@@ -1024,29 +1002,24 @@ class cellSegmentation : public QObject {
         if (centralSlice < 0 || centralSlice >= cubeSize) {
           printf("Central slice out of bounds\n");
         } else {
-          // Print the central slice of the soma segmentation.
-          printf("Soma segmentation (central slice) after rotation: \n");
-          printSomaSlice(
-              somaSegmentation + (centralSlice * cubeSize * cubeSize), cubeSize,
-              0);
-
-          // printf("Rotated soma:\n");
-          // for (V3DLONG z = 0; z < cubeSize; z++) {
-          //   printf("Slice %ld:\n", z);
-          //   for (V3DLONG y = 0; y < cubeSize; y++) {
-          //     for (V3DLONG x = 0; x < cubeSize; x++) {
-          //       V3DLONG idx = z * cubeSize * cubeSize + y * cubeSize + x;
-          //       printf("%d ", somaSegmentation[idx]);
-          //     }
-          //     printf("\n");
-          //   }
-          //   printf("\n");
-          // }
-          // Print the central slice of the probability model.
-          printf("Probability model (central slice): \n");
-          printSomaSlice(
-              probabilityModel + (centralSlice * cubeSize * cubeSize),
-              cubeSize);
+          // Print the central slice of the soma segmentation if there was an
+          // error
+          if (somaSegmentation[centralSlice * cubeSize * cubeSize +
+                               centralSlice * cubeSize + centralSlice] == 0) {
+            errorOccurred = true;
+            printf(
+                "Error: Soma %d is not centered after rotation. Check "
+                "segmentation\n",
+                idx_exemplar + 1);
+            printf("Soma segmentation (central slice) after rotation: \n");
+            printSomaSlice(
+                somaSegmentation + (centralSlice * cubeSize * cubeSize),
+                cubeSize, 0);
+            printf("Probability model (central slice): \n");
+            printSomaSlice(
+                probabilityModel + (centralSlice * cubeSize * cubeSize),
+                cubeSize);
+          }
         }
 
         // Clear somaSegmentation for the next exemplar.
@@ -1056,18 +1029,9 @@ class cellSegmentation : public QObject {
       // print value at the center of the probability model to see if it is
       // working
 
-      // printf("Final probability model:\n");
-      // for (V3DLONG z = 0; z < cubeSize; z++) {
-      //   printf("Slice %ld:\n", z);
-      //   for (V3DLONG y = 0; y < cubeSize; y++) {
-      //     for (V3DLONG x = 0; x < cubeSize; x++) {
-      //       V3DLONG idx = z * cubeSize * cubeSize + y * cubeSize + x;
-      //       printf("%d ", probabilityModel[idx]);
-      //     }
-      //     printf("\n");
-      //   }
-      //   printf("\n");
-      // }
+      printf("Final probability model (central slice) \n");
+      printSomaSlice(probabilityModel + (centralSlice * cubeSize * cubeSize),
+                     cubeSize);
 
       QString saveModelPath = fileName + "_probability_model.bin";
 
@@ -3302,8 +3266,14 @@ class cellSegmentation : public QObject {
                                  savePath.toStdString().c_str(),
                                  Image1D_current, outSZ, 1);
       }
-
-      v3d_msg(QString("Plugin files saved to %1.").arg(fileName));
+      if (this->class_segmentationMain1.errorOccurred) {
+        v3d_msg(QString("Some cells were not properly segmented, which may "
+                        "give a poor probability model of cell shape. Check "
+                        "debuggin log for details. Plugin files saved to %1.")
+                    .arg(fileName));
+      } else {
+        v3d_msg(QString("Plugin files saved to %1.").arg(fileName));
+      }
       delete[] this->class_segmentationMain1.binarySegImage;
 
       return true;
