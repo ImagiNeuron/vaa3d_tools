@@ -82,6 +82,101 @@ void savePCAResultsToCSV(const QString &filename, int somaIndex,
           << vec3[2] << "\n";
 
   outFile.close();
+  printf("PCA results saved to file: %s\n",
+         actualFilename.toStdString().c_str());
+}
+
+void analyzeSomaPCAReturnResults(unsigned char *labeledData, V3DLONG N,
+                                 V3DLONG M, V3DLONG P, const LocationSimple &lm,
+                                 int somaIndex, QString savePath, double &pc1,
+                                 double &pc2, double &pc3, double vec1[3],
+                                 double vec2[3], double vec3[3],
+                                 double &x_center, double &y_center,
+                                 double &z_center) {
+  // Extract soma info
+  float x = lm.x;
+  float y = lm.y;
+  float z = lm.z;
+  float r = lm.radius > 0 ? lm.radius : 5.0f;
+
+  // Create 3D array wrapper for the data
+  unsigned char ***img3d = new unsigned char **[P];
+  for (V3DLONG k = 0; k < P; k++) {
+    img3d[k] = new unsigned char *[M];
+    for (V3DLONG j = 0; j < M; j++) {
+      img3d[k][j] = labeledData + (k * M * N + j * N);
+    }
+  }
+
+  // Use sphere window type (1) and window size based on soma radius
+  if (compute_sphere_win3d_pca_eigVec(
+          img3d, N, M, P, x, y, z,  // Center on soma
+          2 * r, 2 * r, 2 * r,      // Window size based on radius
+          pc1, pc2, pc3, vec1, vec2, vec3, x_center, y_center, z_center)) {
+    // Print results for this soma
+    printf("\nSoma #%d PCA Results:\n", somaIndex);
+    printf("  Center: (%.1f, %.1f, %.1f)\n", x, y, z);
+    printf("  Radius: %.1f\n", r);
+    printf("  Center of mass: (%f, %f, %f)\n", x_center, y_center, z_center);
+    printf("  Eigenvalues:\n");
+    printf("    pc1: %f\n", pc1);
+    printf("    pc2: %f\n", pc2);
+    printf("    pc3: %f\n", pc3);
+    printf("  Principal axes:\n");
+    printf("    pc1: [%f, %f, %f]\n", vec1[0], vec1[1], vec1[2]);
+    printf("    pc2: [%f, %f, %f]\n", vec2[0], vec2[1], vec2[2]);
+    printf("    pc3: [%f, %f, %f]\n\n\n", vec3[0], vec3[1], vec3[2]);
+
+    // Save to CSV with save flag
+    QWidget *mainWin = QApplication::activeWindow();
+    bool saveEnabled = false;
+    savePCAResultsToCSV(savePath, somaIndex, lm, pc1, pc2, pc3, vec1, vec2,
+                        vec3, x_center, y_center, z_center, mainWin,
+                        &saveEnabled);
+
+    if (somaIndex == 1) {
+      if (saveEnabled) {
+        printf("PCA results will be saved to the selected file.\n");
+      } else {
+        printf("PCA results will not be saved to file.\n");
+      }
+    }
+  } else {
+    printf("\nSoma #%d PCA failed.\n", somaIndex);
+  }
+
+  // Cleanup 3D array wrapper
+  for (V3DLONG k = 0; k < P; k++) {
+    delete[] img3d[k];
+  }
+  delete[] img3d;
+}
+
+QString modifyFileNameForTeraFly(const QString &fileName) {
+  QString modifiedFileName = fileName;
+
+  // we are using terafly if the fileName starts with ID
+  if (modifiedFileName.startsWith("ID")) {
+    // check if the MIND folder already exists, if not, create it
+    QDir dir("MIND");
+    if (!dir.exists()) {
+      dir.mkpath(".");
+    }
+
+    // replace ID(%), with ""
+    modifiedFileName.replace(QRegularExpression("ID\\(.*\\), "), "");
+    modifiedFileName.replace("1 channels_processed", "");
+
+    // check if folder for this image exists
+    QDir dir2("MIND/" + modifiedFileName);
+    if (!dir2.exists()) {
+      dir2.mkpath(".");
+    }
+
+    modifiedFileName = "MIND/" + modifiedFileName + "/";
+  }
+
+  return modifiedFileName;
 }
 
 void analyzeSomaPCA(unsigned char *labeledData, V3DLONG N, V3DLONG M, V3DLONG P,

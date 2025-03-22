@@ -22,6 +22,7 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QRadioButton>
+#include <QRegularExpression>
 #include <QtGui>
 #include <algorithm>
 #include <cassert>
@@ -331,6 +332,7 @@ class cellSegmentation : public QObject {
 
     // Input or directly derived;
     bool is_initialized;
+    bool errorOccurred = false;
     unsigned char *Image1D_page;
     unsigned char *Image1D_mask;
     unsigned char ***Image3D_page;
@@ -384,6 +386,30 @@ class cellSegmentation : public QObject {
     }
     ~class_segmentationMain() {}
 
+    void printSomaSlice(double *data, int size, int padding = 1) {
+      for (int y = 0; y < size; y++) {
+        for (int x = 0; x < size; x++) {
+          int idx = y * size + x;
+          // Round the data value to the nearest integer
+          int rounded = (int)round(data[idx]);
+
+          switch (padding) {
+            case 0:
+              printf("%2d", rounded);
+              break;
+            case 1:
+              printf("%4d", rounded);
+              break;
+            default:
+              printf("%2d", rounded);
+              break;
+          }
+        }
+        printf("\n");
+      }
+      printf("\n");
+    }
+
 #pragma region "control-run"
     /**
      * @brief - Main function that goes over landmarks and floods them
@@ -395,7 +421,7 @@ class cellSegmentation : public QObject {
                      double _multiplier_thresholdRegionSize,
                      double _multiplier_uThresholdRegionSize,
                      QString _name_currentWindow, V3DLONG _maxMovement1,
-                     V3DLONG _maxMovement2, int mode = 1) {
+                     V3DLONG _maxMovement2, QString fileName, int mode = 1) {
       // if (!this->is_initialized) // Temporally solution for the "parameter
       // window not popped up" problem;
       {
@@ -484,6 +510,9 @@ class cellSegmentation : public QObject {
       // create list of indexes of successfully segmented labels
       vector<int> segmentedLabels;
 
+      // keep track of the largest labelled radius
+      double largestRadius = 0;
+
       // main loop - iterating over each exemplar
       for (V3DLONG idx_exemplar = 0; idx_exemplar < count_exemplar;
            idx_exemplar++) {
@@ -512,6 +541,11 @@ class cellSegmentation : public QObject {
         double value_centerMovement2 = 0;
 
         double radius_marker = _LandmarkList_exemplar[idx_exemplar].radius;
+
+        // update the largest radius
+        if (radius_marker > largestRadius) {
+          largestRadius = radius_marker;
+        }
 
         // Retrieve the current landmark comment.
         std::string comment = _LandmarkList_exemplar[idx_exemplar].comments;
@@ -583,6 +617,7 @@ class cellSegmentation : public QObject {
               pos_massCenterOld = pos_massCenterNew;
               poss_exemplarRegionOld = poss_exemplarRegionNew;
             }
+            // global otsu method
           } else if (segmentationMode == 2) {
             threshold_exemplarRegion = globalOtsuThreshold();
             printf("Global Otsu threshold computed: %d\n",
@@ -892,19 +927,319 @@ class cellSegmentation : public QObject {
         }
       }
 
-      // perform PCA analysis on the binary segmentation
-      // for each index inside the segmentedLabels vector
+      QString savePath = fileName + "_pca_binary_segmentation.csv";
 
-      QString savePath = _name_currentWindow + "_seg_pca.csv";
+      // make an array to store the counts of each voxel being part of a
+      // soma size of the array is based on the largest radius bounding the
+      // somas
+      V3DLONG cubeSize = ((V3DLONG)ceil(largestRadius) + 3) * 2;
+      V3DLONG centralSlice = (cubeSize / 2) - 1;
+      V3DLONG totalVoxels = cubeSize * cubeSize * cubeSize;
+
+      // store the binary segmentation of each soma
+      double *somaSegmentation = new double[totalVoxels];
+      memset(somaSegmentation, 0, totalVoxels * sizeof(double));
+
+      // store the counts of each voxel being part of a soma
+      double *probabilityModel = new double[totalVoxels];
+      memset(probabilityModel, 0, totalVoxels * sizeof(double));
+
+      // for each index inside the segmentedLabels vector
+      int segmentationCount = 0;
+
       for (int idx_exemplar : segmentedLabels) {
-        analyzeSomaPCA(this->binarySegImage, this->dim_X, this->dim_Y,
-                       this->dim_Z, _LandmarkList_exemplar[idx_exemplar],
-                       idx_exemplar + 1, savePath);
+        // perform PCA analysis on the binary segmentation
+
+        // results of PCA for alignment of soma
+        double pc1, pc2, pc3;
+        double vec1[3], vec2[3], vec3[3];
+        double x_center, y_center, z_center;
+
+        analyzeSomaPCAReturnResults(
+            this->binarySegImage, this->dim_X, this->dim_Y, this->dim_Z,
+            _LandmarkList_exemplar[idx_exemplar], idx_exemplar + 1, savePath,
+            pc1, pc2, pc3, vec1, vec2, vec3, x_center, y_center, z_center);
+
+        // for the label at idx_exemplar, get the segmentation (square around
+        // marker center)
+        vector<V3DLONG> binarySomaIndicies =
+            possVct_exemplarRegion[segmentationCount];
+        segmentationCount++;
+
+        // Adjust the segmentation indices so that the center-of-mass aligns
+        // with the volume center.
+        adjustSegmentationCenter(binarySomaIndicies, cubeSize, x_center,
+                                 y_center, z_center, somaSegmentation);
+
+        // Rotate the segmentation so that its principal axes align with the x,
+        // y, and z axes.
+        rotateSegmentation(somaSegmentation, cubeSize, pc1, pc2, pc3, vec1,
+                           vec2, vec3);
+
+        // Accumulate the binary segmentation into the probability model.
+        for (V3DLONG i = 0; i < totalVoxels; i++) {
+          probabilityModel[i] += somaSegmentation[i];
+        }
+
+        // Compute the central slice index
+        if (centralSlice < 0 || centralSlice >= cubeSize) {
+          printf("Central slice out of bounds\n");
+        } else {
+          // Print the central slice of the soma segmentation if there was an
+          // error
+          if (somaSegmentation[centralSlice * cubeSize * cubeSize +
+                               centralSlice * cubeSize + centralSlice] == 0) {
+            errorOccurred = true;
+            printf(
+                "Error: Soma %d is not centered after rotation. Check "
+                "segmentation\n",
+                idx_exemplar + 1);
+            printf("Soma segmentation (central slice) after rotation: \n");
+            printSomaSlice(
+                somaSegmentation + (centralSlice * cubeSize * cubeSize),
+                cubeSize, 0);
+            printf("Probability model (central slice): \n");
+            printSomaSlice(
+                probabilityModel + (centralSlice * cubeSize * cubeSize),
+                cubeSize);
+          }
+        }
+
+        // Clear somaSegmentation for the next exemplar.
+        memset(somaSegmentation, 0, totalVoxels * sizeof(double));
       }
 
+      // print value at the center of the probability model to see if it is
+      // working
+
+      printf("Final probability model (central slice) \n");
+      printSomaSlice(probabilityModel + (centralSlice * cubeSize * cubeSize),
+                     cubeSize);
+
+      QString saveModelPath = fileName + "_probability_model.bin";
+
+      if (!saveProbabilityModel(saveModelPath.toStdString(), probabilityModel,
+                                totalVoxels)) {
+        printf("Failed to save probability model\n");
+      }
+
+      // Free the allocated memory for the probability model and segmentation.
+      delete[] somaSegmentation;
+      delete[] probabilityModel;
       this->memory_free_uchar2D(masks_page, count_exemplar);
       return true;
     }
+
+    /**
+     * @brief Helper function to adjust coordinates of a segmented soma to align
+     * with the center of mass.
+     */
+    void adjustSegmentationCenter(const vector<V3DLONG> &indices,
+                                  V3DLONG cubeSize, double x_center,
+                                  double y_center, double z_center,
+                                  double *segmentation) {
+      // Calculate the target center index of the cube.
+      int center = cubeSize / 2;
+      // Compute integer shifts (rounding the center-of-mass coordinates).
+      int x_shift = center - static_cast<int>(round(x_center));
+      int y_shift = center - static_cast<int>(round(y_center));
+      int z_shift = center - static_cast<int>(round(z_center));
+
+      // Loop over each voxel index in the provided segmentation region.
+      for (size_t i = 0; i < indices.size(); i++) {
+        V3DLONG idx = indices[i];
+        // Convert the flat index to (x, y, z)
+        int x = idx % dim_X;
+        int y = (idx / dim_X) % dim_Y;
+        int z = idx / (dim_X * dim_Y);
+
+        // Adjust coordinates based on the computed
+        int newX = x + x_shift;
+        int newY = y + y_shift;
+        int newZ = z + z_shift;
+
+        // Check that the new coordinates lie within bounds.
+        if (newX >= 0 && newX < cubeSize && newY >= 0 && newY < cubeSize &&
+            newZ >= 0 && newZ < cubeSize) {
+          V3DLONG newIdx = newZ * cubeSize * cubeSize + newY * cubeSize + newX;
+          segmentation[newIdx] = 1.0;
+          // optional debugging
+          // printf(
+          //     "Index %zu: original (%d, %d, %d) adjusted to (%d, %d, %d) -> "
+          //     "newIdx = %ld\n",
+          //     i, x, y, z, newX, newY, newZ, newIdx);
+        }
+      }
+    }
+
+    /**
+     * @brief Helper function to rotate a segmented soma using PCA results.
+     */
+    void rotateSegmentationToAxes(double *segmentation, V3DLONG cubeSize,
+                                  double pc1, double pc2, double pc3,
+                                  double ev1[3], double ev2[3], double ev3[3],
+                                  double ax1[3], double ax2[3], double ax3[3]) {
+      V3DLONG totalVoxels = cubeSize * cubeSize * cubeSize;
+      // Use a std::vector for temporary storage instead of raw new[]:
+      std::vector<double> rotated(totalVoxels, 0);
+      int center = cubeSize / 2;
+
+      // construct the rotation matrix
+      // R = B A^T
+      // where B is the rotation matrix for canonical-to-new
+      // and A is the rotation matrix for canonical-to-eigenvector
+      //     [ev1[0] ev2[0] ev3[0]]
+      // B = [ev1[1] ev2[1] ev3[1]]
+      //     [ev1[2] ev2[2] ev3[2]]
+      //     [ax1[0] ax2[0] ax3[0]]       [ax1[0] ax1[1] ax1[2]]
+      // A = [ax1[1] ax2[1] ax3[1]] A^T = [ax2[0] ax2[1] ax2[2]]
+      //     [ax1[2] ax2[2] ax3[2]]       [ax3[0] ax3[1] ax3[2]]
+      double R[3][3] = {
+          {ev1[0] * ax1[0] + ev2[0] * ax2[0] + ev3[0] * ax3[0],
+           ev1[0] * ax1[1] + ev2[0] * ax2[1] + ev3[0] * ax3[1],
+           ev1[0] * ax1[2] + ev2[0] * ax2[2] + ev3[0] * ax3[2]},
+          {ev1[1] * ax1[0] + ev2[1] * ax2[0] + ev3[1] * ax3[0],
+           ev1[1] * ax1[1] + ev2[1] * ax2[1] + ev3[1] * ax3[1],
+           ev1[1] * ax1[2] + ev2[1] * ax2[2] + ev3[1] * ax3[2]},
+          {ev1[2] * ax1[0] + ev2[2] * ax2[0] + ev3[2] * ax3[0],
+           ev1[2] * ax1[1] + ev2[2] * ax2[1] + ev3[2] * ax3[1],
+           ev1[2] * ax1[2] + ev2[2] * ax2[2] + ev3[2] * ax3[2]},
+      };
+
+      // Define supersampling resolution per axis.
+      const int samplesPerAxis = 2;  // 2x2x2 grid => 8 samples per voxel.
+      const int numSamples = samplesPerAxis * samplesPerAxis * samplesPerAxis;
+      // Precompute the sub-voxel offsets (center of each sub-cube)
+      std::vector<double> offsets(samplesPerAxis);
+      for (int i = 0; i < samplesPerAxis; i++) {
+        offsets[i] = (i + 0.5) / samplesPerAxis;  // e.g. for 2: 0.25, 0.75
+      }
+
+      // Inverse mapping: iterate over every voxel in the output (rotated)
+      // volume.
+      for (int z = 0; z < cubeSize; z++) {
+        for (int y = 0; y < cubeSize; y++) {
+          for (int x = 0; x < cubeSize; x++) {
+            V3DLONG outIdx = z * cubeSize * cubeSize + y * cubeSize + x;
+            double sum = 0;
+            // Loop over sub-voxel samples.
+            for (int dz = 0; dz < samplesPerAxis; dz++) {
+              for (int dy = 0; dy < samplesPerAxis; dy++) {
+                for (int dx = 0; dx < samplesPerAxis; dx++) {
+                  // Compute sub-voxel coordinate in output volume.
+                  // Adding the sub-voxel offset to the integer coordinate.
+                  double sampleX = x + offsets[dx];
+                  double sampleY = y + offsets[dy];
+                  double sampleZ = z + offsets[dz];
+
+                  // the rotated (output) basis. This is the vector r =
+                  // [rx,ry,rz]. We will consider the original vector in the
+                  // unrotated basis as o = [ox, oy, oz]
+                  double rx = sampleX - center;
+                  double ry = sampleY - center;
+                  double rz = sampleZ - center;
+
+                  // The rotation matrix A has the eigenvectors as its columns
+                  // We know that o = A * r and r = A^T * o
+                  // Horizontal axis (new X axis) (first col of A): Second
+                  // longest PC Vertical axis (new Y axis) (second col of A):
+                  // Longest PC Depth axis (new Z axis) (last col of A):
+                  // Shortest PC allows a veritcal slice to show the most
+                  // information
+
+                  // multiply by the inverse of the rotation matrix
+                  double ox = R[0][0] * rx + R[0][1] * ry + R[0][2] * rz;
+                  double oy = R[1][0] * rx + R[1][1] * ry + R[1][2] * rz;
+                  double oz = R[2][0] * rx + R[2][1] * ry + R[2][2] * rz;
+
+                  // Convert back to original volume coordinates.
+                  int src_x = static_cast<int>(round(ox)) + center;
+                  int src_y = static_cast<int>(round(oy)) + center;
+                  int src_z = static_cast<int>(round(oz)) + center;
+
+                  // If the computed source coordinates are valid, sample the
+                  // input segmentation.
+                  if (src_x >= 0 && src_x < cubeSize && src_y >= 0 &&
+                      src_y < cubeSize && src_z >= 0 && src_z < cubeSize) {
+                    V3DLONG srcIdx =
+                        src_z * cubeSize * cubeSize + src_y * cubeSize + src_x;
+                    sum += segmentation[srcIdx];
+                  }
+                  // If out-of-bounds, we treat the sample as 0.
+                }
+              }
+            }
+            // Set the output voxel to 1 if the majority of sub-samples are 1.
+            rotated[outIdx] = sum / numSamples;
+          }
+        }
+      }
+
+      // Copy the rotated volume back to the original segmentation array.
+      memcpy(segmentation, rotated.data(), totalVoxels * sizeof(double));
+    }
+
+    /**
+     * @brief Helper function to rotate a segmented soma using PCA results.
+     */
+    void rotateSegmentation(double *segmentation, V3DLONG cubeSize, double pc1,
+                            double pc2, double pc3, double vec1[3],
+                            double vec2[3], double vec3[3]) {
+      // align first (longest) principal component with the y-axis
+      double ax1[] = {0.0, 1.0, 0.0};
+      double ax2[] = {1.0, 0.0, 0.0};
+      double ax3[] = {0.0, 0.0, 1.0};
+      rotateSegmentationToAxes(segmentation, cubeSize, pc1, pc2, pc3, vec1,
+                               vec2, vec3, ax1, ax2, ax3);
+    }
+
+    /**
+     * @brief Helper function to save the probability model to a binary file.
+     */
+    bool saveProbabilityModel(const std::string &filename,
+                              const double *probabilityModel,
+                              V3DLONG totalVoxels) {
+      std::ofstream outFile(filename, std::ios::binary);
+      if (!outFile) {
+        std::cerr << "Error: Could not open file " << filename
+                  << " for writing." << std::endl;
+        return false;
+      }
+      // Write the entire array as binary.
+      outFile.write(reinterpret_cast<const char *>(probabilityModel),
+                    totalVoxels * sizeof(double));
+      if (!outFile.good()) {
+        std::cerr << "Error: Failed to write data to file " << filename << "."
+                  << std::endl;
+        return false;
+      }
+      outFile.close();
+      return true;
+    }
+
+    /**
+     * @brief Helper function to load a probability model from a binary file.
+     */
+    bool loadProbabilityModel(const std::string &filename,
+                              int *probabilityModel, V3DLONG totalVoxels) {
+      std::ifstream inFile(filename, std::ios::binary);
+      if (!inFile) {
+        std::cerr << "Error: Could not open file " << filename
+                  << " for reading." << std::endl;
+        return false;
+      }
+      // Read the binary data into the array.
+      inFile.read(reinterpret_cast<char *>(probabilityModel),
+                  totalVoxels * sizeof(int));
+      if (!inFile.good() && !inFile.eof()) {
+        std::cerr << "Error: Failed to read data from file " << filename << "."
+                  << std::endl;
+        return false;
+      }
+      inFile.close();
+      return true;
+    }
+
 #pragma endregion
 
     /**
@@ -2655,6 +2990,17 @@ class cellSegmentation : public QObject {
         _V3DPluginCallback2_currentCallback.getImageName(
             v3dhandle_currentWindow);
 
+    // get name of the image
+    QString fileName = Image4DSimple_current->getFileName();
+
+    bool isTeraFly = false;
+    if (fileName.startsWith("ID")) {
+      isTeraFly = true;
+    }
+
+    // modify name if necessary for TeraFly
+    fileName = modifyFileNameForTeraFly(fileName);
+
     // get image and landmarks
     V3DLONG dim_X = Image4DSimple_current->getXDim();
     V3DLONG dim_Y = Image4DSimple_current->getYDim();
@@ -2705,6 +3051,7 @@ class cellSegmentation : public QObject {
     // give the user the dialog
     dialogRun dialogRun1(_V3DPluginCallback2_currentCallback, _QWidget_parent,
                          dim_C);
+
     bool is_success = false;
 
     /*if (this->class_segmentationMain1.is_initialized) //temporary solution
@@ -2760,7 +3107,7 @@ class cellSegmentation : public QObject {
           dialogRun1.shape_multiplier_thresholdRegionSize,
           dialogRun1.shape_multiplier_uThresholdRegionSize, name_currentWindow,
           dialogRun1.exemplar_maxMovement1, dialogRun1.exemplar_maxMovement2,
-          dialogRun1.segmentationMode);
+          fileName, dialogRun1.segmentationMode);
 
       // Then update the original window with the modified landmarks:
       _V3DPluginCallback2_currentCallback.setLandmark(v3dhandle_currentWindow,
@@ -2884,15 +3231,29 @@ class cellSegmentation : public QObject {
       // }
 
       // Automatically save binary segmented image to current directory.
-
-      QString savePath = name_currentWindow + "_seg.tif";
+      QString savePath = fileName + "_binary_segmentation.tif";
       V3DLONG outSZ[4] = {this->class_segmentationMain1.dim_X,
                           this->class_segmentationMain1.dim_Y,
                           this->class_segmentationMain1.dim_Z, 1};
       simple_saveimage_wrapper(
           _V3DPluginCallback2_currentCallback, savePath.toStdString().c_str(),
           this->class_segmentationMain1.binarySegImage, outSZ, 1);
-      v3d_msg(QString("Binary segmented image saved to %1.").arg(savePath));
+
+      // save original image if we are usingt TeraFly
+      if (isTeraFly) {
+        savePath = fileName + "original_image.tif";
+        simple_saveimage_wrapper(_V3DPluginCallback2_currentCallback,
+                                 savePath.toStdString().c_str(),
+                                 Image1D_current, outSZ, 1);
+      }
+      if (this->class_segmentationMain1.errorOccurred) {
+        v3d_msg(QString("Some cells were not properly segmented, which may "
+                        "give a poor probability model of cell shape. Check "
+                        "debuggin log for details. Plugin files saved to %1.")
+                    .arg(fileName));
+      } else {
+        v3d_msg(QString("Plugin files saved to %1.").arg(fileName));
+      }
       delete[] this->class_segmentationMain1.binarySegImage;
 
       return true;
