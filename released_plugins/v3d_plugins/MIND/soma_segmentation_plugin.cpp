@@ -125,7 +125,7 @@ MIND_4DImage *reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
  **************************************/
 QStringList SomaSegmentation::menulist() const {
   return QStringList() << tr("isotropic_correction") << tr("soma_segmentation")
-                       << tr("pc_analysis") << tr("Visualize PCA")
+                       << tr("pc_analysis") << tr("Visualize PCA") << tr("Visualize Probability Model")
                        << tr("about");
 }
 
@@ -158,6 +158,8 @@ void SomaSegmentation::domenu(const QString &menu_name,
     pca_func(callback, parent, PARA, bmenu);
   } else if (menu_name == tr("Visualize PCA")) {
     visualizePCA_func(callback, parent);
+  } else if (menu_name == tr("Visualize Probability Model")) {
+    visualizeProbabilityModel_func(callback, parent);
   } else {
     v3d_msg(tr("This plugin segments individual somas using a 3D "
                "region-growing algorithm "
@@ -478,4 +480,62 @@ void pca_func(V3DPluginCallback2 &callback, QWidget *parent, input_PARA &PARA,
   for (int i = 0; i < landmarkList.size(); i++) {
     analyzeSomaPCA(data1d, N, M, P, landmarkList[i], i + 1, savePath);
   }
+}
+
+std::tuple<char, char, char> colormap(double value) {
+  // Ensure value is between 0 and 1
+  value = std::clamp(value, 0.0, 1.0);
+
+  // Approximate viridis through polynomial fits
+  // These are simplified approximations of the actual colormap
+  double r = 0.267004 + value * (0.004974 + value * (0.9981 + value * -0.9988));
+  double g = 0.004974 + value * (0.9186 + value * (0.1718 + value * -0.4439));
+  double b = 0.329415 + value * (0.0875 + value * (-0.1234 + value * 0.1794));
+
+  r = std::clamp(r, 0.0, 1.0);
+  g = std::clamp(g, 0.0, 1.0);
+  b = std::clamp(b, 0.0, 1.0);
+
+  return {static_cast<char>(r * 255),
+          static_cast<char>(g * 255),
+          static_cast<char>(b * 255)};
+}
+
+void visualizeProbabilityModel_func(V3DPluginCallback2 &callback, QWidget *parent) {
+  // Load data
+  QString filename = QFileDialog::getOpenFileName(parent, "Open Probability Model", "", "Binary Files (*.bin)");
+
+  if (filename.isEmpty()) {
+    printf("No file selected.\n");
+    return;
+  }
+
+  std::vector<double> data;
+  V3DLONG dim_X, dim_Y, dim_Z;
+  cellSegmentation::class_segmentationMain::loadProbabilityModel(filename.toStdString().c_str(), data, dim_X, dim_Y, dim_Z);
+
+  Image4DSimple *p4DImage = new Image4DSimple();
+  p4DImage->createBlankImage(dim_X, dim_Y, dim_Z, 3, V3D_UINT8);
+
+  double min = data[0];
+  double max = data[0];
+
+  for (V3DLONG i = 0; i < dim_X * dim_Y * dim_Z; i++) {
+    if (data[i] < min)
+      min = data[i];
+    if (data[i] > max)
+      max = data[i];
+  }
+
+  unsigned char *pixels = p4DImage->getRawData();
+  int channelSize = dim_X * dim_Y * dim_Z;
+  for (V3DLONG i = 0; i < dim_X * dim_Y * dim_Z; i++) {
+    auto [r, g, b] = colormap((data[i] - min) / (max - min));
+    pixels[i] = r;
+    pixels[i + channelSize] = g;
+    pixels[i + 2 * channelSize] = b;
+  }
+
+  v3dhandle newwin = callback.newImageWindow("Probability Model");
+  callback.setImage(newwin, p4DImage);
 }
