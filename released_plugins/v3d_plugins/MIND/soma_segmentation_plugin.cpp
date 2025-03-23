@@ -529,8 +529,8 @@ void pca_func(V3DPluginCallback2 &callback, QWidget *parent, input_PARA &PARA,
     delete[] data1d;
     return;
   }
-  imageName = modifyFileNameForTeraFly(imageName);
-  QString savePath = imageName + "_pca_intensity_weighted.csv";
+  QString savePath =
+      modifyFileNameForTeraFly(imageName + "_pca_intensity_weighted.csv");
   for (int i = 0; i < landmarkList.size(); i++) {
     analyzeSomaPCA(data1d, N, M, P, landmarkList[i], i + 1, savePath);
   }
@@ -1073,8 +1073,10 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
   /*
    * Save the synthetic soma segmentation images
    */
-  QString outSegFileName = imageName + "_simulated_seg.tif";
-  QString outIntensityFileName = imageName + "_simulated_intensity.tif";
+  QString outSegFileName =
+      modifyFileNameForTeraFly(imageName + "_simulated_seg.tif");
+  QString outIntensityFileName =
+      modifyFileNameForTeraFly(imageName + "_simulated_intensity.tif");
 
   // Create dimension array for saving images
   V3DLONG out_sz[4];

@@ -744,8 +744,7 @@ void simulate_somas(V3DPluginCallback2 &callback, QWidget *parent) {
   }
 
   // Generate automatic filename from the base image name
-  QString saveSomaPath =
-      currentImagePath + "/" + baseImageName + "_soma_data.csv";
+  QString saveSomaPath = modifyFileNameForTeraFly(imageName + "_soma_data.csv");
 
   // Offer to save the extracted soma information to a CSV file
   int saveResponse = QMessageBox::question(
