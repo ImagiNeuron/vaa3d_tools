@@ -613,7 +613,6 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
          segPcaFileName.toStdString().c_str());
 
   // Load PCA data from CSV file
-  std::vector<double> pcValues;      // eigenvalues
   std::vector<double> eigenVectors;  // 9 eigenvector components
   std::vector<double> centerCoords;  // CenterMassX, CenterMassY, CenterMassZ
   std::vector<double> markerCoords;  // X, Y, Z
@@ -673,10 +672,6 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
     centerCoords.push_back(row[6]);  // CenterMassY
     centerCoords.push_back(row[7]);  // CenterMassZ
 
-    pcValues.push_back(row[8]);   // eigenvalue1
-    pcValues.push_back(row[9]);   // eigenvalue2
-    pcValues.push_back(row[10]);  // eigenvalue3
-
     for (int iVec = 11; iVec < 20; iVec++) {
       eigenVectors.push_back(row[iVec]);
     }
@@ -687,11 +682,9 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
   printf("Loaded %d soma segmentation image PCA records\n", pcaRowCount);
 
   // Calculate mean and standard deviation of center of mass coordinates,
-  // eigenvalues and eigenvectors
+  // and eigenvectors
   std::vector<double> meanCenter(3, 0.0);
   std::vector<double> stdCenter(3, 0.0);
-  std::vector<double> meanEigenvalues(3, 0.0);
-  std::vector<double> stdEigenvalues(3, 0.0);
   std::vector<double> meanEigenvectors(9, 0.0);
   std::vector<double> stdEigenvectors(9, 0.0);
 
@@ -716,20 +709,10 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
     stdCenter[j] = sqrt(stdCenter[j] / numSomas);
   }
 
-  for (size_t i = 0; i < pcValues.size(); i += 3) {
-    for (int j = 0; j < 3; j++) {
-      meanEigenvalues[j] += pcValues[i + j];
-    }
-  }
-
   for (size_t i = 0; i < eigenVectors.size(); i += 9) {
     for (int j = 0; j < 9; j++) {
       meanEigenvectors[j] += eigenVectors[i + j];
     }
-  }
-
-  for (int j = 0; j < 3; j++) {
-    meanEigenvalues[j] /= numSomas;
   }
 
   for (int j = 0; j < 9; j++) {
@@ -737,20 +720,10 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
   }
 
   // Calculate standard deviations
-  for (size_t i = 0; i < pcValues.size(); i += 3) {
-    for (int j = 0; j < 3; j++) {
-      stdEigenvalues[j] += pow(pcValues[i + j] - meanEigenvalues[j], 2);
-    }
-  }
-
   for (size_t i = 0; i < eigenVectors.size(); i += 9) {
     for (int j = 0; j < 9; j++) {
       stdEigenvectors[j] += pow(eigenVectors[i + j] - meanEigenvectors[j], 2);
     }
-  }
-
-  for (int j = 0; j < 3; j++) {
-    stdEigenvalues[j] = sqrt(stdEigenvalues[j] / numSomas);
   }
 
   for (int j = 0; j < 9; j++) {
@@ -762,10 +735,6 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
          meanCenter[2]);
   printf("Std dev: (%.2f, %.2f, %.2f)\n", stdCenter[0], stdCenter[1],
          stdCenter[2]);
-  printf("Mean eigenvalues: (%.2f, %.2f, %.2f)\n", meanEigenvalues[0],
-         meanEigenvalues[1], meanEigenvalues[2]);
-  printf("Std dev eigenvalues: (%.2f, %.2f, %.2f)\n\n", stdEigenvalues[0],
-         stdEigenvalues[1], stdEigenvalues[2]);
 
   /*
    * Create synthetic somas and image
@@ -930,21 +899,7 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
     successfulPlacements++;
 
     // Generate random PCA values based on the distribution
-    double randomPC1, randomPC2, randomPC3;
     double randomVec1[3], randomVec2[3], randomVec3[3];
-
-    // Generate eigenvalues with normal distribution
-    std::normal_distribution<> d1(meanEigenvalues[0], stdEigenvalues[0]);
-    std::normal_distribution<> d2(meanEigenvalues[1], stdEigenvalues[1]);
-    std::normal_distribution<> d3(meanEigenvalues[2], stdEigenvalues[2]);
-    randomPC1 = d1(gen);
-    randomPC2 = d2(gen);
-    randomPC3 = d3(gen);
-
-    // Ensure eigenvalues are positive and in descending order
-    randomPC1 = std::max(randomPC1, 0.1);
-    randomPC2 = std::max(std::min(randomPC2, randomPC1 - 0.1), 0.1);
-    randomPC3 = std::max(std::min(randomPC3, randomPC2 - 0.1), 0.1);
 
     // Generate eigenvectors with normal distributions
     for (int j = 0; j < 3; j++) {
@@ -1025,10 +980,10 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
 
     // Apply random rotation to the synthetic soma
     cellSegmentation::class_segmentationMain segMain;
-    segMain.rotateSegmentation(tempSegmentation, cubeSize, randomPC1, randomPC2,
-                               randomPC3, randomVec1, randomVec2, randomVec3);
-    segMain.rotateSegmentation(tempIntensity, cubeSize, randomPC1, randomPC2,
-                               randomPC3, randomVec1, randomVec2, randomVec3);
+    segMain.rotateSegmentation(tempSegmentation, cubeSize, randomVec1,
+                               randomVec2, randomVec3);
+    segMain.rotateSegmentation(tempIntensity, cubeSize, randomVec1, randomVec2,
+                               randomVec3);
 
     // Place rotated synthetic soma at generated position
     int centerX = static_cast<int>(newCenter[0]);

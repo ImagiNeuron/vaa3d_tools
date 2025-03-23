@@ -973,8 +973,7 @@ class cellSegmentation : public QObject {
 
         // Rotate the segmentation so that its principal axes align with the x,
         // y, and z axes.
-        rotateSegmentation(somaSegmentation, cubeSize, pc1, pc2, pc3, vec1,
-                           vec2, vec3);
+        rotateSegmentation(somaSegmentation, cubeSize, vec1, vec2, vec3);
 
         // Accumulate the binary segmentation into the probability model.
         for (V3DLONG i = 0; i < totalVoxels; i++) {
@@ -1076,7 +1075,6 @@ class cellSegmentation : public QObject {
      * @brief Helper function to rotate a segmented soma using PCA results.
      */
     void rotateSegmentationToAxes(double *segmentation, V3DLONG cubeSize,
-                                  double pc1, double pc2, double pc3,
                                   double ev1[3], double ev2[3], double ev3[3],
                                   double ax1[3], double ax2[3], double ax3[3]) {
       V3DLONG totalVoxels = cubeSize * cubeSize * cubeSize;
@@ -1182,15 +1180,14 @@ class cellSegmentation : public QObject {
     /**
      * @brief Helper function to rotate a segmented soma using PCA results.
      */
-    void rotateSegmentation(double *segmentation, V3DLONG cubeSize, double pc1,
-                            double pc2, double pc3, double vec1[3],
-                            double vec2[3], double vec3[3]) {
+    void rotateSegmentation(double *segmentation, V3DLONG cubeSize,
+                            double vec1[3], double vec2[3], double vec3[3]) {
       // align first (longest) principal component with the y-axis
       double ax1[] = {0.0, 1.0, 0.0};
       double ax2[] = {1.0, 0.0, 0.0};
       double ax3[] = {0.0, 0.0, 1.0};
-      rotateSegmentationToAxes(segmentation, cubeSize, pc1, pc2, pc3, vec1,
-                               vec2, vec3, ax1, ax2, ax3);
+      rotateSegmentationToAxes(segmentation, cubeSize, vec1, vec2, vec3, ax1,
+                               ax2, ax3);
     }
 
     /**
