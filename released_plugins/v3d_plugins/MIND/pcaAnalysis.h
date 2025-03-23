@@ -61,6 +61,15 @@ void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent);
 QString modifyFileNameForTeraFly(const QString &filename);
 
 /**
+ * @brief Find and load the segmentation file for the current image
+ */
+void loadSegmentationFile(const QString &imageName,
+                          const QString &currentImagePath,
+                          const QString &baseImageName, unsigned char *&segData,
+                          V3DLONG sz[4], int &datatype,
+                          V3DPluginCallback2 &callback, QWidget *parent);
+
+/**
  * @brief Simulate somas based on segmentation
  */
 void simulate_somas(V3DPluginCallback2 &callback, QWidget *parent);
@@ -147,7 +156,8 @@ bool get_PCA_info(int somaID, const QString &imageName, double &pc1,
 bool map_intensities(V3DPluginCallback2 &callback,
                      unsigned char ***&intensities,
                      unsigned char ***&segmentation, V3DLONG &dim_X,
-                     V3DLONG &dim_Y, V3DLONG &dim_Z, int channel = 0);
+                     V3DLONG &dim_Y, V3DLONG &dim_Z, int channel = 0,
+                     QWidget *parent = nullptr);
 
 /**
  * @brief Free memory allocated for two 3D arrays (intensities and segmentation)

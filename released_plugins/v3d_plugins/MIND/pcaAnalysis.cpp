@@ -180,6 +180,49 @@ QString modifyFileNameForTeraFly(const QString &fileName) {
   return modifiedFileName;
 }
 
+void loadSegmentationFile(const QString &imageName,
+                          const QString &currentImagePath,
+                          const QString &baseImageName, unsigned char *&segData,
+                          V3DLONG sz[4], int &datatype,
+                          V3DPluginCallback2 &callback, QWidget *parent) {
+  // Construct segmentation filename (try different options)
+  QStringList possibleSegFiles;
+  possibleSegFiles << imageName +
+                          "_binary_segmentation.tif"  // Original approach
+                   << currentImagePath + "/" + baseImageName +
+                          "_binary_segmentation.tif"  // Full path + basename
+                   << baseImageName +
+                          "_binary_segmentation.tif";  // Just basename
+
+  QString segFileName;
+  bool foundSegFile = false;
+
+  for (int i = 0; i < possibleSegFiles.size(); i++) {
+    QString possibleSegFile = modifyFileNameForTeraFly(possibleSegFiles[i]);
+    if (QFile::exists(possibleSegFile)) {
+      segFileName = possibleSegFile;
+      foundSegFile = true;
+      printf("Found segmentation file: %s\n",
+             segFileName.toStdString().c_str());
+      break;
+    }
+  }
+
+  // If segmentation file still not found, ask the user to select it
+  if (!foundSegFile) {
+    v3d_msg("No segmentation file found. Please segment the image first.",
+            parent);
+    return;
+  }
+
+  // Load the binary segmentation file
+  if (!simple_loadimage_wrapper(callback, segFileName.toStdString().c_str(),
+                                segData, sz, datatype)) {
+    v3d_msg("Failed to load segmentation file.", parent);
+    return;
+  }
+}
+
 void analyzeSomaPCA(unsigned char *labeledData, V3DLONG N, V3DLONG M, V3DLONG P,
                     const LocationSimple &lm, int somaIndex, QString savePath) {
   // Extract soma info
@@ -481,42 +524,12 @@ void simulate_somas(V3DPluginCallback2 &callback, QWidget *parent) {
   QString currentImagePath = QFileInfo(imageName).absolutePath();
   QString baseImageName = QFileInfo(imageName).baseName();
 
-  // Construct segmentation filename (try different options)
-  QStringList possibleSegFiles;
-  possibleSegFiles << imageName + "_seg.tif"  // Original approach
-                   << currentImagePath + "/" + baseImageName +
-                          "_seg.tif"               // Full path + basename
-                   << baseImageName + "_seg.tif";  // Just basename
-
-  QString segFileName;
-  bool foundSegFile = false;
-
-  for (int i = 0; i < possibleSegFiles.size(); i++) {
-    if (QFile::exists(possibleSegFiles[i])) {
-      segFileName = possibleSegFiles[i];
-      foundSegFile = true;
-      printf("Found segmentation file: %s\n",
-             segFileName.toStdString().c_str());
-      break;
-    }
-  }
-
-  // If segmentation file still not found, ask the user to select it
-  if (!foundSegFile) {
-    v3d_msg("No segmentation file found. Please segment the image first.",
-            parent);
-    return;
-  }
-
   // Load the binary segmentation file
   unsigned char *segData = nullptr;
   V3DLONG sz[4];
   int datatype = 0;
-  if (!simple_loadimage_wrapper(callback, segFileName.toStdString().c_str(),
-                                segData, sz, datatype)) {
-    v3d_msg("Failed to load segmentation file.", parent);
-    return;
-  }
+  loadSegmentationFile(imageName, currentImagePath, baseImageName, segData, sz,
+                       datatype, callback, parent);
 
   // Get current landmarks (soma markers)
   LandmarkList markers = callback.getLandmark(curwin);
@@ -533,7 +546,8 @@ void simulate_somas(V3DPluginCallback2 &callback, QWidget *parent) {
   int channel = 0;  // Default to first channel (index 0)
 
   // Use the PCA file created by analyzeSomaPCA (same naming convention)
-  QString pcaFileName = imageName + "_pca.csv";
+  QString pcaFileName =
+      modifyFileNameForTeraFly(imageName + "_pca_intensity_weighted.csv");
 
   // Check if the PCA file exists
   if (!QFile::exists(pcaFileName)) {
@@ -816,40 +830,12 @@ unsigned char ***create_background(V3DPluginCallback2 &callback,
   QString currentImagePath = QFileInfo(imageName).absolutePath();
   QString baseImageName = QFileInfo(imageName).baseName();
 
-  // Try different possible locations for segmentation file
-  QStringList possibleSegFiles;
-  possibleSegFiles << imageName + "_seg.tif"
-                   << currentImagePath + "/" + baseImageName + "_seg.tif"
-                   << baseImageName + "_seg.tif";
-
-  QString segFileName;
-  bool foundSegFile = false;
-
-  for (int i = 0; i < possibleSegFiles.size(); i++) {
-    if (QFile::exists(possibleSegFiles[i])) {
-      segFileName = possibleSegFiles[i];
-      foundSegFile = true;
-      printf("Found segmentation file: %s\n",
-             segFileName.toStdString().c_str());
-      break;
-    }
-  }
-
-  if (!foundSegFile) {
-    v3d_msg("No segmentation file found. Please segment the image first.",
-            parent);
-    return nullptr;
-  }
-
-  // Load segmentation file
+  // Load the binary segmentation file
   unsigned char *segData = nullptr;
   V3DLONG sz[4];
   int datatype = 0;
-  if (!simple_loadimage_wrapper(callback, segFileName.toStdString().c_str(),
-                                segData, sz, datatype)) {
-    v3d_msg("Failed to load segmentation file.", parent);
-    return nullptr;
-  }
+  loadSegmentationFile(imageName, currentImagePath, baseImageName, segData, sz,
+                       datatype, callback, parent);
 
   // Check dimensions match
   if (sz[0] != dim_X || sz[1] != dim_Y || sz[2] != dim_Z) {
@@ -1064,7 +1050,8 @@ bool get_PCA_info(int somaID, const QString &imageName, double &pc1,
 bool map_intensities(V3DPluginCallback2 &callback,
                      unsigned char ***&intensities,
                      unsigned char ***&segmentation, V3DLONG &dim_X,
-                     V3DLONG &dim_Y, V3DLONG &dim_Z, int channel) {
+                     V3DLONG &dim_Y, V3DLONG &dim_Z, int channel,
+                     QWidget *parent) {
   // Get the current image window
   v3dhandle curwin = callback.currentImageWindow();
   if (!curwin) {
@@ -1096,40 +1083,12 @@ bool map_intensities(V3DPluginCallback2 &callback,
     return false;
   }
 
-  // Construct segmentation filename (try different options)
-  QStringList possibleSegFiles;
-  possibleSegFiles << imageName + "_seg.tif"  // Original approach
-                   << currentImagePath + "/" + baseImageName +
-                          "_seg.tif"               // Full path + basename
-                   << baseImageName + "_seg.tif";  // Just basename
-
-  QString segFileName;
-  bool foundSegFile = false;
-
-  for (int i = 0; i < possibleSegFiles.size(); i++) {
-    if (QFile::exists(possibleSegFiles[i])) {
-      segFileName = possibleSegFiles[i];
-      foundSegFile = true;
-      printf("Found segmentation file: %s\n",
-             segFileName.toStdString().c_str());
-      break;
-    }
-  }
-
-  if (!foundSegFile) {
-    v3d_msg("No segmentation file found. Please segment the image first.");
-    return false;
-  }
-
   // Load the binary segmentation file
   unsigned char *segData = nullptr;
   V3DLONG sz[4];
   int datatype = 0;
-  if (!simple_loadimage_wrapper(callback, segFileName.toStdString().c_str(),
-                                segData, sz, datatype)) {
-    v3d_msg("Failed to load segmentation file.");
-    return false;
-  }
+  loadSegmentationFile(imageName, currentImagePath, baseImageName, segData, sz,
+                       datatype, callback, parent);
 
   // Check if segmentation dimensions match original image dimensions
   if (sz[0] != dim_X || sz[1] != dim_Y || sz[2] != dim_Z) {

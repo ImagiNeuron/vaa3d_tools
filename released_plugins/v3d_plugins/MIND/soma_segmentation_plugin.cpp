@@ -584,49 +584,19 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
    * Load soma segmentation data
    */
 
-  // Construct segmentation filename (try different options)
-  QStringList possibleSegFiles;
-  possibleSegFiles << imageName + "_seg.tif"  // Original approach
-                   << currentImagePath + "/" + baseImageName +
-                          "_seg.tif"               // Full path + basename
-                   << baseImageName + "_seg.tif";  // Just basename
-
-  QString segFileName;
-  bool foundSegFile = false;
-
-  for (int i = 0; i < possibleSegFiles.size(); i++) {
-    if (QFile::exists(possibleSegFiles[i])) {
-      segFileName = possibleSegFiles[i];
-      foundSegFile = true;
-      printf("Found segmentation file: %s\n",
-             segFileName.toStdString().c_str());
-      break;
-    }
-  }
-
-  // If segmentation file still not found, ask the user to select it
-  if (!foundSegFile) {
-    v3d_msg("No segmentation file found. Please segment the image first.",
-            parent);
-    return;
-  }
-
-  // Load the binary segmentation file
   unsigned char *segData = nullptr;
   V3DLONG sz[4];
   int datatype = 0;
-  if (!simple_loadimage_wrapper(callback, segFileName.toStdString().c_str(),
-                                segData, sz, datatype)) {
-    v3d_msg("Failed to load segmentation file.", parent);
-    return;
-  }
+  loadSegmentationFile(imageName, currentImagePath, baseImageName, segData, sz,
+                       datatype, callback, parent);
 
   /*
    * Load segmentation image PCA and get distribution of soma properties
    */
 
   // Find the segmentation image PCA file
-  QString segPcaFileName = imageName + "_seg_pca.csv";
+  QString segPcaFileName =
+      modifyFileNameForTeraFly(imageName + "_pca_binary_segmentation.csv");
 
   // Check if the PCA file exists
   if (!QFile::exists(segPcaFileName)) {
@@ -837,15 +807,15 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
 
   // Ask user for the number of synthetic somas to generate
   bool ok;
-  int numSynthetic = QInputDialog::getInt(
-      parent, "Synthetic Soma Generation",
-      "Enter the number of synthetic somas to generate:", 
-      20, // Default value
-      1,  // Minimum value
-      1000, // Maximum value
-      1,  // Step
-      &ok);
-      
+  int numSynthetic =
+      QInputDialog::getInt(parent, "Synthetic Soma Generation",
+                           "Enter the number of synthetic somas to generate:",
+                           20,    // Default value
+                           1,     // Minimum value
+                           1000,  // Maximum value
+                           1,     // Step
+                           &ok);
+
   if (!ok) {
     // User canceled the dialog
     v3d_msg("Synthetic soma generation canceled.", parent);
