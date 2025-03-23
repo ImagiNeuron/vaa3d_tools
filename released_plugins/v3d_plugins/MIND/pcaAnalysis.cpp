@@ -153,6 +153,33 @@ void analyzeSomaPCAReturnResults(unsigned char *labeledData, V3DLONG N,
   delete[] img3d;
 }
 
+QString modifyFileNameForTeraFly(const QString &fileName) {
+  QString modifiedFileName = fileName;
+
+  // we are using terafly if the fileName starts with ID
+  if (modifiedFileName.startsWith("ID")) {
+    // check if the MIND folder already exists, if not, create it
+    QDir dir("MIND");
+    if (!dir.exists()) {
+      dir.mkpath(".");
+    }
+
+    // replace ID(%), with ""
+    modifiedFileName.replace(QRegularExpression("ID\\(.*\\), "), "");
+    modifiedFileName.replace("1 channels_processed", "");
+
+    // check if folder for this image exists
+    QDir dir2("MIND/" + modifiedFileName);
+    if (!dir2.exists()) {
+      dir2.mkpath(".");
+    }
+
+    modifiedFileName = "MIND/" + modifiedFileName + "/";
+  }
+
+  return modifiedFileName;
+}
+
 void analyzeSomaPCA(unsigned char *labeledData, V3DLONG N, V3DLONG M, V3DLONG P,
                     const LocationSimple &lm, int somaIndex, QString savePath) {
   // Extract soma info

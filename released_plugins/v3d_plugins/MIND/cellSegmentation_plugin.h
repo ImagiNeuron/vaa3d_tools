@@ -22,6 +22,7 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QRadioButton>
+#include <QRegularExpression>
 #include <QtGui>
 #include <algorithm>
 #include <cassert>
@@ -82,7 +83,6 @@ class dialogRun : public QDialog {
   QLineEdit *QLineEdit_localOtsuRadius;     // line edit for local Otsu radius
   QLineEdit *
       QLineEdit_medianFilteringRadius;  // line edit for median filtering radius
-  double localOtsuRadius;               // radius for local Otsu radius
   double medianFilteringRadius;         // radius for median filtering radius
   dialogRun(V3DPluginCallback2 &V3DPluginCallback2_currentCallback,
             QWidget *QWidget_parent, int int_channelDim) {
@@ -176,13 +176,6 @@ class dialogRun : public QDialog {
     QComboBox_mode_selection->addItem("Global Otsu");
     QComboBox_mode_selection->addItem("Iterative Threshold");
     hLayout_segmentationTop->addWidget(QComboBox_mode_selection, 2);
-    // Local Otsu Radius Label
-    QLabel *label_localOtsuRadius =
-        new QLabel("Local Otsu Radius: (Voxels)", this);
-    hLayout_segmentationTop->addWidget(label_localOtsuRadius, 0);
-    // Local Otsu Radius Input
-    QLineEdit_localOtsuRadius = new QLineEdit("10", this);  // default value
-    hLayout_segmentationTop->addWidget(QLineEdit_localOtsuRadius, 1);
     // Manual Thresholding Checkbox
     QCheckBox_manualThresholding = new QCheckBox("Manual Thresholding", this);
     QCheckBox_manualThresholding->setChecked(false);  // default off
@@ -276,14 +269,7 @@ class dialogRun : public QDialog {
         this->QLineEdit_exemplar_maxMovement2->text().toUInt();
     // retrieve the segmentation mode:
     segmentationMode = QComboBox_mode_selection->currentIndex() + 1;
-    if (segmentationMode == 1) {
-      localOtsuRadius = QLineEdit_localOtsuRadius->text().toDouble();
-      // Enforce a valid range of 3 to 50.
-      if (localOtsuRadius < 3)
-        localOtsuRadius = 3;
-      else if (localOtsuRadius > 50)
-        localOtsuRadius = 50;
-    }
+
     // retrieve the median filtering flag
     applyMedianFiltering = QCheckBox_medianFiltering->isChecked();
     // Retrieve the median filtering radius only if median filtering is enabled.
@@ -346,6 +332,7 @@ class cellSegmentation : public QObject {
 
     // Input or directly derived;
     bool is_initialized;
+    bool errorOccurred = false;
     unsigned char *Image1D_page;
     unsigned char *Image1D_mask;
     unsigned char ***Image3D_page;
@@ -381,8 +368,6 @@ class cellSegmentation : public QObject {
 
     // segmentation mode
     int segmentationMode;  // 1: local otsu, 2: global Otsu, 3: iterative
-    // Local Otsu radius input
-    double localOtsuRadius;
     // median filtering check
     bool applyMedianFiltering;
     // median filtering radius input
@@ -401,6 +386,30 @@ class cellSegmentation : public QObject {
     }
     ~class_segmentationMain() {}
 
+    void printSomaSlice(double *data, int size, int padding = 1) {
+      for (int y = 0; y < size; y++) {
+        for (int x = 0; x < size; x++) {
+          int idx = y * size + x;
+          // Round the data value to the nearest integer
+          int rounded = (int)round(data[idx]);
+
+          switch (padding) {
+            case 0:
+              printf("%2d", rounded);
+              break;
+            case 1:
+              printf("%4d", rounded);
+              break;
+            default:
+              printf("%2d", rounded);
+              break;
+          }
+        }
+        printf("\n");
+      }
+      printf("\n");
+    }
+
 #pragma region "control-run"
     /**
      * @brief - Main function that goes over landmarks and floods them
@@ -412,7 +421,7 @@ class cellSegmentation : public QObject {
                      double _multiplier_thresholdRegionSize,
                      double _multiplier_uThresholdRegionSize,
                      QString _name_currentWindow, V3DLONG _maxMovement1,
-                     V3DLONG _maxMovement2, int mode = 1) {
+                     V3DLONG _maxMovement2, QString fileName, int mode = 1) {
       // if (!this->is_initialized) // Temporally solution for the "parameter
       // window not popped up" problem;
       {
@@ -620,9 +629,9 @@ class cellSegmentation : public QObject {
             value_centerMovement2 =
                 this->getEuclideanDistance2(pos_exemplar, pos_massCenterOld);
           } else if (segmentationMode == 1) {
-            // Use the local Otsu radius provided by the user.
-            threshold_exemplarRegion = localOtsuThreshold(
-                pos_exemplar, (V3DLONG)(this->localOtsuRadius));
+            // Get the otsu threshold around the soma
+            threshold_exemplarRegion =
+                localOtsuThreshold(pos_exemplar, (V3DLONG)(radius_marker));
             vector<V3DLONG> xyz_exemplar = this->index2Coordinate(pos_exemplar);
             printf(
                 "Local Otsu threshold computed at landmark (%ld, %ld, %ld): "
@@ -918,24 +927,26 @@ class cellSegmentation : public QObject {
         }
       }
 
-      QString savePath = _name_currentWindow + "_seg_pca.csv";
+      QString savePath = fileName + "_pca_binary_segmentation.csv";
 
       // make an array to store the counts of each voxel being part of a
       // soma size of the array is based on the largest radius bounding the
       // somas
       V3DLONG cubeSize = ((V3DLONG)ceil(largestRadius) + 3) * 2;
+      V3DLONG centralSlice = (cubeSize / 2) - 1;
       V3DLONG totalVoxels = cubeSize * cubeSize * cubeSize;
 
       // store the binary segmentation of each soma
-      int *somaSegmentation = new int[totalVoxels];
-      memset(somaSegmentation, 0, totalVoxels * sizeof(int));
+      double *somaSegmentation = new double[totalVoxels];
+      memset(somaSegmentation, 0, totalVoxels * sizeof(double));
 
       // store the counts of each voxel being part of a soma
-      int *probabilityModel = new int[totalVoxels];
-      memset(probabilityModel, 0, totalVoxels * sizeof(int));
+      double *probabilityModel = new double[totalVoxels];
+      memset(probabilityModel, 0, totalVoxels * sizeof(double));
 
       // for each index inside the segmentedLabels vector
       int segmentationCount = 0;
+
       for (int idx_exemplar : segmentedLabels) {
         // perform PCA analysis on the binary segmentation
 
@@ -949,7 +960,7 @@ class cellSegmentation : public QObject {
             _LandmarkList_exemplar[idx_exemplar], idx_exemplar + 1, savePath,
             pc1, pc2, pc3, vec1, vec2, vec3, x_center, y_center, z_center);
 
-        // for the label at idx_exemplar, get the segmentation (sqaure around
+        // for the label at idx_exemplar, get the segmentation (square around
         // marker center)
         vector<V3DLONG> binarySomaIndicies =
             possVct_exemplarRegion[segmentationCount];
@@ -959,41 +970,6 @@ class cellSegmentation : public QObject {
         // with the volume center.
         adjustSegmentationCenter(binarySomaIndicies, cubeSize, x_center,
                                  y_center, z_center, somaSegmentation);
-
-        // Compute the central slice index
-        V3DLONG centralSlice = (cubeSize / 2) - 1;
-        if (centralSlice < 0 || centralSlice >= cubeSize) {
-          printf("Central slice out of bounds\n");
-        } else {
-          // Print the central slice of the soma segmentation.
-          printf("Soma segmentation (central slice) before rotation: \n");
-          for (V3DLONG y = 0; y < cubeSize; y++) {
-            for (V3DLONG x = 0; x < cubeSize; x++) {
-              V3DLONG idx =
-                  (centralSlice * cubeSize * cubeSize) + (y * cubeSize) + x;
-              // Ensure idx is within bounds:
-              if (idx < totalVoxels)
-                printf("%d ", somaSegmentation[idx]);
-              else
-                printf("ERR ");
-            }
-            printf("\n");
-          }
-          printf("\n");
-
-          // printf("Unrotated soma:\n");
-          // for (V3DLONG z = 0; z < cubeSize; z++) {
-          //   printf("Slice %ld:\n", z);
-          //   for (V3DLONG y = 0; y < cubeSize; y++) {
-          //     for (V3DLONG x = 0; x < cubeSize; x++) {
-          //       V3DLONG idx = z * cubeSize * cubeSize + y * cubeSize + x;
-          //       printf("%d ", somaSegmentation[idx]);
-          //     }
-          //     printf("\n");
-          //   }
-          //   printf("\n");
-          // }
-        }
 
         // Rotate the segmentation so that its principal axes align with the x,
         // y, and z axes.
@@ -1009,71 +985,38 @@ class cellSegmentation : public QObject {
         if (centralSlice < 0 || centralSlice >= cubeSize) {
           printf("Central slice out of bounds\n");
         } else {
-          // Print the central slice of the soma segmentation.
-          printf("Soma segmentation (central slice) after rotation: \n");
-          for (V3DLONG y = 0; y < cubeSize; y++) {
-            for (V3DLONG x = 0; x < cubeSize; x++) {
-              V3DLONG idx =
-                  (centralSlice * cubeSize * cubeSize) + (y * cubeSize) + x;
-              // Ensure idx is within bounds:
-              if (idx < totalVoxels)
-                printf("%d ", somaSegmentation[idx]);
-              else
-                printf("ERR ");
-            }
-            printf("\n");
+          // Print the central slice of the soma segmentation if there was an
+          // error
+          if (somaSegmentation[centralSlice * cubeSize * cubeSize +
+                               centralSlice * cubeSize + centralSlice] == 0) {
+            errorOccurred = true;
+            printf(
+                "Error: Soma %d is not centered after rotation. Check "
+                "segmentation\n",
+                idx_exemplar + 1);
+            printf("Soma segmentation (central slice) after rotation: \n");
+            printSomaSlice(
+                somaSegmentation + (centralSlice * cubeSize * cubeSize),
+                cubeSize, 0);
+            printf("Probability model (central slice): \n");
+            printSomaSlice(
+                probabilityModel + (centralSlice * cubeSize * cubeSize),
+                cubeSize);
           }
-          printf("\n");
-
-          // printf("Rotated soma:\n");
-          // for (V3DLONG z = 0; z < cubeSize; z++) {
-          //   printf("Slice %ld:\n", z);
-          //   for (V3DLONG y = 0; y < cubeSize; y++) {
-          //     for (V3DLONG x = 0; x < cubeSize; x++) {
-          //       V3DLONG idx = z * cubeSize * cubeSize + y * cubeSize + x;
-          //       printf("%d ", somaSegmentation[idx]);
-          //     }
-          //     printf("\n");
-          //   }
-          //   printf("\n");
-          // }
-          // Print the central slice of the probability model.
-          printf("Probability model (central slice): \n");
-          for (V3DLONG y = 0; y < cubeSize; y++) {
-            for (V3DLONG x = 0; x < cubeSize; x++) {
-              V3DLONG idx =
-                  (centralSlice * cubeSize * cubeSize) + (y * cubeSize) + x;
-              if (idx < totalVoxels)
-                printf("%d ", probabilityModel[idx]);
-              else
-                printf("ERR ");
-            }
-            printf("\n");
-          }
-          printf("\n");
         }
 
         // Clear somaSegmentation for the next exemplar.
-        memset(somaSegmentation, 0, totalVoxels * sizeof(int));
+        memset(somaSegmentation, 0, totalVoxels * sizeof(double));
       }
 
       // print value at the center of the probability model to see if it is
       // working
 
-      // printf("Final probability model:\n");
-      // for (V3DLONG z = 0; z < cubeSize; z++) {
-      //   printf("Slice %ld:\n", z);
-      //   for (V3DLONG y = 0; y < cubeSize; y++) {
-      //     for (V3DLONG x = 0; x < cubeSize; x++) {
-      //       V3DLONG idx = z * cubeSize * cubeSize + y * cubeSize + x;
-      //       printf("%d ", probabilityModel[idx]);
-      //     }
-      //     printf("\n");
-      //   }
-      //   printf("\n");
-      // }
+      printf("Final probability model (central slice) \n");
+      printSomaSlice(probabilityModel + (centralSlice * cubeSize * cubeSize),
+                     cubeSize);
 
-      QString saveModelPath = _name_currentWindow + "_probabilityModel.bin";
+      QString saveModelPath = fileName + "_probability_model.bin";
 
       if (!saveProbabilityModel(saveModelPath.toStdString(), probabilityModel,
                                 totalVoxels)) {
@@ -1094,7 +1037,7 @@ class cellSegmentation : public QObject {
     void adjustSegmentationCenter(const vector<V3DLONG> &indices,
                                   V3DLONG cubeSize, double x_center,
                                   double y_center, double z_center,
-                                  int *segmentation) {
+                                  double *segmentation) {
       // Calculate the target center index of the cube.
       int center = cubeSize / 2;
       // Compute integer shifts (rounding the center-of-mass coordinates).
@@ -1110,7 +1053,7 @@ class cellSegmentation : public QObject {
         int y = (idx / dim_X) % dim_Y;
         int z = idx / (dim_X * dim_Y);
 
-        // Adjust coordinates based on the computed shift. -1 for indexes
+        // Adjust coordinates based on the computed
         int newX = x + x_shift;
         int newY = y + y_shift;
         int newZ = z + z_shift;
@@ -1119,7 +1062,7 @@ class cellSegmentation : public QObject {
         if (newX >= 0 && newX < cubeSize && newY >= 0 && newY < cubeSize &&
             newZ >= 0 && newZ < cubeSize) {
           V3DLONG newIdx = newZ * cubeSize * cubeSize + newY * cubeSize + newX;
-          segmentation[newIdx] = 1;
+          segmentation[newIdx] = 1.0;
           // optional debugging
           // printf(
           //     "Index %zu: original (%d, %d, %d) adjusted to (%d, %d, %d) -> "
@@ -1129,38 +1072,39 @@ class cellSegmentation : public QObject {
       }
     }
 
-    // A helper structure to hold an eigenvalue and its associated eigenvector.
-    struct EigenComponent {
-      double eigenvalue;
-      double vector[3];
-    };
-
     /**
      * @brief Helper function to rotate a segmented soma using PCA results.
      */
-    void rotateSegmentation(int *segmentation, V3DLONG cubeSize, double pc1,
-                            double pc2, double pc3, double vec1[3],
-                            double vec2[3], double vec3[3]) {
+    void rotateSegmentationToAxes(double *segmentation, V3DLONG cubeSize,
+                                  double pc1, double pc2, double pc3,
+                                  double ev1[3], double ev2[3], double ev3[3],
+                                  double ax1[3], double ax2[3], double ax3[3]) {
       V3DLONG totalVoxels = cubeSize * cubeSize * cubeSize;
       // Use a std::vector for temporary storage instead of raw new[]:
-      std::vector<int> rotated(totalVoxels, 0);
+      std::vector<double> rotated(totalVoxels, 0);
       int center = cubeSize / 2;
 
-      // Pack the eigenvalues and vectors into an array.
-      EigenComponent components[3];
-      components[0] = {pc1, {vec1[0], vec1[1], vec1[2]}};
-      components[1] = {pc2, {vec2[0], vec2[1], vec2[2]}};
-      components[2] = {pc3, {vec3[0], vec3[1], vec3[2]}};
-
-      // Sort components by eigenvalue in increasing order.
-      // After sorting:
-      //   components[0] = shortest principal component (z-axis)
-      //   components[1] = second longest (x-axis)
-      //   components[2] = longest (y-axis)
-      std::sort(components, components + 3,
-                [](const EigenComponent &a, const EigenComponent &b) {
-                  return a.eigenvalue < b.eigenvalue;
-                });
+      // construct the rotation matrix
+      // R = B A^T
+      // where B is the rotation matrix for canonical-to-new
+      // and A is the rotation matrix for canonical-to-eigenvector
+      //     [ev1[0] ev2[0] ev3[0]]
+      // B = [ev1[1] ev2[1] ev3[1]]
+      //     [ev1[2] ev2[2] ev3[2]]
+      //     [ax1[0] ax2[0] ax3[0]]       [ax1[0] ax1[1] ax1[2]]
+      // A = [ax1[1] ax2[1] ax3[1]] A^T = [ax2[0] ax2[1] ax2[2]]
+      //     [ax1[2] ax2[2] ax3[2]]       [ax3[0] ax3[1] ax3[2]]
+      double R[3][3] = {
+          {ev1[0] * ax1[0] + ev2[0] * ax2[0] + ev3[0] * ax3[0],
+           ev1[0] * ax1[1] + ev2[0] * ax2[1] + ev3[0] * ax3[1],
+           ev1[0] * ax1[2] + ev2[0] * ax2[2] + ev3[0] * ax3[2]},
+          {ev1[1] * ax1[0] + ev2[1] * ax2[0] + ev3[1] * ax3[0],
+           ev1[1] * ax1[1] + ev2[1] * ax2[1] + ev3[1] * ax3[1],
+           ev1[1] * ax1[2] + ev2[1] * ax2[2] + ev3[1] * ax3[2]},
+          {ev1[2] * ax1[0] + ev2[2] * ax2[0] + ev3[2] * ax3[0],
+           ev1[2] * ax1[1] + ev2[2] * ax2[1] + ev3[2] * ax3[1],
+           ev1[2] * ax1[2] + ev2[2] * ax2[2] + ev3[2] * ax3[2]},
+      };
 
       // Define supersampling resolution per axis.
       const int samplesPerAxis = 2;  // 2x2x2 grid => 8 samples per voxel.
@@ -1177,7 +1121,7 @@ class cellSegmentation : public QObject {
         for (int y = 0; y < cubeSize; y++) {
           for (int x = 0; x < cubeSize; x++) {
             V3DLONG outIdx = z * cubeSize * cubeSize + y * cubeSize + x;
-            int sum = 0;
+            double sum = 0;
             // Loop over sub-voxel samples.
             for (int dz = 0; dz < samplesPerAxis; dz++) {
               for (int dy = 0; dy < samplesPerAxis; dy++) {
@@ -1190,13 +1134,13 @@ class cellSegmentation : public QObject {
 
                   // the rotated (output) basis. This is the vector r =
                   // [rx,ry,rz]. We will consider the original vector in the
-                  // unrotated basisas o = [ox, oy, oz]
+                  // unrotated basis as o = [ox, oy, oz]
                   double rx = sampleX - center;
                   double ry = sampleY - center;
                   double rz = sampleZ - center;
 
-                  // The rotation matix A has the eigenvectors as its columns
-                  // We know that o = A * r and r = A^T * r
+                  // The rotation matrix A has the eigenvectors as its columns
+                  // We know that o = A * r and r = A^T * o
                   // Horizontal axis (new X axis) (first col of A): Second
                   // longest PC Vertical axis (new Y axis) (second col of A):
                   // Longest PC Depth axis (new Z axis) (last col of A):
@@ -1204,15 +1148,9 @@ class cellSegmentation : public QObject {
                   // information
 
                   // multiply by the inverse of the rotation matrix
-                  double ox = rx * components[1].vector[0] +
-                              ry * components[2].vector[0] +
-                              rz * components[0].vector[0];
-                  double oy = rx * components[1].vector[1] +
-                              ry * components[2].vector[1] +
-                              rz * components[0].vector[1];
-                  double oz = rx * components[1].vector[2] +
-                              ry * components[2].vector[2] +
-                              rz * components[0].vector[2];
+                  double ox = R[0][0] * rx + R[0][1] * ry + R[0][2] * rz;
+                  double oy = R[1][0] * rx + R[1][1] * ry + R[1][2] * rz;
+                  double oz = R[2][0] * rx + R[2][1] * ry + R[2][2] * rz;
 
                   // Convert back to original volume coordinates.
                   int src_x = static_cast<int>(round(ox)) + center;
@@ -1232,20 +1170,34 @@ class cellSegmentation : public QObject {
               }
             }
             // Set the output voxel to 1 if the majority of sub-samples are 1.
-            rotated[outIdx] = (sum > numSamples / 2) ? 1 : 0;
+            rotated[outIdx] = sum / numSamples;
           }
         }
       }
 
       // Copy the rotated volume back to the original segmentation array.
-      memcpy(segmentation, rotated.data(), totalVoxels * sizeof(int));
+      memcpy(segmentation, rotated.data(), totalVoxels * sizeof(double));
+    }
+
+    /**
+     * @brief Helper function to rotate a segmented soma using PCA results.
+     */
+    void rotateSegmentation(double *segmentation, V3DLONG cubeSize, double pc1,
+                            double pc2, double pc3, double vec1[3],
+                            double vec2[3], double vec3[3]) {
+      // align first (longest) principal component with the y-axis
+      double ax1[] = {0.0, 1.0, 0.0};
+      double ax2[] = {1.0, 0.0, 0.0};
+      double ax3[] = {0.0, 0.0, 1.0};
+      rotateSegmentationToAxes(segmentation, cubeSize, pc1, pc2, pc3, vec1,
+                               vec2, vec3, ax1, ax2, ax3);
     }
 
     /**
      * @brief Helper function to save the probability model to a binary file.
      */
     bool saveProbabilityModel(const std::string &filename,
-                              const int *probabilityModel,
+                              const double *probabilityModel,
                               V3DLONG totalVoxels) {
       std::ofstream outFile(filename, std::ios::binary);
       if (!outFile) {
@@ -1255,7 +1207,7 @@ class cellSegmentation : public QObject {
       }
       // Write the entire array as binary.
       outFile.write(reinterpret_cast<const char *>(probabilityModel),
-                    totalVoxels * sizeof(int));
+                    totalVoxels * sizeof(double));
       if (!outFile.good()) {
         std::cerr << "Error: Failed to write data to file " << filename << "."
                   << std::endl;
@@ -3038,6 +2990,17 @@ class cellSegmentation : public QObject {
         _V3DPluginCallback2_currentCallback.getImageName(
             v3dhandle_currentWindow);
 
+    // get name of the image
+    QString fileName = Image4DSimple_current->getFileName();
+
+    bool isTeraFly = false;
+    if (fileName.startsWith("ID")) {
+      isTeraFly = true;
+    }
+
+    // modify name if necessary for TeraFly
+    fileName = modifyFileNameForTeraFly(fileName);
+
     // get image and landmarks
     V3DLONG dim_X = Image4DSimple_current->getXDim();
     V3DLONG dim_Y = Image4DSimple_current->getYDim();
@@ -3088,6 +3051,7 @@ class cellSegmentation : public QObject {
     // give the user the dialog
     dialogRun dialogRun1(_V3DPluginCallback2_currentCallback, _QWidget_parent,
                          dim_C);
+
     bool is_success = false;
 
     /*if (this->class_segmentationMain1.is_initialized) //temporary solution
@@ -3111,9 +3075,6 @@ class cellSegmentation : public QObject {
       if (dialogRun1.exec() != QDialog::Accepted) {
         return false;
       }
-      // Set the local Otsu radius from the dialog
-      this->class_segmentationMain1.localOtsuRadius =
-          dialogRun1.localOtsuRadius;
       // Set the median filtering flag from the dialog
       this->class_segmentationMain1.applyMedianFiltering =
           dialogRun1.applyMedianFiltering;
@@ -3146,7 +3107,7 @@ class cellSegmentation : public QObject {
           dialogRun1.shape_multiplier_thresholdRegionSize,
           dialogRun1.shape_multiplier_uThresholdRegionSize, name_currentWindow,
           dialogRun1.exemplar_maxMovement1, dialogRun1.exemplar_maxMovement2,
-          dialogRun1.segmentationMode);
+          fileName, dialogRun1.segmentationMode);
 
       // Then update the original window with the modified landmarks:
       _V3DPluginCallback2_currentCallback.setLandmark(v3dhandle_currentWindow,
@@ -3270,15 +3231,29 @@ class cellSegmentation : public QObject {
       // }
 
       // Automatically save binary segmented image to current directory.
-
-      QString savePath = name_currentWindow + "_seg.tif";
+      QString savePath = fileName + "_binary_segmentation.tif";
       V3DLONG outSZ[4] = {this->class_segmentationMain1.dim_X,
                           this->class_segmentationMain1.dim_Y,
                           this->class_segmentationMain1.dim_Z, 1};
       simple_saveimage_wrapper(
           _V3DPluginCallback2_currentCallback, savePath.toStdString().c_str(),
           this->class_segmentationMain1.binarySegImage, outSZ, 1);
-      v3d_msg(QString("Binary segmented image saved to %1.").arg(savePath));
+
+      // save original image if we are usingt TeraFly
+      if (isTeraFly) {
+        savePath = fileName + "original_image.tif";
+        simple_saveimage_wrapper(_V3DPluginCallback2_currentCallback,
+                                 savePath.toStdString().c_str(),
+                                 Image1D_current, outSZ, 1);
+      }
+      if (this->class_segmentationMain1.errorOccurred) {
+        v3d_msg(QString("Some cells were not properly segmented, which may "
+                        "give a poor probability model of cell shape. Check "
+                        "debuggin log for details. Plugin files saved to %1.")
+                    .arg(fileName));
+      } else {
+        v3d_msg(QString("Plugin files saved to %1.").arg(fileName));
+      }
       delete[] this->class_segmentationMain1.binarySegImage;
 
       return true;

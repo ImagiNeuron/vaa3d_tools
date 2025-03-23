@@ -4,13 +4,11 @@
 #include <v3d_interface.h>
 
 #include <QApplication>
-#include <QComboBox>
-#include <QDialog>
-#include <QDialogButtonBox>
+#include <QDir>
 #include <QFileDialog>
 #include <QLabel>
 #include <QMessageBox>
-#include <QVBoxLayout>
+#include <QRegularExpression>
 #include <QtGui>
 #include <fstream>
 
@@ -55,6 +53,12 @@ void drawLine(Image4DSimple *image, double *from, double *to);
  * @brief Visualize PCA results
  */
 void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent);
+
+/**
+ * @brief change names according to folder structure for storing things when
+ * TeraFly data is used
+ */
+QString modifyFileNameForTeraFly(const QString &filename);
 
 /**
  * @brief Simulate somas based on segmentation

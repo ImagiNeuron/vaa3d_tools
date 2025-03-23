@@ -529,7 +529,8 @@ void pca_func(V3DPluginCallback2 &callback, QWidget *parent, input_PARA &PARA,
     delete[] data1d;
     return;
   }
-  QString savePath = imageName + "_pca.csv";
+  imageName = modifyFileNameForTeraFly(imageName);
+  QString savePath = imageName + "_pca_intensity_weighted.csv";
   for (int i = 0; i < landmarkList.size(); i++) {
     analyzeSomaPCA(data1d, N, M, P, landmarkList[i], i + 1, savePath);
   }
