@@ -985,10 +985,10 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
         static_cast<V3DLONG>(centerCoords[randomSomaIndex * 3 + 2]);
 
     V3DLONG totalVoxels = cubeSize * cubeSize * cubeSize;
-    int *tempSegmentation = new int[totalVoxels];
-    unsigned char *tempIntensity = new unsigned char[totalVoxels];
-    memset(tempSegmentation, 0, totalVoxels * sizeof(int));
-    memset(tempIntensity, 0, totalVoxels * sizeof(unsigned char));
+    double *tempSegmentation = new double[totalVoxels];
+    double *tempIntensity = new double[totalVoxels];
+    memset(tempSegmentation, 0, totalVoxels * sizeof(double));
+    memset(tempIntensity, 0, totalVoxels * sizeof(double));
 
     // Extract both segmentation and intensity data for the soma
     for (int z = 0; z < cubeSize; z++) {
@@ -1015,7 +1015,8 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
             // Copy the original intensity value if this voxel is part of the
             // soma
             if (segData[sourceIdx] > 0) {
-              tempIntensity[targetIdx] = originalData[sourceIdx];
+              tempIntensity[targetIdx] =
+                  static_cast<double>(originalData[sourceIdx]);
             }
           }
         }
@@ -1023,17 +1024,11 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
     }
 
     // Apply random rotation to the synthetic soma
-    // TODO: Implement rotation of tempSegmentation and tempIntensity
-    //       For the rotation values, we can use randomPC1, randomPC2,
-    //       randomPC3, randomVec1, randomVec2, randomVec3
-
-    // cellSegmentation::class_segmentationMain segMain;
-    // segMain.rotateSegmentation(tempSegmentation, cubeSize, randomPC1,
-    //                            randomPC2, randomPC3, randomVec1, randomVec2,
-    //                            randomVec3);
-    // segMain.rotateSegmentation(tempIntensity, cubeSize, randomPC1, randomPC2,
-    //                            randomPC3, randomVec1, randomVec2,
-    //                            randomVec3);
+    cellSegmentation::class_segmentationMain segMain;
+    segMain.rotateSegmentation(tempSegmentation, cubeSize, randomPC1, randomPC2,
+                               randomPC3, randomVec1, randomVec2, randomVec3);
+    segMain.rotateSegmentation(tempIntensity, cubeSize, randomPC1, randomPC2,
+                               randomPC3, randomVec1, randomVec2, randomVec3);
 
     // Place rotated synthetic soma at generated position
     int centerX = static_cast<int>(newCenter[0]);
@@ -1060,7 +1055,11 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
             if (tempSegmentation[sourceIdx] > 0) {
               outSegData[targetIdx] = 255;  // Binary segmentation
               outIntensityData[targetIdx] =
-                  tempIntensity[sourceIdx];  // Original intensity
+                  static_cast<unsigned char>(std::round(std::min(
+                      255.0,
+                      std::max(
+                          0.0,
+                          tempIntensity[sourceIdx]))));  // Original intensity
             }
           }
         }
