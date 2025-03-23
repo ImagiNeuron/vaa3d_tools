@@ -913,20 +913,70 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
       randomVec3[j] = dv3(gen);
     }
 
-    // Normalize eigenvectors
+    // Normalize first vector
     double norm1 =
         sqrt(randomVec1[0] * randomVec1[0] + randomVec1[1] * randomVec1[1] +
              randomVec1[2] * randomVec1[2]);
+    for (int j = 0; j < 3; j++) {
+      randomVec1[j] /= norm1;
+    }
+
+    // Make second vector orthogonal to the first using Gram-Schmidt process
+    // Project randomVec2 onto randomVec1
+    double dot_product1 = randomVec2[0] * randomVec1[0] +
+                          randomVec2[1] * randomVec1[1] +
+                          randomVec2[2] * randomVec1[2];
+
+    // Subtract the projection from randomVec2
+    for (int j = 0; j < 3; j++) {
+      randomVec2[j] -= dot_product1 * randomVec1[j];
+    }
+
+    // Normalize second vector
     double norm2 =
         sqrt(randomVec2[0] * randomVec2[0] + randomVec2[1] * randomVec2[1] +
              randomVec2[2] * randomVec2[2]);
+    for (int j = 0; j < 3; j++) {
+      randomVec2[j] /= norm2;
+    }
+
+    // Make third vector orthogonal to first two using Gram-Schmidt
+    // Project randomVec3 onto randomVec1
+    double dot_product3_1 = randomVec3[0] * randomVec1[0] +
+                            randomVec3[1] * randomVec1[1] +
+                            randomVec3[2] * randomVec1[2];
+
+    // Project randomVec3 onto randomVec2
+    double dot_product3_2 = randomVec3[0] * randomVec2[0] +
+                            randomVec3[1] * randomVec2[1] +
+                            randomVec3[2] * randomVec2[2];
+
+    // Subtract both projections to make it orthogonal to both vectors
+    for (int j = 0; j < 3; j++) {
+      randomVec3[j] = randomVec3[j] - dot_product3_1 * randomVec1[j] -
+                      dot_product3_2 * randomVec2[j];
+    }
+
+    // Normalize third vector
     double norm3 =
         sqrt(randomVec3[0] * randomVec3[0] + randomVec3[1] * randomVec3[1] +
              randomVec3[2] * randomVec3[2]);
 
+    // Check if the resulting vector is too small (near zero)
+    if (norm3 < 1e-6) {
+      // If so, fall back to cross product method
+      randomVec3[0] =
+          randomVec1[1] * randomVec2[2] - randomVec1[2] * randomVec2[1];
+      randomVec3[1] =
+          randomVec1[2] * randomVec2[0] - randomVec1[0] * randomVec2[2];
+      randomVec3[2] =
+          randomVec1[0] * randomVec2[1] - randomVec1[1] * randomVec2[0];
+      norm3 =
+          sqrt(randomVec3[0] * randomVec3[0] + randomVec3[1] * randomVec3[1] +
+               randomVec3[2] * randomVec3[2]);
+    }
+
     for (int j = 0; j < 3; j++) {
-      randomVec1[j] /= norm1;
-      randomVec2[j] /= norm2;
       randomVec3[j] /= norm3;
     }
 
