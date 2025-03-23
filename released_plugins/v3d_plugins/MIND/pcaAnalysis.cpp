@@ -821,82 +821,25 @@ unsigned char ***create_background(V3DPluginCallback2 &callback,
   dim_X = p4DImage->getXDim();
   dim_Y = p4DImage->getYDim();
   dim_Z = p4DImage->getZDim();
-  V3DLONG cDim = p4DImage->getCDim();
   V3DLONG totalSize = dim_X * dim_Y * dim_Z;
   unsigned char *originalData = p4DImage->getRawData();
 
-  // Get segmentation file
-  QString imageName = callback.getImageName(curwin);
-  QString currentImagePath = QFileInfo(imageName).absolutePath();
-  QString baseImageName = QFileInfo(imageName).baseName();
+  // Calculate chunk dimensions (ensure at least 1)
+  V3DLONG factor = 4;
+  V3DLONG chunk_X = std::max(1L, dim_X / factor);
+  V3DLONG chunk_Y = std::max(1L, dim_Y / factor);
+  V3DLONG chunk_Z = std::max(1L, dim_Z / factor);
 
-  // Load the binary segmentation file
-  unsigned char *segData = nullptr;
-  V3DLONG sz[4];
-  int datatype = 0;
-  loadSegmentationFile(imageName, currentImagePath, baseImageName, segData, sz,
-                       datatype, callback, parent);
+  // Calculate number of chunks in each dimension
+  V3DLONG num_chunks_X = (dim_X + chunk_X - 1) / chunk_X;
+  V3DLONG num_chunks_Y = (dim_Y + chunk_Y - 1) / chunk_Y;
+  V3DLONG num_chunks_Z = (dim_Z + chunk_Z - 1) / chunk_Z;
 
-  // Check dimensions match
-  if (sz[0] != dim_X || sz[1] != dim_Y || sz[2] != dim_Z) {
-    v3d_msg("Segmentation dimensions don't match the original image.", parent);
-    delete[] segData;
-    return nullptr;
-  }
-
-  // Find lowest threshold value in segmented regions
-  unsigned char lowestThreshold = 255;  // Start with max value
-  for (V3DLONG i = 0; i < totalSize; i++) {
-    if (segData[i] > 0) {
-      if (originalData[i] < lowestThreshold) {
-        lowestThreshold = originalData[i];
-      }
-    }
-  }
-
-  // If no segmentation found (unlikely), use default value
-  if (lowestThreshold == 255) {
-    lowestThreshold = 10;  // Arbitrary low value
-    v3d_msg(
-        "Warning: Could not determine threshold from segmentation, using "
-        "default value.",
-        parent);
-  }
-
-  printf("Lowest threshold used for segmentation: %d\n", lowestThreshold);
-
-  // Background threshold is slightly 1 lower than the lowest threshold
-  unsigned char backgroundThreshold = lowestThreshold - 1;
-  printf("Using %d as background threshold\n", backgroundThreshold);
-
-  // Calculate mean and standard deviation of background voxels
-  double sum = 0.0;
-  double sumSq = 0.0;
-  V3DLONG backgroundCount = 0;
-
-  for (V3DLONG i = 0; i < totalSize; i++) {
-    if (originalData[i] < backgroundThreshold) {
-      sum += originalData[i];
-      sumSq += originalData[i] * originalData[i];
-      backgroundCount++;
-    }
-  }
-
-  if (backgroundCount == 0) {
-    v3d_msg(
-        "No background voxels found below threshold. Try a different "
-        "threshold.",
-        parent);
-    delete[] segData;
-    return nullptr;
-  }
-
-  double mean = sum / backgroundCount;
-  double variance = (sumSq / backgroundCount) - (mean * mean);
-  double stdDev = sqrt(variance);
-
-  printf("Background statistics: count=%ld, mean=%.2f, stddev=%.2f\n",
-         backgroundCount, mean, stdDev);
+  printf("Image dimensions: %ld x %ld x %ld\n", dim_X, dim_Y, dim_Z);
+  printf("Chunk dimensions: %ld x %ld x %ld\n", chunk_X, chunk_Y, chunk_Z);
+  printf("Number of chunks: %ld x %ld x %ld = %ld chunks total\n", num_chunks_X,
+         num_chunks_Y, num_chunks_Z,
+         num_chunks_X * num_chunks_Y * num_chunks_Z);
 
   // Allocate 3D array for background
   unsigned char ***backgroundArray = new unsigned char **[dim_Z];
@@ -904,17 +847,106 @@ unsigned char ***create_background(V3DPluginCallback2 &callback,
     backgroundArray[z] = new unsigned char *[dim_Y];
     for (V3DLONG y = 0; y < dim_Y; y++) {
       backgroundArray[z][y] = new unsigned char[dim_X];
+      // Initialize to zero
+      memset(backgroundArray[z][y], 0, dim_X * sizeof(unsigned char));
     }
   }
 
-  // Fill with random values from normal distribution
-  std::srand(std::time(nullptr));  // Seed random generator
+  // Seed random generator
+  std::srand(std::time(nullptr));
 
+  // Store statistics for each chunk for blending
+  std::vector<std::vector<std::vector<std::pair<double, double>>>> chunkStats(
+      num_chunks_Z, std::vector<std::vector<std::pair<double, double>>>(
+                        num_chunks_Y, std::vector<std::pair<double, double>>(
+                                          num_chunks_X, {0.0, 0.0})));
+
+  // Calculate statistics for each chunk first
+  for (V3DLONG cz = 0; cz < num_chunks_Z; cz++) {
+    V3DLONG z_start = cz * chunk_Z;
+    V3DLONG z_end = std::min(z_start + chunk_Z, dim_Z);
+
+    for (V3DLONG cy = 0; cy < num_chunks_Y; cy++) {
+      V3DLONG y_start = cy * chunk_Y;
+      V3DLONG y_end = std::min(y_start + chunk_Y, dim_Y);
+
+      for (V3DLONG cx = 0; cx < num_chunks_X; cx++) {
+        V3DLONG x_start = cx * chunk_X;
+        V3DLONG x_end = std::min(x_start + chunk_X, dim_X);
+
+        // Create histogram for this chunk
+        int hist[256] = {0};
+        int chunkSize = 0;
+
+        for (V3DLONG z = z_start; z < z_end; z++) {
+          for (V3DLONG y = y_start; y < y_end; y++) {
+            for (V3DLONG x = x_start; x < x_end; x++) {
+              V3DLONG idx = z * dim_X * dim_Y + y * dim_X + x;
+              hist[originalData[idx]]++;
+              chunkSize++;
+            }
+          }
+        }
+
+        // Calculate Otsu threshold for this chunk using the new function
+        int threshold = calculateOtsuThreshold(hist, chunkSize);
+
+        // Calculate statistics for background voxels (below threshold)
+        double mean = 0.0;
+        double stdDev = 0.0;
+        V3DLONG backgroundCount = 0;
+        double sum_bg = 0.0;
+        double sumSq_bg = 0.0;
+
+        for (V3DLONG z = z_start; z < z_end; z++) {
+          for (V3DLONG y = y_start; y < y_end; y++) {
+            for (V3DLONG x = x_start; x < x_end; x++) {
+              V3DLONG idx = z * dim_X * dim_Y + y * dim_X + x;
+              if (originalData[idx] < threshold) {
+                sum_bg += originalData[idx];
+                sumSq_bg += originalData[idx] * originalData[idx];
+                backgroundCount++;
+              }
+            }
+          }
+        }
+
+        // If we found background voxels, calculate statistics
+        if (backgroundCount > 0) {
+          mean = sum_bg / backgroundCount;
+          double variance = (sumSq_bg / backgroundCount) - (mean * mean);
+          stdDev = sqrt(variance);
+
+          // Ensure minimum stdDev to avoid issues with uniform regions
+          if (stdDev < 1.0) stdDev = 1.0;
+        } else {
+          // If no background voxels found, use default values
+          mean = 10.0;
+          stdDev = 3.0;
+        }
+
+        // Store the mean and stdDev for this chunk
+        chunkStats[cz][cy][cx] = {mean, stdDev};
+      }
+    }
+  }
+
+  // Define blending parameters - use a smaller radius for more localized
+  // blending
+  double blendRadius = 1.0;
+
+  // Generate background values with blending between chunks
   for (V3DLONG z = 0; z < dim_Z; z++) {
     for (V3DLONG y = 0; y < dim_Y; y++) {
       for (V3DLONG x = 0; x < dim_X; x++) {
-        // Use Box-Muller transform to generate Gaussian distributed random
-        // numbers
+        // Get blended distribution parameters for this voxel
+        double blendedMean, blendedStdDev;
+        getBlendedDistributionParams(x, y, z, chunkStats, chunk_X, chunk_Y,
+                                     chunk_Z, num_chunks_X, num_chunks_Y,
+                                     num_chunks_Z, blendRadius, blendedMean,
+                                     blendedStdDev);
+
+        // Generate random value from the blended distribution
         double u1 = std::rand() / (RAND_MAX + 1.0);
         double u2 = std::rand() / (RAND_MAX + 1.0);
 
@@ -923,7 +955,7 @@ unsigned char ***create_background(V3DPluginCallback2 &callback,
 
         double randStdNormal =
             std::sqrt(-2.0 * std::log(u1)) * std::cos(2.0 * M_PI * u2);
-        double randNormal = mean + stdDev * randStdNormal;
+        double randNormal = blendedMean + blendedStdDev * randStdNormal;
 
         // Clamp to valid unsigned char range [0,255]
         int value = std::round(randNormal);
@@ -934,10 +966,9 @@ unsigned char ***create_background(V3DPluginCallback2 &callback,
     }
   }
 
-  // Clean up
-  delete[] segData;
-
-  printf("Background generation complete.\n");
+  printf(
+      "Background generation complete with smooth blending (radius = %.1f).\n",
+      blendRadius);
   return backgroundArray;
 }
 
@@ -1215,4 +1246,111 @@ void create_background(V3DPluginCallback2 &callback, QWidget *parent) {
   callback.updateImageWindow(newwin);
 
   v3d_msg("Background image generated successfully.");
+}
+
+/**
+ * @brief Calculate Otsu threshold for a histogram
+ * @param hist Array of 256 histogram values
+ * @param totalPixels Total number of pixels in the region
+ * @return The calculated Otsu threshold value
+ */
+int calculateOtsuThreshold(const int hist[256], int totalPixels) {
+  double sum = 0;
+  for (int t = 0; t < 256; t++) {
+    sum += t * hist[t];
+  }
+
+  double sumB = 0;
+  int wB = 0;
+  double varMax = 0;
+  int threshold = 0;
+
+  for (int t = 0; t < 256; t++) {
+    wB += hist[t];
+    if (wB == 0) continue;
+
+    int wF = totalPixels - wB;
+    if (wF == 0) break;
+
+    sumB += t * hist[t];
+    double mB = sumB / wB;
+    double mF = (sum - sumB) / wF;
+    double varBetween = (double)wB * wF * (mB - mF) * (mB - mF);
+
+    if (varBetween > varMax) {
+      varMax = varBetween;
+      threshold = t;
+    }
+  }
+
+  return threshold;
+}
+
+void getBlendedDistributionParams(
+    V3DLONG x, V3DLONG y, V3DLONG z,
+    const std::vector<std::vector<std::vector<std::pair<double, double>>>>
+        &chunkStats,
+    V3DLONG chunk_X, V3DLONG chunk_Y, V3DLONG chunk_Z, V3DLONG num_chunks_X,
+    V3DLONG num_chunks_Y, V3DLONG num_chunks_Z, double blendRadius,
+    double &blendedMean, double &blendedStdDev) {
+  // Calculate chunk coordinates and relative position
+  double cx_pos = (double)x / chunk_X;
+  V3DLONG cx = std::min(num_chunks_X - 1, (V3DLONG)cx_pos);
+
+  double cy_pos = (double)y / chunk_Y;
+  V3DLONG cy = std::min(num_chunks_Y - 1, (V3DLONG)cy_pos);
+
+  double cz_pos = (double)z / chunk_Z;
+  V3DLONG cz = std::min(num_chunks_Z - 1, (V3DLONG)cz_pos);
+
+  // Variables for weighted blending
+  double totalWeight = 0.0;
+  double weightedMean = 0.0;
+  double weightedVar = 0.0;
+
+  // Iterate over neighboring chunks within blend radius
+  for (int nz = std::max(0L, cz - (V3DLONG)blendRadius);
+       nz <= std::min(num_chunks_Z - 1, cz + (V3DLONG)blendRadius); nz++) {
+    for (int ny = std::max(0L, cy - (V3DLONG)blendRadius);
+         ny <= std::min(num_chunks_Y - 1, cy + (V3DLONG)blendRadius); ny++) {
+      for (int nx = std::max(0L, cx - (V3DLONG)blendRadius);
+           nx <= std::min(num_chunks_X - 1, cx + (V3DLONG)blendRadius); nx++) {
+        // Calculate distance to chunk center in chunk-space
+        double dx = (cx_pos - nx - 0.5);
+        double dy = (cy_pos - ny - 0.5);
+        double dz = (cz_pos - nz - 0.5);
+        double distSq = dx * dx + dy * dy + dz * dz;
+
+        // Skip chunks that are too far
+        if (distSq > blendRadius * blendRadius) continue;
+
+        // Calculate weight based on distance (quadratic falloff)
+        double weight = std::max(0.0, 1.0 - std::sqrt(distSq) / blendRadius);
+        weight = weight * weight;  // Square the weight for smoother falloff
+
+        // Get the statistics for this chunk
+        double mean = chunkStats[nz][ny][nx].first;
+        double stdDev = chunkStats[nz][ny][nx].second;
+
+        // Accumulate weighted statistics
+        weightedMean += weight * mean;
+        weightedVar += weight * stdDev * stdDev;  // Weighted variance
+        totalWeight += weight;
+      }
+    }
+  }
+
+  // Normalize by total weight
+  if (totalWeight > 0) {
+    weightedMean /= totalWeight;
+    weightedVar /= totalWeight;
+  } else {
+    // Fallback to central chunk if no weights (should not happen)
+    weightedMean = chunkStats[cz][cy][cx].first;
+    weightedVar = chunkStats[cz][cy][cx].second * chunkStats[cz][cy][cx].second;
+  }
+
+  // Set output parameters
+  blendedMean = weightedMean;
+  blendedStdDev = std::sqrt(weightedVar);
 }
