@@ -49,7 +49,7 @@ const double const_max_voxelValue = 255;
 // 27 directions -1
 const int const_count_neighbors = 26;
 // small enough global value as a last resort
-const double default_threshold_global = 15;
+const double default_threshold_global = 7;
 // cube of voxels of length 2
 const int default_threshold_regionSize = 8;
 const double const_infinitesimal = 0.000000001;
@@ -679,7 +679,7 @@ class cellSegmentation : public QObject {
         }
 
         // region is too large
-        if (poss_exemplarRegionOld.size() > (this->size_page / 1000)) {
+        if (poss_exemplarRegionOld.size() > (this->size_page / 100)) {
           printf("Marker number %d failed - poss_exemplarRegionOld was %d\n",
                  idx_exemplar, poss_exemplarRegionOld.size());
           continue;
@@ -2996,7 +2996,7 @@ class cellSegmentation : public QObject {
     }
 
     // modify name if necessary for TeraFly
-    fileName = modifyFileNameForTeraFly(fileName);
+    fileName = modifyFilePathForTeraFly(fileName);
 
     // get image and landmarks
     V3DLONG dim_X = Image4DSimple_current->getXDim();

@@ -58,7 +58,7 @@ void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent);
  * @brief change names according to folder structure for storing things when
  * TeraFly data is used
  */
-QString modifyFileNameForTeraFly(const QString &filename);
+QString modifyFilePathForTeraFly(const QString &filename);
 
 /**
  * @brief Find and load the segmentation file for the current image

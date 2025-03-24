@@ -153,7 +153,7 @@ void analyzeSomaPCAReturnResults(unsigned char *labeledData, V3DLONG N,
   delete[] img3d;
 }
 
-QString modifyFileNameForTeraFly(const QString &fileName) {
+QString modifyFilePathForTeraFly(const QString &fileName) {
   QString modifiedFileName = fileName;
 
   // we are using terafly if the fileName starts with ID
@@ -184,8 +184,12 @@ void loadSegmentationFile(const QString &imageName, unsigned char *&segData,
                           V3DLONG sz[4], int &datatype,
                           V3DPluginCallback2 &callback, QWidget *parent) {
   // Construct segmentation filename (try different options)
-  QString segFileName =
-      modifyFileNameForTeraFly(imageName + "_binary_segmentation.tif");
+  QString segFileName = QDir::currentPath() + "/" +
+                        modifyFilePathForTeraFly(imageName) +
+                        "_binary_segmentation.tif";
+
+  printf("Looking for segmentation file: %s\n",
+         segFileName.toStdString().c_str());
 
   bool foundSegFile = false;
   if (QFile::exists(segFileName)) {
