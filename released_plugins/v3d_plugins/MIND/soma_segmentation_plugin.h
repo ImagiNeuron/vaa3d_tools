@@ -68,8 +68,11 @@ void isotropic_correction_func(V3DPluginCallback2 &callback, QWidget *parent,
 void pca_func(V3DPluginCallback2 &callback, QWidget *parent, input_PARA &PARA,
               bool bmenu);
 
-// Simulation of synthetic soma data
+std::tuple<char, char, char> colormap(double value);
 
+void visualizeProbabilityModel_func(V3DPluginCallback2 &callback, QWidget *parent);
+
+// Simulation of synthetic soma data
 void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
                         input_PARA &PARA, bool bmenu);
 
