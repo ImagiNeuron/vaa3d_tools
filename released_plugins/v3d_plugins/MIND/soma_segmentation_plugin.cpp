@@ -30,7 +30,6 @@
 #include "ResolutionDialog.h"
 #include "basic_4dimage.h"
 #include "basic_surf_objs.h"
-#include "cellSegmentation_plugin.h"
 #include "v3d_message.h"
 
 using namespace std;
@@ -1258,7 +1257,8 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
   // overlay
   overlaySimulation(callback, parent, outSegData, gradientImage,
                     outIntensityData);
-  // // Create and show new window with binary simulated data. Now Obsolote
+  // // Create and show new window with binary simulated data. Now Obsolete
+  // Create an image for the binary and realistic simulation data
   // Image4DSimple outSegImage;
   // outSegImage.setData(outSegData, out_sz[0], out_sz[1], out_sz[2], out_sz[3],
   //                     V3D_UINT8);

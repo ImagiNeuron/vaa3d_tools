@@ -36,11 +36,10 @@
 #include <string>
 #include <vector>
 
-#include "cellSegmentation_plugin.h"
-#include "soma_segmentation_plugin.h"
 #include "compute_win_pca_wp.h"
 #include "convert_type2uint8.h"
 #include "pcaAnalysis.h"
+#include "soma_segmentation_plugin.h"
 #include "sstream"
 #include "string"
 #include "v3d_message.h"
@@ -1028,7 +1027,8 @@ class cellSegmentation : public QObject {
 
       QString saveModelPath = fileName + "_probability_model.bin";
 
-      if (!saveProbabilityModel(saveModelPath.toStdString(), probabilityModel, cubeSize, cubeSize, cubeSize)) {
+      if (!saveProbabilityModel(saveModelPath.toStdString(), probabilityModel,
+                                cubeSize, cubeSize, cubeSize)) {
         printf("Failed to save probability model\n");
       }
 
@@ -1203,11 +1203,14 @@ class cellSegmentation : public QObject {
     /**
      * @brief Helper function to save the probability model to a binary file.
      */
-    static bool saveProbabilityModel(const std::string &filename, const double *probabilityModel, V3DLONG dimX, V3DLONG dimY, V3DLONG dimZ) {
+    static bool saveProbabilityModel(const std::string &filename,
+                                     const double *probabilityModel,
+                                     V3DLONG dimX, V3DLONG dimY, V3DLONG dimZ) {
       std::ofstream outFile(filename, std::ios::binary);
 
       if (!outFile) {
-        std::cerr << "Error: Could not open file " << filename << " for writing." << std::endl;
+        std::cerr << "Error: Could not open file " << filename
+                  << " for writing." << std::endl;
         return false;
       }
 
@@ -1216,9 +1219,11 @@ class cellSegmentation : public QObject {
       outFile.write(reinterpret_cast<const char *>(&dimZ), sizeof(V3DLONG));
 
       // Write the entire array as binary.
-      outFile.write(reinterpret_cast<const char *>(probabilityModel), dimX * dimY * dimZ * sizeof(double));
+      outFile.write(reinterpret_cast<const char *>(probabilityModel),
+                    dimX * dimY * dimZ * sizeof(double));
       if (!outFile.good()) {
-        std::cerr << "Error: Failed to write data to file " << filename << "." << std::endl;
+        std::cerr << "Error: Failed to write data to file " << filename << "."
+                  << std::endl;
         return false;
       }
 
@@ -1229,11 +1234,15 @@ class cellSegmentation : public QObject {
     /**
      * @brief Helper function to load a probability model from a binary file.
      */
-    static bool loadProbabilityModel(const std::string &filename, std::vector<double>& probabilityModelOut, V3DLONG& dimXOut, V3DLONG& dimYOut, V3DLONG& dimZOut) {
+    static bool loadProbabilityModel(const std::string &filename,
+                                     std::vector<double> &probabilityModelOut,
+                                     V3DLONG &dimXOut, V3DLONG &dimYOut,
+                                     V3DLONG &dimZOut) {
       std::ifstream inFile(filename, std::ios::binary);
 
       if (!inFile) {
-        std::cerr << "Error: Could not open file " << filename << " for reading." << std::endl;
+        std::cerr << "Error: Could not open file " << filename
+                  << " for reading." << std::endl;
         return false;
       }
 
@@ -1243,10 +1252,12 @@ class cellSegmentation : public QObject {
 
       // Read the entire array from the binary file.
       probabilityModelOut.resize(dimXOut * dimYOut * dimZOut);
-      inFile.read(reinterpret_cast<char *>(probabilityModelOut.data()), dimXOut * dimYOut * dimZOut * sizeof(double));
+      inFile.read(reinterpret_cast<char *>(probabilityModelOut.data()),
+                  dimXOut * dimYOut * dimZOut * sizeof(double));
 
       if (!inFile.good() && !inFile.eof()) {
-        std::cerr << "Error: Failed to read data from file " << filename << "." << std::endl;
+        std::cerr << "Error: Failed to read data from file " << filename << "."
+                  << std::endl;
         return false;
       }
 
