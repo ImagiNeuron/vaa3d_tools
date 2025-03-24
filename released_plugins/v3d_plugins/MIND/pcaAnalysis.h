@@ -63,16 +63,9 @@ QString modifyFileNameForTeraFly(const QString &filename);
 /**
  * @brief Find and load the segmentation file for the current image
  */
-void loadSegmentationFile(const QString &imageName,
-                          const QString &currentImagePath,
-                          const QString &baseImageName, unsigned char *&segData,
+void loadSegmentationFile(const QString &imageName, unsigned char *&segData,
                           V3DLONG sz[4], int &datatype,
                           V3DPluginCallback2 &callback, QWidget *parent);
-
-/**
- * @brief Simulate somas based on segmentation
- */
-void simulate_somas(V3DPluginCallback2 &callback, QWidget *parent);
 
 /**
  * @brief Create a background image based on segmentation threshold and return
@@ -89,22 +82,6 @@ unsigned char ***create_background(V3DPluginCallback2 &callback,
                                    V3DLONG &dim_Y, V3DLONG &dim_Z);
 
 /**
- * @brief Create background intensity values based on segmentation threshold
- * @param callback V3DPluginCallback2 reference
- * @param parent Parent widget
- * @param dimX Output parameter for X dimension
- * @param dimY Output parameter for Y dimension
- * @param dimZ Output parameter for Z dimension
- * @return 3D array of background intensity values (not binary segmentation).
- *         The values follow Gaussian distribution with mean and standard
- * deviation calculated from background voxels in the original image. The caller
- * is responsible for freeing this memory using free_3d_array(array, dimZ, dimY)
- */
-unsigned char ***create_background(V3DPluginCallback2 &callback,
-                                   QWidget *parent, V3DLONG &dimX,
-                                   V3DLONG &dimY, V3DLONG &dimZ);
-
-/**
  * @brief Create a background image based on segmentation threshold
  * @param callback V3DPluginCallback2 reference
  * @param parent Parent widget
@@ -119,45 +96,6 @@ void create_background(V3DPluginCallback2 &callback, QWidget *parent);
  * @param dim_Y Number of rows
  */
 void free_3d_array(unsigned char ***array, V3DLONG dim_Z, V3DLONG dim_Y);
-
-/**
- * @brief Retrieve PCA information for a specific soma from a CSV file
- *
- * @param somaID The ID of the soma to retrieve information for
- * @param imageName The base image name to construct the CSV filename
- * @param pc1 Output parameter for first principal component eigenvalue
- * @param pc2 Output parameter for second principal component eigenvalue
- * @param pc3 Output parameter for third principal component eigenvalue
- * @param vec1 Output array for first principal component eigenvector (size 3)
- * @param vec2 Output array for second principal component eigenvector (size 3)
- * @param vec3 Output array for third principal component eigenvector (size 3)
- * @param x_center Output parameter for x-coordinate of center of mass
- * @param y_center Output parameter for y-coordinate of center of mass
- * @param z_center Output parameter for z-coordinate of center of mass
- * @return bool True if successful, false otherwise
- */
-bool get_PCA_info(int somaID, const QString &imageName, double &pc1,
-                  double &pc2, double &pc3, double vec1[3], double vec2[3],
-                  double vec3[3], double &x_center, double &y_center,
-                  double &z_center);
-
-/**
- * @brief Map intensities from an image and its segmentation into 3D arrays
- * @param callback V3DPluginCallback2 reference
- * @param intensities Output parameter for 3D array of intensity values
- * @param segmentation Output parameter for 3D array of binary segmentation
- * values
- * @param dim_X Output parameter for X dimension
- * @param dim_Y Output parameter for Y dimension
- * @param dim_Z Output parameter for Z dimension
- * @param channel Channel to extract intensity values from (0-based index)
- * @return true if successful, false otherwise
- */
-bool map_intensities(V3DPluginCallback2 &callback,
-                     unsigned char ***&intensities,
-                     unsigned char ***&segmentation, V3DLONG &dim_X,
-                     V3DLONG &dim_Y, V3DLONG &dim_Z, int channel = 0,
-                     QWidget *parent = nullptr);
 
 /**
  * @brief Free memory allocated for two 3D arrays (intensities and segmentation)

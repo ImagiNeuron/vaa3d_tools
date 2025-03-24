@@ -124,10 +124,10 @@ MIND_4DImage *reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
  * Plugin Interface Methods
  **************************************/
 QStringList SomaSegmentation::menulist() const {
-  return QStringList() << tr("isotropic_correction") << tr("soma_segmentation")
-                       << tr("pc_analysis") << tr("Visualize PCA")
-                       << tr("Simulate Somas") << tr("Create Background")
-                       << tr("simulate_soma_data") << tr("about");
+  return QStringList() << tr("Isotropic Correction") << tr("Soma Segmentation")
+                       << tr("PC Analysis") << tr("Visualize PCA")
+                       << tr("Create Background") << tr("Simulate Somas")
+                       << tr("about");
 }
 
 QStringList SomaSegmentation::funclist() const {
@@ -145,26 +145,24 @@ QStringList SomaSegmentation::funclist() const {
  */
 void SomaSegmentation::domenu(const QString &menu_name,
                               V3DPluginCallback2 &callback, QWidget *parent) {
-  if (menu_name == tr("soma_segmentation")) {
+  if (menu_name == tr("Soma Segmentation")) {
     bool bmenu = true;
     input_PARA PARA;
     cellSegmentation cellseg;
     cellseg.interface_run(callback, parent);
-  } else if (menu_name == tr("isotropic_correction")) {
+  } else if (menu_name == tr("Isotropic Correction")) {
     bool bmenu = true;
     input_PARA PARA;
     isotropic_correction_func(callback, parent, PARA, bmenu);
-  } else if (menu_name == tr("pc_analysis")) {
+  } else if (menu_name == tr("PC Analysis")) {
     bool bmenu = true;
     input_PARA PARA;
     pca_func(callback, parent, PARA, bmenu);
   } else if (menu_name == tr("Visualize PCA")) {
     visualizePCA_func(callback, parent);
-  } else if (menu_name == tr("Simulate Somas")) {
-    simulate_somas(callback, parent);
   } else if (menu_name == tr("Create Background")) {
     create_background(callback, parent);
-  } else if (menu_name == tr("simulate_soma_data")) {
+  } else if (menu_name == tr("Simulate Somas")) {
     bool bmenu = true;
     input_PARA PARA;
     simulate_soma_data(callback, parent, PARA, bmenu);
@@ -587,8 +585,7 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
   unsigned char *segData = nullptr;
   V3DLONG sz[4];
   int datatype = 0;
-  loadSegmentationFile(imageName, currentImagePath, baseImageName, segData, sz,
-                       datatype, callback, parent);
+  loadSegmentationFile(imageName, segData, sz, datatype, callback, parent);
 
   /*
    * Load segmentation image PCA and get distribution of soma properties
@@ -746,8 +743,6 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
   memset(outSegData, 0, totalSize);
 
   // Create output image with original intensity values
-  // unsigned char *outIntensityData = new unsigned char[totalSize];
-  // memset(outIntensityData, 0, totalSize);
   unsigned char ***intensityBackground =
       create_background(callback, parent, xDim, yDim, zDim);
   // Convert intensityBackground to 1D array
@@ -904,13 +899,7 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
     // Generate eigenvectors with normal distributions
     for (int j = 0; j < 3; j++) {
       std::normal_distribution<> dv1(meanEigenvectors[j], stdEigenvectors[j]);
-      std::normal_distribution<> dv2(meanEigenvectors[j + 3],
-                                     stdEigenvectors[j + 3]);
-      std::normal_distribution<> dv3(meanEigenvectors[j + 6],
-                                     stdEigenvectors[j + 6]);
       randomVec1[j] = dv1(gen);
-      randomVec2[j] = dv2(gen);
-      randomVec3[j] = dv3(gen);
     }
 
     // Normalize first vector
@@ -922,49 +911,123 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
     }
 
     // Make second vector orthogonal to the first using Gram-Schmidt process
-    // Project randomVec2 onto randomVec1
-    double dot_product1 = randomVec2[0] * randomVec1[0] +
-                          randomVec2[1] * randomVec1[1] +
-                          randomVec2[2] * randomVec1[2];
+    bool validSecondVector = false;
+    int maxRetries = 10;  // Prevent infinite loops
+    int retryCount = 0;
 
-    // Subtract the projection from randomVec2
-    for (int j = 0; j < 3; j++) {
-      randomVec2[j] -= dot_product1 * randomVec1[j];
+    while (!validSecondVector && retryCount < maxRetries) {
+      // Generate eigenvectors with normal distributions
+      for (int j = 0; j < 3; j++) {
+        std::normal_distribution<> dv2(meanEigenvectors[j + 3],
+                                       stdEigenvectors[j + 3]);
+        randomVec2[j] = dv2(gen);
+      }
+
+      // Project randomVec2 onto randomVec1
+      double dot_product1 = randomVec2[0] * randomVec1[0] +
+                            randomVec2[1] * randomVec1[1] +
+                            randomVec2[2] * randomVec1[2];
+
+      // Subtract the projection from randomVec2
+      for (int j = 0; j < 3; j++) {
+        randomVec2[j] -= dot_product1 * randomVec1[j];
+      }
+
+      // Compute the norm of the resulting vector
+      double norm2 =
+          sqrt(randomVec2[0] * randomVec2[0] + randomVec2[1] * randomVec2[1] +
+               randomVec2[2] * randomVec2[2]);
+
+      // Check if the resulting vector is not too small
+      if (norm2 >= 1e-6) {
+        validSecondVector = true;
+      }
+
+      retryCount++;
+    }
+
+    // If still no valid second vector after retries, generate an arbitrary
+    // vector perpendicular to randomVec1
+    if (!validSecondVector) {
+      if (fabs(randomVec1[0]) < fabs(randomVec1[1]) &&
+          fabs(randomVec1[0]) < fabs(randomVec1[2])) {
+        randomVec2[0] = 1.0;
+        randomVec2[1] = 0.0;
+        randomVec2[2] = 0.0;
+      } else if (fabs(randomVec1[1]) < fabs(randomVec1[2])) {
+        randomVec2[0] = 0.0;
+        randomVec2[1] = 1.0;
+        randomVec2[2] = 0.0;
+      } else {
+        randomVec2[0] = 0.0;
+        randomVec2[1] = 0.0;
+        randomVec2[2] = 1.0;
+      }
+
+      // Make it orthogonal to randomVec1
+      double dot_product1 = randomVec2[0] * randomVec1[0] +
+                            randomVec2[1] * randomVec1[1] +
+                            randomVec2[2] * randomVec1[2];
+
+      for (int j = 0; j < 3; j++) {
+        randomVec2[j] -= dot_product1 * randomVec1[j];
+      }
+
+      // Compute the norm of the resulting vector
+      double norm2 =
+          sqrt(randomVec2[0] * randomVec2[0] + randomVec2[1] * randomVec2[1] +
+               randomVec2[2] * randomVec2[2]);
     }
 
     // Normalize second vector
-    double norm2 =
-        sqrt(randomVec2[0] * randomVec2[0] + randomVec2[1] * randomVec2[1] +
-             randomVec2[2] * randomVec2[2]);
     for (int j = 0; j < 3; j++) {
       randomVec2[j] /= norm2;
     }
 
     // Make third vector orthogonal to first two using Gram-Schmidt
-    // Project randomVec3 onto randomVec1
-    double dot_product3_1 = randomVec3[0] * randomVec1[0] +
-                            randomVec3[1] * randomVec1[1] +
-                            randomVec3[2] * randomVec1[2];
+    bool validThirdVector = false;
+    retryCount = 0;
 
-    // Project randomVec3 onto randomVec2
-    double dot_product3_2 = randomVec3[0] * randomVec2[0] +
-                            randomVec3[1] * randomVec2[1] +
-                            randomVec3[2] * randomVec2[2];
+    while (!validThirdVector && retryCount < maxRetries) {
+      // Generate eigenvectors with normal distributions
+      for (int j = 0; j < 3; j++) {
+        std::normal_distribution<> dv3(meanEigenvectors[j + 6],
+                                       stdEigenvectors[j + 6]);
+        randomVec3[j] = dv3(gen);
+      }
 
-    // Subtract both projections to make it orthogonal to both vectors
-    for (int j = 0; j < 3; j++) {
-      randomVec3[j] = randomVec3[j] - dot_product3_1 * randomVec1[j] -
-                      dot_product3_2 * randomVec2[j];
+      // Project randomVec3 onto randomVec1
+      double dot_product3_1 = randomVec3[0] * randomVec1[0] +
+                              randomVec3[1] * randomVec1[1] +
+                              randomVec3[2] * randomVec1[2];
+
+      // Project randomVec3 onto randomVec2
+      double dot_product3_2 = randomVec3[0] * randomVec2[0] +
+                              randomVec3[1] * randomVec2[1] +
+                              randomVec3[2] * randomVec2[2];
+
+      // Subtract both projections to make it orthogonal to both vectors
+      for (int j = 0; j < 3; j++) {
+        randomVec3[j] = randomVec3[j] - dot_product3_1 * randomVec1[j] -
+                        dot_product3_2 * randomVec2[j];
+      }
+
+      // Normalize third vector
+      double norm3 =
+          sqrt(randomVec3[0] * randomVec3[0] + randomVec3[1] * randomVec3[1] +
+               randomVec3[2] * randomVec3[2]);
+
+      // Check if the resulting vector is not too small
+      if (norm3 >= 1e-6) {
+        validThirdVector = true;
+      }
+
+      retryCount++;
     }
 
-    // Normalize third vector
-    double norm3 =
-        sqrt(randomVec3[0] * randomVec3[0] + randomVec3[1] * randomVec3[1] +
-             randomVec3[2] * randomVec3[2]);
-
-    // Check if the resulting vector is too small (near zero)
-    if (norm3 < 1e-6) {
-      // If so, fall back to cross product method
+    // If still no valid third vector after retries, generate with cross product
+    // method
+    if (!validThirdVector) {
       randomVec3[0] =
           randomVec1[1] * randomVec2[2] - randomVec1[2] * randomVec2[1];
       randomVec3[1] =
