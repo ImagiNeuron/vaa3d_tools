@@ -329,9 +329,9 @@ void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent) {
 
     int somaID;
     double center[3];
-    // double pc1, pc2, pc3;
+    double pc1Length, pc2Length, pc3Length;
     double vec1Pos[3], vec2Pos[3], vec3Pos[3];
-    double radius;
+    // double radius;
 
     int col = 0;
     while (std::getline(ss, token, ',')) {
@@ -340,9 +340,9 @@ void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent) {
           somaID = std::stoi(token);
           break;
         // case 1,2,3: // marker position
-        case 4:
-          radius = std::stod(token);
-          break;
+        // case 4:
+        //   radius = std::stod(token);
+        //   break;
         case 5:
           center[0] = std::stod(token);
           break;
@@ -352,41 +352,41 @@ void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent) {
         case 7:
           center[2] = std::stod(token);
           break;
-        // case 8:
-        //   pc1 = std::stod(token);
-        //   break;
-        // case 9:
-        //   pc2 = std::stod(token);
-        //   break;
-        // case 10:
-        //   pc3 = std::stod(token);
-        //   break;
+        case 8:
+          pc1Length = 2.35 * sqrt(std::stod(token));
+          break;
+        case 9:
+          pc2Length = 2.35 * sqrt(std::stod(token));
+          break;
+        case 10:
+          pc3Length = 2.35 * sqrt(std::stod(token));
+          break;
         case 11:
-          vec1Pos[0] = radius * std::stod(token) + center[0];
+          vec1Pos[0] = pc1Length * std::stod(token) + center[0];
           break;
         case 12:
-          vec1Pos[1] = radius * std::stod(token) + center[1];
+          vec1Pos[1] = pc1Length * std::stod(token) + center[1];
           break;
         case 13:
-          vec1Pos[2] = radius * std::stod(token) + center[2];
+          vec1Pos[2] = pc1Length * std::stod(token) + center[2];
           break;
         case 14:
-          vec2Pos[0] = 0.5 * radius * std::stod(token) + center[0];
+          vec2Pos[0] = pc2Length * std::stod(token) + center[0];
           break;
         case 15:
-          vec2Pos[1] = 0.5 * radius * std::stod(token) + center[1];
+          vec2Pos[1] = pc2Length * std::stod(token) + center[1];
           break;
         case 16:
-          vec2Pos[2] = 0.5 * radius * std::stod(token) + center[2];
+          vec2Pos[2] = pc2Length * std::stod(token) + center[2];
           break;
         case 17:
-          vec3Pos[0] = 0.5 * radius * std::stod(token) + center[0];
+          vec3Pos[0] = pc3Length * std::stod(token) + center[0];
           break;
         case 18:
-          vec3Pos[1] = 0.5 * radius * std::stod(token) + center[1];
+          vec3Pos[1] = pc3Length * std::stod(token) + center[1];
           break;
         case 19:
-          vec3Pos[2] = 0.5 * radius * std::stod(token) + center[2];
+          vec3Pos[2] = pc3Length * std::stod(token) + center[2];
           break;
       }
       col++;
