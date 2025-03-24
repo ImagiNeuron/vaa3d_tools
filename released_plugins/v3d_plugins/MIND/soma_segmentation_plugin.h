@@ -70,10 +70,17 @@ void pca_func(V3DPluginCallback2 &callback, QWidget *parent, input_PARA &PARA,
 
 std::tuple<char, char, char> colormap(double value);
 
+// visualize probability model of somas
 void visualizeProbabilityModel_func(V3DPluginCallback2 &callback, QWidget *parent);
 
 // Simulation of synthetic soma data
 void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
                         input_PARA &PARA, bool bmenu);
+
+// display simulation results
+void overlaySimulation(V3DPluginCallback2 &callback, QWidget *parent,
+                       unsigned char *binarySegImage,
+                       unsigned char *gradientImage,
+                       unsigned char *simulatedImage) ; 
 
 #endif  // __SOMA_SEGMENTATION_PLUGIN_H__

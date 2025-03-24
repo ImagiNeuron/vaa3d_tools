@@ -154,10 +154,10 @@ void analyzeSomaPCAReturnResults(unsigned char *labeledData, V3DLONG N,
 }
 
 QString modifyFilePathForTeraFly(const QString &fileName) {
-  QString modifiedFileName = fileName;
+  QString modifiedFilePath = fileName;
 
   // we are using terafly if the fileName starts with ID
-  if (modifiedFileName.startsWith("ID")) {
+  if (modifiedFilePath.startsWith("ID")) {
     // check if the MIND folder already exists, if not, create it
     QDir dir("MIND");
     if (!dir.exists()) {
@@ -165,28 +165,30 @@ QString modifyFilePathForTeraFly(const QString &fileName) {
     }
 
     // replace ID(%), with ""
-    modifiedFileName.replace(QRegularExpression("ID\\(.*\\), "), "");
-    modifiedFileName.replace("1 channels_processed", "");
+    modifiedFilePath.replace(QRegularExpression("ID\\(.*\\), "), "");
+    modifiedFilePath.replace("1 channels_processed", "");
 
     // check if folder for this image exists
-    QDir dir2("MIND/" + modifiedFileName);
+    QDir dir2("MIND/" + modifiedFilePath);
     if (!dir2.exists()) {
       dir2.mkpath(".");
     }
 
-    modifiedFileName = "MIND/" + modifiedFileName + "/";
+    modifiedFilePath = QDir::currentPath() + "/MIND/" + modifiedFilePath + "/";
+  } else {
+    // if not using terafly, just remove the file extension
+    modifiedFilePath = modifiedFilePath.split(".")[0];
   }
 
-  return modifiedFileName;
+  return modifiedFilePath;
 }
 
 void loadSegmentationFile(const QString &imageName, unsigned char *&segData,
                           V3DLONG sz[4], int &datatype,
                           V3DPluginCallback2 &callback, QWidget *parent) {
   // Construct segmentation filename (try different options)
-  QString segFileName = QDir::currentPath() + "/" +
-                        modifyFilePathForTeraFly(imageName) +
-                        "_binary_segmentation.tif";
+  QString segFileName =
+      modifyFilePathForTeraFly(imageName) + "_binary_segmentation.tif";
 
   printf("Looking for segmentation file: %s\n",
          segFileName.toStdString().c_str());

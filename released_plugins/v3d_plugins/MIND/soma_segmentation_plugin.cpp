@@ -125,7 +125,8 @@ MIND_4DImage *reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
  **************************************/
 QStringList SomaSegmentation::menulist() const {
   return QStringList() << tr("Isotropic Correction") << tr("Soma Segmentation")
-                       << tr("PC Analysis") << tr("Visualize PCA") << tr("Visualize Probability Model")
+                       << tr("PC Analysis") << tr("Visualize PCA")
+                       << tr("Visualize Probability Model")
                        << tr("Create Background") << tr("Simulate Somas")
                        << tr("about");
 }
@@ -550,14 +551,15 @@ std::tuple<char, char, char> colormap(double value) {
   g = std::clamp(g, 0.0, 1.0);
   b = std::clamp(b, 0.0, 1.0);
 
-  return {static_cast<char>(r * 255),
-          static_cast<char>(g * 255),
+  return {static_cast<char>(r * 255), static_cast<char>(g * 255),
           static_cast<char>(b * 255)};
 }
 
-void visualizeProbabilityModel_func(V3DPluginCallback2 &callback, QWidget *parent) {
+void visualizeProbabilityModel_func(V3DPluginCallback2 &callback,
+                                    QWidget *parent) {
   // Load data
-  QString filename = QFileDialog::getOpenFileName(parent, "Open Probability Model", "", "Binary Files (*.bin)");
+  QString filename = QFileDialog::getOpenFileName(
+      parent, "Open Probability Model", "", "Binary Files (*.bin)");
 
   if (filename.isEmpty()) {
     printf("No file selected.\n");
@@ -566,7 +568,8 @@ void visualizeProbabilityModel_func(V3DPluginCallback2 &callback, QWidget *paren
 
   std::vector<double> data;
   V3DLONG dim_X, dim_Y, dim_Z;
-  cellSegmentation::class_segmentationMain::loadProbabilityModel(filename.toStdString().c_str(), data, dim_X, dim_Y, dim_Z);
+  cellSegmentation::class_segmentationMain::loadProbabilityModel(
+      filename.toStdString().c_str(), data, dim_X, dim_Y, dim_Z);
 
   Image4DSimple *p4DImage = new Image4DSimple();
   p4DImage->createBlankImage(dim_X, dim_Y, dim_Z, 3, V3D_UINT8);
@@ -575,10 +578,8 @@ void visualizeProbabilityModel_func(V3DPluginCallback2 &callback, QWidget *paren
   double max = data[0];
 
   for (V3DLONG i = 0; i < dim_X * dim_Y * dim_Z; i++) {
-    if (data[i] < min)
-      min = data[i];
-    if (data[i] > max)
-      max = data[i];
+    if (data[i] < min) min = data[i];
+    if (data[i] > max) max = data[i];
   }
 
   unsigned char *pixels = p4DImage->getRawData();
@@ -592,6 +593,33 @@ void visualizeProbabilityModel_func(V3DPluginCallback2 &callback, QWidget *paren
 
   v3dhandle newwin = callback.newImageWindow("Probability Model");
   callback.setImage(newwin, p4DImage);
+}
+
+/**
+ * @brief overlay the ground truth data on the new simulated image. Dimesnions
+ * calculated based on current image
+ */
+void overlaySimulation(V3DPluginCallback2 &callback, QWidget *parent,
+                       unsigned char *binarySegImage,
+                       unsigned char *gradientImage,
+                       unsigned char *simulatedImage) {
+  v3dhandle curwin = callback.currentImageWindow();
+  v3dhandle newwin = callback.newImageWindow();
+
+  Image4DSimple *p4DImage = callback.getImage(curwin);
+  unsigned char *newData = new unsigned char[p4DImage->getTotalBytes() * 3];
+
+  memcpy(newData, simulatedImage, p4DImage->getTotalBytes());
+  memcpy(newData + p4DImage->getTotalBytes(), binarySegImage,
+         p4DImage->getTotalBytes());
+  memcpy(newData + p4DImage->getTotalBytes() * 2, gradientImage,
+         p4DImage->getTotalBytes());
+
+  Image4DSimple *newImage = new Image4DSimple;
+  newImage->setData(newData, p4DImage->getXDim(), p4DImage->getYDim(),
+                    p4DImage->getZDim(), p4DImage->getCDim() * 3, V3D_UINT8);
+
+  callback.setImage(newwin, newImage);
 }
 
 /**
@@ -652,9 +680,8 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
    */
 
   // Find the segmentation image PCA file
-  QString segPcaFileName = QDir::currentPath() + "/" +
-                           modifyFilePathForTeraFly(imageName) +
-                           "_pca_binary_segmentation.csv";
+  QString segPcaFileName =
+      modifyFilePathForTeraFly(imageName) + "_pca_binary_segmentation.csv";
 
   // Check if the PCA file exists
   if (!QFile::exists(segPcaFileName)) {
@@ -1222,21 +1249,31 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
    * Open new windows and display the synthetic soma data
    */
 
-  // Create and show new window with binary simulated data
-  Image4DSimple outSegImage;
-  outSegImage.setData(outSegData, out_sz[0], out_sz[1], out_sz[2], out_sz[3],
-                      V3D_UINT8);
-  v3dhandle segWin = callback.newImageWindow();
-  callback.setImage(segWin, &outSegImage);
-  callback.setImageName(segWin, outSegFileName);
-  callback.updateImageWindow(segWin);
+  unsigned char *gradientImage = new unsigned char[totalSize];
+  cellSegmentation cellSeg;
+  cellSeg.sobel3D(outSegData, gradientImage, xDim, yDim,
+                                          zDim);
 
-  // Create and show new window with intensity simulated data
-  Image4DSimple outIntensityImage;
-  outIntensityImage.setData(outIntensityData, out_sz[0], out_sz[1], out_sz[2],
-                            out_sz[3], V3D_UINT8);
-  v3dhandle intensityWin = callback.newImageWindow();
-  callback.setImage(intensityWin, &outIntensityImage);
-  callback.setImageName(intensityWin, outIntensityFileName);
-  callback.updateImageWindow(intensityWin);
+  // overlay
+  overlaySimulation(callback, parent, outSegData, gradientImage,
+                    outIntensityData);
+  // // Create and show new window with binary simulated data. Now Obsolete
+  // Create an image for the binary and realistic simulation data
+  // Image4DSimple outSegImage;
+  // outSegImage.setData(outSegData, out_sz[0], out_sz[1], out_sz[2], out_sz[3],
+  //                     V3D_UINT8);
+  // v3dhandle segWin = callback.newImageWindow();
+  // callback.setImage(segWin, &outSegImage);
+  // callback.setImageName(segWin, outSegFileName);
+  // callback.updateImageWindow(segWin);
+
+  // // Create and show new window with intensity simulated data
+  // Image4DSimple outIntensityImage;
+  // outIntensityImage.setData(outIntensityData, out_sz[0], out_sz[1],
+  // out_sz[2],
+  //                           out_sz[3], V3D_UINT8);
+  // v3dhandle intensityWin = callback.newImageWindow();
+  // callback.setImage(intensityWin, &outIntensityImage);
+  // callback.setImageName(intensityWin, outIntensityFileName);
+  // callback.updateImageWindow(intensityWin);
 }
