@@ -1017,8 +1017,7 @@ class cellSegmentation : public QObject {
 
       QString saveModelPath = fileName + "_probability_model.bin";
 
-      if (!saveProbabilityModel(saveModelPath.toStdString(), probabilityModel,
-                                totalVoxels)) {
+      if (!saveProbabilityModel(saveModelPath.toStdString(), probabilityModel, cubeSize, cubeSize, cubeSize)) {
         printf("Failed to save probability model\n");
       }
 
