@@ -37,6 +37,7 @@
 #include <vector>
 
 #include "cellSegmentation_plugin.h"
+#include "soma_segmentation_plugin.h"
 #include "compute_win_pca_wp.h"
 #include "convert_type2uint8.h"
 #include "pcaAnalysis.h"
