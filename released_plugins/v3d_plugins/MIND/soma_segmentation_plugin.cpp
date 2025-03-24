@@ -1126,7 +1126,7 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
    * Save the synthetic soma segmentation images
    */
   QString outSegFileName =
-      modifyFilePathForTeraFly(imageName) + "_simulated_seg.tif";
+      modifyFilePathForTeraFly(imageName) + "_simulated_segmentation.tif";
   QString outIntensityFileName =
       modifyFilePathForTeraFly(imageName) + "_simulated_intensity.tif";
 
