@@ -49,7 +49,7 @@ const double const_max_voxelValue = 255;
 // 27 directions -1
 const int const_count_neighbors = 26;
 // small enough global value as a last resort
-const double default_threshold_global = 15;
+const double default_threshold_global = 7;
 // cube of voxels of length 2
 const int default_threshold_regionSize = 8;
 const double const_infinitesimal = 0.000000001;
@@ -679,7 +679,7 @@ class cellSegmentation : public QObject {
         }
 
         // region is too large
-        if (poss_exemplarRegionOld.size() > (this->size_page / 1000)) {
+        if (poss_exemplarRegionOld.size() > (this->size_page / 100)) {
           printf("Marker number %d failed - poss_exemplarRegionOld was %d\n",
                  idx_exemplar, poss_exemplarRegionOld.size());
           continue;
@@ -973,8 +973,7 @@ class cellSegmentation : public QObject {
 
         // Rotate the segmentation so that its principal axes align with the x,
         // y, and z axes.
-        rotateSegmentation(somaSegmentation, cubeSize, pc1, pc2, pc3, vec1,
-                           vec2, vec3);
+        rotateSegmentation(somaSegmentation, cubeSize, vec1, vec2, vec3);
 
         // Accumulate the binary segmentation into the probability model.
         for (V3DLONG i = 0; i < totalVoxels; i++) {
@@ -1076,7 +1075,6 @@ class cellSegmentation : public QObject {
      * @brief Helper function to rotate a segmented soma using PCA results.
      */
     void rotateSegmentationToAxes(double *segmentation, V3DLONG cubeSize,
-                                  double pc1, double pc2, double pc3,
                                   double ev1[3], double ev2[3], double ev3[3],
                                   double ax1[3], double ax2[3], double ax3[3]) {
       V3DLONG totalVoxels = cubeSize * cubeSize * cubeSize;
@@ -1182,15 +1180,14 @@ class cellSegmentation : public QObject {
     /**
      * @brief Helper function to rotate a segmented soma using PCA results.
      */
-    void rotateSegmentation(double *segmentation, V3DLONG cubeSize, double pc1,
-                            double pc2, double pc3, double vec1[3],
-                            double vec2[3], double vec3[3]) {
+    void rotateSegmentation(double *segmentation, V3DLONG cubeSize,
+                            double vec1[3], double vec2[3], double vec3[3]) {
       // align first (longest) principal component with the y-axis
       double ax1[] = {0.0, 1.0, 0.0};
       double ax2[] = {1.0, 0.0, 0.0};
       double ax3[] = {0.0, 0.0, 1.0};
-      rotateSegmentationToAxes(segmentation, cubeSize, pc1, pc2, pc3, vec1,
-                               vec2, vec3, ax1, ax2, ax3);
+      rotateSegmentationToAxes(segmentation, cubeSize, vec1, vec2, vec3, ax1,
+                               ax2, ax3);
     }
 
     /**
@@ -2999,7 +2996,7 @@ class cellSegmentation : public QObject {
     }
 
     // modify name if necessary for TeraFly
-    fileName = modifyFileNameForTeraFly(fileName);
+    fileName = modifyFilePathForTeraFly(fileName);
 
     // get image and landmarks
     V3DLONG dim_X = Image4DSimple_current->getXDim();
