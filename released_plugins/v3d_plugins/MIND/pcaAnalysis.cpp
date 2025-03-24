@@ -291,7 +291,7 @@ void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent) {
   }
   Image4DSimple *pcaVisualization = new Image4DSimple();
   pcaVisualization->createBlankImage(p4DImage->getXDim(), p4DImage->getYDim(),
-                                     p4DImage->getZDim(), p4DImage->getCDim(),
+                                     p4DImage->getZDim(), 3,
                                      V3D_UINT8);
   pcaVisualization->setOriginX(p4DImage->getOriginX());
   pcaVisualization->setOriginY(p4DImage->getOriginY());
@@ -299,6 +299,10 @@ void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent) {
   pcaVisualization->setRezX(p4DImage->getRezX());
   pcaVisualization->setRezY(p4DImage->getRezY());
   pcaVisualization->setRezZ(p4DImage->getRezZ());
+
+  // copy original image to channel 1
+  memcpy(pcaVisualization->getRawData(), p4DImage->getRawData(),
+         p4DImage->getTotalUnitNumber() * p4DImage->getUnitBytes());
 
   // load pca data from csv
   QString filename = QFileDialog::getOpenFileName(parent, "Open PCA Results",
@@ -325,8 +329,9 @@ void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent) {
 
     int somaID;
     double center[3];
-    double pc1, pc2, pc3;
+    double pc1Length, pc2Length, pc3Length;
     double vec1Pos[3], vec2Pos[3], vec3Pos[3];
+    // double radius;
 
     int col = 0;
     while (std::getline(ss, token, ',')) {
@@ -334,69 +339,63 @@ void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent) {
         case 0:
           somaID = std::stoi(token);
           break;
-        case 1:
+        // case 1,2,3: // marker position
+        // case 4:
+        //   radius = std::stod(token);
+        //   break;
+        case 5:
           center[0] = std::stod(token);
           break;
-        case 2:
+        case 6:
           center[1] = std::stod(token);
           break;
-        case 3:
+        case 7:
           center[2] = std::stod(token);
           break;
-        // case 4: // radius
-        // case 5,6,7: // center of mass
         case 8:
-          pc1 = std::stod(token);
+          pc1Length = 2.35 * sqrt(std::stod(token));
           break;
         case 9:
-          pc2 = std::stod(token);
+          pc2Length = 2.35 * sqrt(std::stod(token));
           break;
         case 10:
-          pc3 = std::stod(token);
+          pc3Length = 2.35 * sqrt(std::stod(token));
           break;
         case 11:
-          vec1Pos[0] = pc1 * std::stod(token) + center[0];
+          vec1Pos[0] = pc1Length * std::stod(token) + center[0];
           break;
         case 12:
-          vec1Pos[1] = pc1 * std::stod(token) + center[1];
+          vec1Pos[1] = pc1Length * std::stod(token) + center[1];
           break;
         case 13:
-          vec1Pos[2] = pc1 * std::stod(token) + center[2];
+          vec1Pos[2] = pc1Length * std::stod(token) + center[2];
           break;
         case 14:
-          vec2Pos[0] = pc2 * std::stod(token) + center[0];
+          vec2Pos[0] = pc2Length * std::stod(token) + center[0];
           break;
         case 15:
-          vec2Pos[1] = pc2 * std::stod(token) + center[1];
+          vec2Pos[1] = pc2Length * std::stod(token) + center[1];
           break;
         case 16:
-          vec2Pos[2] = pc2 * std::stod(token) + center[2];
+          vec2Pos[2] = pc2Length * std::stod(token) + center[2];
           break;
         case 17:
-          vec3Pos[0] = pc3 * std::stod(token) + center[0];
+          vec3Pos[0] = pc3Length * std::stod(token) + center[0];
           break;
         case 18:
-          vec3Pos[1] = pc3 * std::stod(token) + center[1];
+          vec3Pos[1] = pc3Length * std::stod(token) + center[1];
           break;
         case 19:
-          vec3Pos[2] = pc3 * std::stod(token) + center[2];
+          vec3Pos[2] = pc3Length * std::stod(token) + center[2];
           break;
       }
       col++;
     }
 
-    printf(
-        "Soma #%d PCA Results. Center (%f, %f, %f) | eigenvals (%f, %f, %f) | "
-        "vec1Pos (%f, %f, %f) | vec2Pos (%f, %f, %f) | vec3Pos (%f, %f, "
-        "%f)\n\n",
-        somaID, center[0], center[1], center[2], pc1, pc2, pc3, vec1Pos[0],
-        vec1Pos[1], vec1Pos[2], vec2Pos[0], vec2Pos[1], vec2Pos[2], vec3Pos[0],
-        vec3Pos[1], vec3Pos[2]);
-
     // Visualize
-    drawLine(pcaVisualization, center, vec1Pos);
-    drawLine(pcaVisualization, center, vec2Pos);
-    drawLine(pcaVisualization, center, vec3Pos);
+    drawLine(pcaVisualization, 1, center, vec1Pos);
+    drawLine(pcaVisualization, 2, center, vec2Pos);
+    drawLine(pcaVisualization, 2, center, vec3Pos);
   }
 
   inFile.close();
@@ -406,7 +405,7 @@ void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent) {
   callback.setImage(newwin, pcaVisualization);
 }
 
-void drawLine(Image4DSimple *image, double *from, double *to) {
+void drawLine(Image4DSimple *image, int channel, double *from, double *to) {
   // convert points from world space to image space
   int x1 = (int)((from[0] - image->getOriginX()) / image->getRezX());
   int y1 = (int)((from[1] - image->getOriginY()) / image->getRezY());
@@ -420,8 +419,8 @@ void drawLine(Image4DSimple *image, double *from, double *to) {
   auto fillPixel = [&](int x, int y, int z) {
     if (x >= 0 && x < image->getXDim() && y >= 0 && y < image->getYDim() &&
         z >= 0 && z < image->getZDim()) {
-      imgData[z * image->getYDim() * image->getXDim() + y * image->getXDim() +
-              x] = 255;
+      imgData[channel * image->getXDim() * image->getYDim() * image->getZDim() +
+              z * image->getXDim() * image->getYDim() + y * image->getXDim() + x] = 255;
     }
   };
 

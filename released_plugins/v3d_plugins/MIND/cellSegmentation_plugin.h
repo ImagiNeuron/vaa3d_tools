@@ -927,6 +927,16 @@ class cellSegmentation : public QObject {
         }
       }
 
+      // create the binary mask for PCA
+      unsigned char *pcSegImage = new unsigned char[size_page];
+      memset(pcSegImage, 0,
+             size_page);  // Initialize to background (black)
+      for (const auto &region : this->possVct_segmentationResult) {
+        for (V3DLONG idx : region) {
+          pcSegImage[idx] = 1;  // Set to 1 for PCA
+        }
+      }
+
       QString savePath = fileName + "_pca_binary_segmentation.csv";
 
       // make an array to store the counts of each voxel being part of a
@@ -956,7 +966,7 @@ class cellSegmentation : public QObject {
         double x_center, y_center, z_center;
 
         analyzeSomaPCAReturnResults(
-            this->binarySegImage, this->dim_X, this->dim_Y, this->dim_Z,
+            pcSegImage, this->dim_X, this->dim_Y, this->dim_Z,
             _LandmarkList_exemplar[idx_exemplar], idx_exemplar + 1, savePath,
             pc1, pc2, pc3, vec1, vec2, vec3, x_center, y_center, z_center);
 
@@ -3389,10 +3399,24 @@ class cellSegmentation : public QObject {
    * @brief Compute 3D Sobel filter
    */
   void sobel3D(unsigned char *data, unsigned char *out, V3DLONG dim_X,
-               V3DLONG dim_Y, V3DLONG dim_Z) {
+               V3DLONG dim_Y, V3DLONG dim_Z, int threshold = 25) {
+    // Allocate temporary storage for gradient components and direction
+    // information
     std::vector<cv::Mat> gradX(dim_Z), gradY(dim_Z);
 
-    // Compute Sobel for x and y for each slice
+    // We'll need these arrays to store 3D gradient information
+    short *gradZ = new short[dim_X * dim_Y * dim_Z];
+    float *magnitude = new float[dim_X * dim_Y * dim_Z];
+    float *theta =
+        new float[dim_X * dim_Y *
+                  dim_Z];  // Azimuthal angle in spherical coordinates
+    float *phi = new float[dim_X * dim_Y *
+                           dim_Z];  // Polar angle in spherical coordinates
+
+    // Clear the output buffer
+    std::memset(out, 0, dim_X * dim_Y * dim_Z * sizeof(unsigned char));
+
+    // Step 1: Compute Sobel gradients in X and Y for each slice
     for (int k = 0; k < dim_Z; k++) {
       cv::Mat slice(dim_Y, dim_X, CV_8U, data + k * dim_X * dim_Y);
       cv::Mat gx, gy;
@@ -3402,16 +3426,17 @@ class cellSegmentation : public QObject {
       gradY[k] = gy.clone();
     }
 
-    // Compute gradient magnitude for each voxel
+    // Step 2: Compute Z gradient and store all gradient information
     for (int k = 0; k < dim_Z; k++) {
       for (int j = 0; j < dim_Y; j++) {
         for (int i = 0; i < dim_X; i++) {
+          int idx = k * dim_X * dim_Y + j * dim_X + i;
+
           // Get Sobel derivatives in x and y
           short sx = gradX[k].at<short>(j, i);
           short sy = gradY[k].at<short>(j, i);
 
           // Compute derivative in z using central difference
-          int idx = k * dim_X * dim_Y + j * dim_X + i;
           int center = data[idx];
           int prev =
               (k == 0) ? center : data[(k - 1) * dim_X * dim_Y + j * dim_X + i];
@@ -3420,13 +3445,99 @@ class cellSegmentation : public QObject {
                          : data[(k + 1) * dim_X * dim_Y + j * dim_X + i];
           short sz = static_cast<short>((next - prev) / 2);
 
-          // Gradient magnitude (using Euclidean norm)
-          int mag = static_cast<int>(std::sqrt(sx * sx + sy * sy + sz * sz));
-          if (mag > 255) mag = 255;
-          out[idx] = static_cast<unsigned char>(mag);
+          // Store z gradient
+          gradZ[idx] = sz;
+
+          // Compute gradient magnitude (using Euclidean norm)
+          float mag =
+              std::sqrt(static_cast<float>(sx * sx + sy * sy + sz * sz));
+          magnitude[idx] = mag;
+
+          // Compute gradient direction in spherical coordinates
+          // theta is the azimuthal angle in the x-y plane
+          theta[idx] =
+              std::atan2(static_cast<float>(sy), static_cast<float>(sx));
+          // phi is the polar angle from the z-axis
+          phi[idx] =
+              std::atan2(std::sqrt(static_cast<float>(sx * sx + sy * sy)),
+                         static_cast<float>(sz));
         }
       }
     }
+
+    // Step 3: Apply 3D non-maximum suppression
+    for (int k = 1; k < dim_Z - 1; k++) {
+      for (int j = 1; j < dim_Y - 1; j++) {
+        for (int i = 1; i < dim_X - 1; i++) {
+          int idx = k * dim_X * dim_Y + j * dim_X + i;
+
+          // Skip processing if below threshold
+          if (magnitude[idx] < threshold) continue;
+
+          // Get the gradient direction in spherical coordinates
+          float t = theta[idx];  // Azimuthal angle
+          float p = phi[idx];    // Polar angle
+
+          // Determine the voxels to check based on the gradient direction
+          // We need to check in the direction of the gradient and its opposite
+
+          // Convert spherical coordinates to 3D unit vector
+          float dirX = std::sin(p) * std::cos(t);
+          float dirY = std::sin(p) * std::sin(t);
+          float dirZ = std::cos(p);
+
+          // Find the closest of the 26 neighboring directions
+          // We'll use a simplified approach: find the dimension with the
+          // largest component
+          float absX = std::abs(dirX);
+          float absY = std::abs(dirY);
+          float absZ = std::abs(dirZ);
+
+          int offsetX = 0, offsetY = 0, offsetZ = 0;
+
+          // Determine the primary direction
+          if (absX >= absY && absX >= absZ) {
+            // X is the primary direction
+            offsetX = (dirX > 0) ? 1 : -1;
+            // Determine secondary directions based on relative magnitudes
+            if (absY > 0.5f * absX) offsetY = (dirY > 0) ? 1 : -1;
+            if (absZ > 0.5f * absX) offsetZ = (dirZ > 0) ? 1 : -1;
+          } else if (absY >= absX && absY >= absZ) {
+            // Y is the primary direction
+            offsetY = (dirY > 0) ? 1 : -1;
+            // Determine secondary directions
+            if (absX > 0.5f * absY) offsetX = (dirX > 0) ? 1 : -1;
+            if (absZ > 0.5f * absY) offsetZ = (dirZ > 0) ? 1 : -1;
+          } else {
+            // Z is the primary direction
+            offsetZ = (dirZ > 0) ? 1 : -1;
+            // Determine secondary directions
+            if (absX > 0.5f * absZ) offsetX = (dirX > 0) ? 1 : -1;
+            if (absY > 0.5f * absZ) offsetY = (dirY > 0) ? 1 : -1;
+          }
+
+          // Check the two voxels along the gradient direction
+          int idx1 = (k + offsetZ) * dim_X * dim_Y + (j + offsetY) * dim_X +
+                     (i + offsetX);
+          int idx2 = (k - offsetZ) * dim_X * dim_Y + (j - offsetY) * dim_X +
+                     (i - offsetX);
+
+          // Perform non-maximum suppression
+          if (magnitude[idx] >= magnitude[idx1] &&
+              magnitude[idx] >= magnitude[idx2]) {
+            // This is a local maximum along the gradient direction
+            out[idx] =
+                static_cast<unsigned char>(std::min(255.0f, magnitude[idx]));
+          }
+        }
+      }
+    }
+
+    // Clean up temporary storage
+    delete[] gradZ;
+    delete[] magnitude;
+    delete[] theta;
+    delete[] phi;
   }
 };
 #pragma endregion

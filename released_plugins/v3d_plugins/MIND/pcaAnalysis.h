@@ -47,7 +47,7 @@ void savePCAResultsToCSV(const QString &filename, int somaIndex,
 /**
  * @brief draws a line to represent a PC
  */
-void drawLine(Image4DSimple *image, double *from, double *to);
+void drawLine(Image4DSimple *image, int channel, double *from, double *to);
 
 /**
  * @brief Visualize PCA results
