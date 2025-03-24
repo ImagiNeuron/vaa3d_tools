@@ -491,9 +491,9 @@ void drawLine(Image4DSimple *image, double *from, double *to) {
   }
 }
 
-unsigned char ***create_background(V3DPluginCallback2 &callback,
-                                   QWidget *parent, V3DLONG &dim_X,
-                                   V3DLONG &dim_Y, V3DLONG &dim_Z) {
+unsigned char *create_background(V3DPluginCallback2 &callback, QWidget *parent,
+                                 V3DLONG &dim_X, V3DLONG &dim_Y,
+                                 V3DLONG &dim_Z) {
   // Get current image
   v3dhandle curwin = callback.currentImageWindow();
   if (!curwin) {
@@ -532,15 +532,7 @@ unsigned char ***create_background(V3DPluginCallback2 &callback,
          num_chunks_X * num_chunks_Y * num_chunks_Z);
 
   // Allocate 3D array for background
-  unsigned char ***backgroundArray = new unsigned char **[dim_Z];
-  for (V3DLONG z = 0; z < dim_Z; z++) {
-    backgroundArray[z] = new unsigned char *[dim_Y];
-    for (V3DLONG y = 0; y < dim_Y; y++) {
-      backgroundArray[z][y] = new unsigned char[dim_X];
-      // Initialize to zero
-      memset(backgroundArray[z][y], 0, dim_X * sizeof(unsigned char));
-    }
-  }
+  unsigned char *backgroundArray = new unsigned char[totalSize];
 
   // Seed random generator
   std::srand(std::time(nullptr));
@@ -651,7 +643,8 @@ unsigned char ***create_background(V3DPluginCallback2 &callback,
         int value = std::round(randNormal);
         value = std::max(0, std::min(255, value));
 
-        backgroundArray[z][y][x] = (unsigned char)value;
+        backgroundArray[z * dim_X * dim_Y + y * dim_X + x] =
+            (unsigned char)value;
       }
     }
   }
@@ -660,20 +653,6 @@ unsigned char ***create_background(V3DPluginCallback2 &callback,
       "Background generation complete with smooth blending (radius = %.1f).\n",
       blendRadius);
   return backgroundArray;
-}
-
-void free_3d_array(unsigned char ***array, V3DLONG dim_Z, V3DLONG dim_Y) {
-  if (array) {
-    for (V3DLONG z = 0; z < dim_Z; z++) {
-      if (array[z]) {
-        for (V3DLONG y = 0; y < dim_Y; y++) {
-          if (array[z][y]) delete[] array[z][y];
-        }
-        delete[] array[z];
-      }
-    }
-    delete[] array;
-  }
 }
 
 void free_mapped_arrays(unsigned char ***intensities,
@@ -711,7 +690,7 @@ void create_background(V3DPluginCallback2 &callback, QWidget *parent) {
 
   // Call the new version to get the background intensities
   V3DLONG dimX, dimY, dimZ;
-  unsigned char ***backgroundIntensities =
+  unsigned char *backgroundIntensities =
       create_background(callback, parent, dimX, dimY, dimZ);
 
   if (!backgroundIntensities) {
@@ -739,17 +718,10 @@ void create_background(V3DPluginCallback2 &callback, QWidget *parent) {
 
   // Copy the background intensities to the new image
   unsigned char *backgroundData = backgroundImage->getRawData();
-  for (V3DLONG z = 0; z < dimZ; z++) {
-    for (V3DLONG y = 0; y < dimY; y++) {
-      for (V3DLONG x = 0; x < dimX; x++) {
-        V3DLONG idx = z * dimX * dimY + y * dimX + x;
-        backgroundData[idx] = backgroundIntensities[z][y][x];
-      }
-    }
-  }
+  std::memcpy(backgroundData, backgroundIntensities, dimX * dimY * dimZ);
 
-  // Free the 3D array now that we've copied the data
-  free_3d_array(backgroundIntensities, dimZ, dimY);
+  // Free the background intensities array
+  delete[] backgroundIntensities;
 
   // Show the generated background
   QString imageName = callback.getImageName(curwin);

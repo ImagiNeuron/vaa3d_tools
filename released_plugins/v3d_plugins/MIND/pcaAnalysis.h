@@ -69,17 +69,17 @@ void loadSegmentationFile(const QString &imageName, unsigned char *&segData,
 
 /**
  * @brief Create a background image based on segmentation threshold and return
- * as 3D array
+ * as 1D array
  * @param callback V3DPluginCallback2 reference
  * @param parent Parent widget
  * @param dim_X Output parameter for X dimension
  * @param dim_Y Output parameter for Y dimension
  * @param dim_Z Output parameter for Z dimension
- * @return 3D array of background intensities, or nullptr on failure
+ * @return 1D array of background image
  */
-unsigned char ***create_background(V3DPluginCallback2 &callback,
-                                   QWidget *parent, V3DLONG &dim_X,
-                                   V3DLONG &dim_Y, V3DLONG &dim_Z);
+unsigned char *create_background(V3DPluginCallback2 &callback, QWidget *parent,
+                                 V3DLONG &dim_X, V3DLONG &dim_Y,
+                                 V3DLONG &dim_Z);
 
 /**
  * @brief Create a background image based on segmentation threshold
@@ -88,14 +88,6 @@ unsigned char ***create_background(V3DPluginCallback2 &callback,
  * @deprecated Use the version that returns unsigned char*** instead
  */
 void create_background(V3DPluginCallback2 &callback, QWidget *parent);
-
-/**
- * @brief Free memory allocated for a single 3D array
- * @param array 3D array to free
- * @param dim_Z Number of Z slices
- * @param dim_Y Number of rows
- */
-void free_3d_array(unsigned char ***array, V3DLONG dim_Z, V3DLONG dim_Y);
 
 /**
  * @brief Free memory allocated for two 3D arrays (intensities and segmentation)

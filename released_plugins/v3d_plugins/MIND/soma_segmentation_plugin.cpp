@@ -743,27 +743,8 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
   memset(outSegData, 0, totalSize);
 
   // Create output image with original intensity values
-  unsigned char ***intensityBackground =
+  unsigned char *outIntensityData =
       create_background(callback, parent, xDim, yDim, zDim);
-  // Convert intensityBackground to 1D array
-  unsigned char *outIntensityData = new unsigned char[totalSize];
-  for (V3DLONG k = 0; k < zDim; k++) {      // z dimension
-    for (V3DLONG j = 0; j < yDim; j++) {    // y dimension
-      for (V3DLONG i = 0; i < xDim; i++) {  // x dimension
-        outIntensityData[i + j * xDim + k * xDim * yDim] =
-            intensityBackground[k][j][i];
-      }
-    }
-  }
-
-  // Deallocation
-  for (V3DLONG k = 0; k < zDim; k++) {
-    for (V3DLONG j = 0; j < yDim; j++) {
-      delete[] intensityBackground[k][j];
-    }
-    delete[] intensityBackground[k];
-  }
-  delete[] intensityBackground;
 
   // Generate random positions and place synthetic somas
   std::random_device rd;
