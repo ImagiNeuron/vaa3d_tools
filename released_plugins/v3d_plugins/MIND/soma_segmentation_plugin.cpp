@@ -914,6 +914,7 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
     bool validSecondVector = false;
     int maxRetries = 10;  // Prevent infinite loops
     int retryCount = 0;
+    double norm2 = 0.0;
 
     while (!validSecondVector && retryCount < maxRetries) {
       // Generate eigenvectors with normal distributions
@@ -934,7 +935,7 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
       }
 
       // Compute the norm of the resulting vector
-      double norm2 =
+      norm2 =
           sqrt(randomVec2[0] * randomVec2[0] + randomVec2[1] * randomVec2[1] +
                randomVec2[2] * randomVec2[2]);
 
@@ -974,7 +975,7 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
       }
 
       // Compute the norm of the resulting vector
-      double norm2 =
+      norm2 =
           sqrt(randomVec2[0] * randomVec2[0] + randomVec2[1] * randomVec2[1] +
                randomVec2[2] * randomVec2[2]);
     }
@@ -987,6 +988,7 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
     // Make third vector orthogonal to first two using Gram-Schmidt
     bool validThirdVector = false;
     retryCount = 0;
+    double norm3 = 0.0;
 
     while (!validThirdVector && retryCount < maxRetries) {
       // Generate eigenvectors with normal distributions
@@ -1013,7 +1015,7 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
       }
 
       // Normalize third vector
-      double norm3 =
+      norm3 =
           sqrt(randomVec3[0] * randomVec3[0] + randomVec3[1] * randomVec3[1] +
                randomVec3[2] * randomVec3[2]);
 

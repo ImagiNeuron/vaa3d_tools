@@ -184,20 +184,13 @@ void loadSegmentationFile(const QString &imageName, unsigned char *&segData,
                           V3DLONG sz[4], int &datatype,
                           V3DPluginCallback2 &callback, QWidget *parent) {
   // Construct segmentation filename (try different options)
-  QString possibleSegFileName = imageName + "_binary_segmentation.tif";
+  QString segFileName =
+      modifyFileNameForTeraFly(imageName + "_binary_segmentation.tif");
 
-  QString segFileName;
   bool foundSegFile = false;
-
-  for (int i = 0; i < possibleSegFiles.size(); i++) {
-    QString possibleSegFile = modifyFileNameForTeraFly(possibleSegFiles[i]);
-    if (QFile::exists(possibleSegFile)) {
-      segFileName = possibleSegFile;
-      foundSegFile = true;
-      printf("Found segmentation file: %s\n",
-             segFileName.toStdString().c_str());
-      break;
-    }
+  if (QFile::exists(segFileName)) {
+    foundSegFile = true;
+    printf("Found segmentation file: %s\n", segFileName.toStdString().c_str());
   }
 
   // If segmentation file still not found, ask the user to select it
