@@ -63,9 +63,14 @@ MIND_4DImage *reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
 void isotropic_correction_func(V3DPluginCallback2 &callback, QWidget *parent,
                                input_PARA &PARA, bool bmenu);
 
-// PCA analysis function
+// PCA function
 
 void pca_func(V3DPluginCallback2 &callback, QWidget *parent, input_PARA &PARA,
               bool bmenu);
+
+// Simulation of synthetic soma data
+
+void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
+                        input_PARA &PARA, bool bmenu);
 
 #endif  // __SOMA_SEGMENTATION_PLUGIN_H__
