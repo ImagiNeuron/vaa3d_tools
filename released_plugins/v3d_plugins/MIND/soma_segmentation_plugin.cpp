@@ -856,7 +856,7 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
     return;
   }
 
-  v3d_msg(QString("Generating %1 synthetic somas...").arg(numSynthetic));
+  printf("\nGenerating %d synthetic somas...\n", numSynthetic);
 
   int successfulPlacements = 0;
 
@@ -934,10 +934,6 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
         for (const auto &existingSoma : placedSomas) {
           if (somasOverlap(newSoma, existingSoma)) {
             validPosition = false;
-            printf(
-                "Soma %d position attempt %d: Overlap detected with existing "
-                "soma\n",
-                i + 1, attempts);
             break;
           }
         }
@@ -1232,6 +1228,62 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
   simple_saveimage_wrapper(callback, outIntensityFileName.toStdString().c_str(),
                            outIntensityData, out_sz, V3D_UINT8);
 
+  /*
+   * Save simulated soma landmarks as a marker file
+   */
+
+  // Create simulated landmarks
+  LandmarkList simulatedLandmarks;
+  for (size_t i = 0; i < placedSomas.size(); i++) {
+    LocationSimple landmark;
+    landmark.x = placedSomas[i].x;
+    landmark.y = placedSomas[i].y;
+    landmark.z = placedSomas[i].z;
+    landmark.radius = placedSomas[i].radius;
+    simulatedLandmarks.append(landmark);
+  }
+
+  QString markerFileName =
+      modifyFilePathForTeraFly(imageName) + "_simulated_landmarks.marker";
+
+  FILE *fp = fopen(markerFileName.toStdString().c_str(), "w");
+  if (fp) {
+    // Write header
+    fprintf(fp, "#x, y, z, radius, shape, name, comment\n");
+
+    // Write each landmark
+    for (int i = 0; i < simulatedLandmarks.size(); i++) {
+      // Format: x,y,z,radius,shape,name,comment
+      fprintf(fp, "%d,%d,%d,%d,%d,%s,%s\n", (int)round(simulatedLandmarks[i].x),
+              (int)round(simulatedLandmarks[i].y),
+              (int)round(simulatedLandmarks[i].z),
+              (int)round(simulatedLandmarks[i].radius),
+              1,                                         // shape (1 = sphere)
+              qPrintable(QString("Sim_%1").arg(i + 1)),  // name
+              "");                                       // comment
+    }
+
+    fclose(fp);
+    printf("Saved %d simulated landmarks to: %s\n", simulatedLandmarks.size(),
+           markerFileName.toStdString().c_str());
+  } else {
+    printf("Error: Could not save marker file: %s\n",
+           markerFileName.toStdString().c_str());
+  }
+
+  /*
+   * Perform PCA analysis on the simulated somas
+   */
+
+  QString pcaSimulatedFileName =
+      modifyFilePathForTeraFly(imageName) + "_pca_simulated_segmentation.csv";
+
+  // Perform PCA analysis on each simulated soma
+  for (int i = 0; i < simulatedLandmarks.size(); i++) {
+    analyzeSomaPCA(outSegData, xDim, yDim, zDim, simulatedLandmarks[i], i + 1,
+                   pcaSimulatedFileName);
+  }
+
   printf("\nSimulation complete:\n");
   printf("Successfully placed %d/%d somas\n", successfulPlacements,
          numSynthetic);
@@ -1251,8 +1303,7 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
 
   unsigned char *gradientImage = new unsigned char[totalSize];
   cellSegmentation cellSeg;
-  cellSeg.sobel3D(outSegData, gradientImage, xDim, yDim,
-                                          zDim);
+  cellSeg.sobel3D(outSegData, gradientImage, xDim, yDim, zDim);
 
   // overlay
   overlaySimulation(callback, parent, outSegData, gradientImage,
