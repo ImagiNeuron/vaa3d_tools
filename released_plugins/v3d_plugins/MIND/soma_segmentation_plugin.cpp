@@ -860,15 +860,12 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
 
   int successfulPlacements = 0;
 
-  // Structure to keep track of placed somas for overlap detection
-  struct PlacedSoma {
-    double x, y, z;  // Center coordinates
-    double radius;   // Soma radius
-  };
-  std::vector<PlacedSoma> placedSomas;
+  // Initialize simulatedLandmarks list
+  LandmarkList simulatedLandmarks;
 
   // Helper function to check if two somas overlap
-  auto somasOverlap = [](const PlacedSoma &s1, const PlacedSoma &s2) -> bool {
+  auto somasOverlap = [](const LocationSimple &s1,
+                         const LocationSimple &s2) -> bool {
     // Calculate squared distance between centers
     double dx = s1.x - s2.x;
     double dy = s1.y - s2.y;
@@ -896,7 +893,12 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
     int boundaryMargin = cubeSize / 2;
 
     // Generate random position using normal distribution
-    std::vector<double> newCenter(3);
+    LocationSimple newSoma;
+    newSoma.radius = round(radius);
+    newSoma.name = qPrintable(QString("Sim_%1").arg(i + 1));
+    newSoma.comments = "";
+    newSoma.shape = pxSphere;
+
     bool validPosition = false;
     int maxAttempts = 100;
     int attempts = 0;
@@ -908,31 +910,38 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
       // Generate new potential position
       for (int j = 0; j < 3; j++) {
         std::normal_distribution<> d(meanCenter[j], stdCenter[j]);
-        newCenter[j] = d(gen);
+        double coord = round(d(gen));
 
-        // Check if position is within image boundaries
-        if (j == 0 && (newCenter[j] < boundaryMargin ||
-                       newCenter[j] > xDim - boundaryMargin)) {
-          validPosition = false;
-          break;
-        } else if (j == 1 && (newCenter[j] < boundaryMargin ||
-                              newCenter[j] > yDim - boundaryMargin)) {
-          validPosition = false;
-          break;
-        } else if (j == 2 && (newCenter[j] < boundaryMargin ||
-                              newCenter[j] > zDim - boundaryMargin)) {
-          validPosition = false;
-          break;
+        // Store coordinate in new soma
+        if (j == 0) {
+          newSoma.x = coord;
+          // Check if position is within image boundaries
+          if (coord < boundaryMargin || coord > xDim - boundaryMargin) {
+            validPosition = false;
+            break;
+          }
+        } else if (j == 1) {
+          newSoma.y = coord;
+          // Check if position is within image boundaries
+          if (coord < boundaryMargin || coord > yDim - boundaryMargin) {
+            validPosition = false;
+            break;
+          }
+        } else if (j == 2) {
+          newSoma.z = coord;
+          // Check if position is within image boundaries
+          if (coord < boundaryMargin || coord > zDim - boundaryMargin) {
+            validPosition = false;
+            break;
+          }
         }
       }
 
       // If position is within boundaries, check for overlap with existing somas
       if (validPosition) {
-        PlacedSoma newSoma = {newCenter[0], newCenter[1], newCenter[2], radius};
-
         // Check against all previously placed somas
-        for (const auto &existingSoma : placedSomas) {
-          if (somasOverlap(newSoma, existingSoma)) {
+        for (int s = 0; s < simulatedLandmarks.size(); s++) {
+          if (somasOverlap(newSoma, simulatedLandmarks[s])) {
             validPosition = false;
             break;
           }
@@ -948,14 +957,13 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
       continue;
     }
 
-    // Add this soma to our placed somas list for future overlap checking
-    placedSomas.push_back({newCenter[0], newCenter[1], newCenter[2], radius});
+    // Add this soma to our landmarks list
+    simulatedLandmarks.append(newSoma);
 
     printf(
-        "Placed soma %d/%d at (%.1f, %.1f, %.1f) with radius %.2f and cube "
+        "Placed soma %d/%d at (%.2f, %.2f, %.2f) with radius %.2f and cube "
         "size %ld\n",
-        i + 1, numSynthetic, newCenter[0], newCenter[1], newCenter[2], radius,
-        cubeSize);
+        i + 1, numSynthetic, newSoma.x, newSoma.y, newSoma.z, radius, cubeSize);
     successfulPlacements++;
 
     // Generate random PCA values based on the distribution
@@ -1166,9 +1174,9 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
                                randomVec3);
 
     // Place rotated synthetic soma at generated position
-    int centerX = static_cast<int>(newCenter[0]);
-    int centerY = static_cast<int>(newCenter[1]);
-    int centerZ = static_cast<int>(newCenter[2]);
+    int centerX = V3DLONG(newSoma.x);
+    int centerY = V3DLONG(newSoma.y);
+    int centerZ = V3DLONG(newSoma.z);
 
     // Copy rotated soma to both output images
     for (int z = 0; z < cubeSize; z++) {
@@ -1203,17 +1211,6 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
 
     delete[] tempSegmentation;
     delete[] tempIntensity;
-  }
-
-  // After all somas have been placed, convert placedSomas to simulatedLandmarks
-  LandmarkList simulatedLandmarks;
-  for (const auto &soma : placedSomas) {
-    LocationSimple landmark;
-    landmark.x = soma.x;
-    landmark.y = soma.y;
-    landmark.z = soma.z;
-    landmark.radius = soma.radius;
-    simulatedLandmarks.append(landmark);
   }
 
   /*
@@ -1267,13 +1264,14 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
     // Write each landmark
     for (int i = 0; i < simulatedLandmarks.size(); i++) {
       // Format: x,y,z,radius,shape,name,comment
-      fprintf(fp, "%d,%d,%d,%d,%d,%s,%s\n", (int)round(simulatedLandmarks[i].x),
-              (int)round(simulatedLandmarks[i].y),
-              (int)round(simulatedLandmarks[i].z),
-              (int)round(simulatedLandmarks[i].radius),
-              1,                                         // shape (1 = sphere)
-              qPrintable(QString("Sim_%1").arg(i + 1)),  // name
-              "");                                       // comment
+      fprintf(fp, "%ld,%ld,%ld,%ld,%ld,%s,%s\n",
+              V3DLONG(simulatedLandmarks.at(i).x),
+              V3DLONG(simulatedLandmarks.at(i).y),
+              V3DLONG(simulatedLandmarks.at(i).z),
+              V3DLONG(simulatedLandmarks.at(i).radius),
+              V3DLONG(simulatedLandmarks.at(i).shape),
+              simulatedLandmarks.at(i).name.c_str(),
+              simulatedLandmarks.at(i).comments.c_str());
     }
 
     fclose(fp);
@@ -1297,11 +1295,8 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
                    pcaSimulatedFileName);
   }
 
-  printf("\nSimulation complete:\n");
-  printf("Successfully placed %d/%d somas\n", successfulPlacements,
-         numSynthetic);
-  v3d_msg(QString("Simulation complete. Generated %1/%2 synthetic "
-                  "somas. Files saved to directory: %3")
+  v3d_msg(QString("Simulation complete:\nGenerated %1/%2 synthetic "
+                  "somas. Files saved to directory: %3\n")
               .arg(successfulPlacements)
               .arg(numSynthetic)
               .arg(outputDirPath),
