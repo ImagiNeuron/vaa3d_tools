@@ -1205,13 +1205,38 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
     delete[] tempIntensity;
   }
 
+  // After all somas have been placed, convert placedSomas to simulatedLandmarks
+  LandmarkList simulatedLandmarks;
+  for (const auto &soma : placedSomas) {
+    LocationSimple landmark;
+    landmark.x = soma.x;
+    landmark.y = soma.y;
+    landmark.z = soma.z;
+    landmark.radius = soma.radius;
+    simulatedLandmarks.append(landmark);
+  }
+
   /*
    * Save the synthetic soma segmentation images
    */
-  QString outSegFileName =
-      modifyFilePathForTeraFly(imageName) + "_simulated_segmentation.tif";
-  QString outIntensityFileName =
-      modifyFilePathForTeraFly(imageName) + "_simulated_intensity.tif";
+
+  // Generate timestamp for folder name
+  QDateTime currentTime = QDateTime::currentDateTime();
+  QString timestamp = currentTime.toString("yyyyMMdd_hhmmss");
+
+  // Create timestamped directory to store all output files
+  QString outputDirPath =
+      modifyFilePathForTeraFly(imageName) + "_simulation_" + timestamp;
+  QDir outputDir(outputDirPath);
+  if (!outputDir.exists()) {
+    outputDir.mkpath(".");
+    printf("Created output directory: %s\n",
+           outputDirPath.toStdString().c_str());
+  }
+
+  // Define output filenames in the new directory
+  QString outSegFileName = outputDirPath + "/simulated_segmentation.tif";
+  QString outIntensityFileName = outputDirPath + "/simulated_intensity.tif";
 
   // Create dimension array for saving images
   V3DLONG out_sz[4];
@@ -1232,19 +1257,7 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
    * Save simulated soma landmarks as a marker file
    */
 
-  // Create simulated landmarks
-  LandmarkList simulatedLandmarks;
-  for (size_t i = 0; i < placedSomas.size(); i++) {
-    LocationSimple landmark;
-    landmark.x = placedSomas[i].x;
-    landmark.y = placedSomas[i].y;
-    landmark.z = placedSomas[i].z;
-    landmark.radius = placedSomas[i].radius;
-    simulatedLandmarks.append(landmark);
-  }
-
-  QString markerFileName =
-      modifyFilePathForTeraFly(imageName) + "_simulated_landmarks.marker";
+  QString markerFileName = outputDirPath + "/simulated_landmarks.marker";
 
   FILE *fp = fopen(markerFileName.toStdString().c_str(), "w");
   if (fp) {
@@ -1276,7 +1289,7 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
    */
 
   QString pcaSimulatedFileName =
-      modifyFilePathForTeraFly(imageName) + "_pca_simulated_segmentation.csv";
+      outputDirPath + "/pca_simulated_segmentation.csv";
 
   // Perform PCA analysis on each simulated soma
   for (int i = 0; i < simulatedLandmarks.size(); i++) {
@@ -1288,11 +1301,10 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
   printf("Successfully placed %d/%d somas\n", successfulPlacements,
          numSynthetic);
   v3d_msg(QString("Simulation complete. Generated %1/%2 synthetic "
-                  "somas. Saved images as %3 and %4.")
+                  "somas. Files saved to directory: %3")
               .arg(successfulPlacements)
               .arg(numSynthetic)
-              .arg(outSegFileName)
-              .arg(outIntensityFileName),
+              .arg(outputDirPath),
           parent);
 
   delete[] segData;
