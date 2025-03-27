@@ -688,8 +688,7 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
     v3d_msg(
         QString("segmentation image PCA file not found: %1\nPlease run soma "
                 "segmentation first.")
-            .arg(segPcaFileName),
-        parent);
+            .arg(segPcaFileName));
     delete[] segData;
     return;
   }
@@ -851,7 +850,7 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
 
   if (!ok) {
     // User canceled the dialog
-    v3d_msg("Synthetic soma generation canceled.", parent);
+    printf("Synthetic soma generation canceled.");
     delete[] segData;
     return;
   }
@@ -959,11 +958,6 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
 
     // Add this soma to our landmarks list
     simulatedLandmarks.append(newSoma);
-
-    printf(
-        "Placed soma %d/%d at (%.2f, %.2f, %.2f) with radius %.2f and cube "
-        "size %ld\n",
-        i + 1, numSynthetic, newSoma.x, newSoma.y, newSoma.z, radius, cubeSize);
     successfulPlacements++;
 
     // Generate random PCA values based on the distribution
@@ -1275,8 +1269,6 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
     }
 
     fclose(fp);
-    printf("Saved %d simulated landmarks to: %s\n", simulatedLandmarks.size(),
-           markerFileName.toStdString().c_str());
   } else {
     printf("Error: Could not save marker file: %s\n",
            markerFileName.toStdString().c_str());
@@ -1299,8 +1291,7 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
                   "somas. Files saved to directory: %3\n")
               .arg(successfulPlacements)
               .arg(numSynthetic)
-              .arg(outputDirPath),
-          parent);
+              .arg(outputDirPath));
 
   delete[] segData;
 

@@ -83,20 +83,6 @@ void analyzeSomaPCAReturnResults(unsigned char *labeledData, V3DLONG N,
           img3d, N, M, P, x, y, z,  // Center on soma
           2 * r, 2 * r, 2 * r,      // Window size based on radius
           pc1, pc2, pc3, vec1, vec2, vec3, x_center, y_center, z_center)) {
-    // Print results for this soma
-    printf("\nSoma #%d PCA Results:\n", somaIndex);
-    printf("  Center: (%.1f, %.1f, %.1f)\n", x, y, z);
-    printf("  Radius: %.1f\n", r);
-    printf("  Center of mass: (%f, %f, %f)\n", x_center, y_center, z_center);
-    printf("  Eigenvalues:\n");
-    printf("    pc1: %f\n", pc1);
-    printf("    pc2: %f\n", pc2);
-    printf("    pc3: %f\n", pc3);
-    printf("  Principal axes:\n");
-    printf("    pc1: [%f, %f, %f]\n", vec1[0], vec1[1], vec1[2]);
-    printf("    pc2: [%f, %f, %f]\n", vec2[0], vec2[1], vec2[2]);
-    printf("    pc3: [%f, %f, %f]\n\n\n", vec3[0], vec3[1], vec3[2]);
-
     // Save to CSV with save flag
     QWidget *mainWin = QApplication::activeWindow();
     savePCAResultsToCSV(savePath, somaIndex, lm, pc1, pc2, pc3, vec1, vec2,
@@ -200,20 +186,6 @@ void analyzeSomaPCA(unsigned char *labeledData, V3DLONG N, V3DLONG M, V3DLONG P,
           img3d, N, M, P, x, y, z,  // Center on soma
           2 * r, 2 * r, 2 * r,      // Window size based on radius
           pc1, pc2, pc3, vec1, vec2, vec3, x_center, y_center, z_center)) {
-    // Print results for this soma
-    printf("\nSoma #%d PCA Results:\n", somaIndex);
-    printf("  Center: (%.1f, %.1f, %.1f)\n", x, y, z);
-    printf("  Radius: %.1f\n", r);
-    printf("  Center of mass: (%f, %f, %f)\n", x_center, y_center, z_center);
-    printf("  Eigenvalues:\n");
-    printf("    pc1: %f\n", pc1);
-    printf("    pc2: %f\n", pc2);
-    printf("    pc3: %f\n", pc3);
-    printf("  Principal axes:\n");
-    printf("    pc1: [%f, %f, %f]\n", vec1[0], vec1[1], vec1[2]);
-    printf("    pc2: [%f, %f, %f]\n", vec2[0], vec2[1], vec2[2]);
-    printf("    pc3: [%f, %f, %f]\n\n\n", vec3[0], vec3[1], vec3[2]);
-
     // Save to CSV with save flag
     QWidget *mainWin = QApplication::activeWindow();
     savePCAResultsToCSV(savePath, somaIndex, lm, pc1, pc2, pc3, vec1, vec2,
