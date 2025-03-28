@@ -10,6 +10,9 @@ INCLUDEPATH += $$VAA3DPATH/v3d_main/jba/newmat11
 INCLUDEPATH += $$VAA3DPATH/v3d_main/jba/c++
 INCLUDEPATH += $$VAA3DPATH/v3d_main/common_lib/include
 
+# eigen
+INCLUDEPATH += eigen
+
 # opencv
 INCLUDEPATH += opencv/build/include
 LIBS += -Lopencv/build/x64/mingw/lib/ -lopencv_core4120 -lopencv_imgproc4120 -lopencv_highgui4120
