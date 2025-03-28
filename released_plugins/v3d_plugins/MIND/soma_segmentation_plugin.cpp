@@ -23,6 +23,7 @@
 #include <cassert>
 #include <cmath>
 #include <cstring>
+#include <eigen/Dense>
 #include <fstream>
 #include <queue>
 #include <vector>
@@ -963,153 +964,23 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
     // Generate random PCA values based on the distribution
     double randomVec1[3], randomVec2[3], randomVec3[3];
 
-    // Generate eigenvectors with normal distributions
-    for (int j = 0; j < 3; j++) {
-      std::normal_distribution<> dv1(meanEigenvectors[j], stdEigenvectors[j]);
-      randomVec1[j] = dv1(gen);
+    Eigen::Matrix3d A;
+    for (int col = 0; col < 3; ++col) {
+      for (int row = 0; row < 3; ++row) {
+        std::normal_distribution<> dist(meanEigenvectors[col * 3 + row],
+                                        stdEigenvectors[col * 3 + row]);
+        A(row, col) = dist(gen);
+      }
     }
 
-    // Normalize first vector
-    double norm1 =
-        sqrt(randomVec1[0] * randomVec1[0] + randomVec1[1] * randomVec1[1] +
-             randomVec1[2] * randomVec1[2]);
-    for (int j = 0; j < 3; j++) {
-      randomVec1[j] /= norm1;
-    }
+    // Perform QR decomposition to obtain orthogonal vectors
+    Eigen::HouseholderQR<Eigen::Matrix3d> qr(A);
+    Eigen::Matrix3d Q = qr.householderQ();
 
-    // Make second vector orthogonal to the first using Gram-Schmidt process
-    bool validSecondVector = false;
-    int maxRetries = 10;  // Prevent infinite loops
-    int retryCount = 0;
-    double norm2 = 0.0;
-
-    while (!validSecondVector && retryCount < maxRetries) {
-      // Generate eigenvectors with normal distributions
-      for (int j = 0; j < 3; j++) {
-        std::normal_distribution<> dv2(meanEigenvectors[j + 3],
-                                       stdEigenvectors[j + 3]);
-        randomVec2[j] = dv2(gen);
-      }
-
-      // Project randomVec2 onto randomVec1
-      double dot_product1 = randomVec2[0] * randomVec1[0] +
-                            randomVec2[1] * randomVec1[1] +
-                            randomVec2[2] * randomVec1[2];
-
-      // Subtract the projection from randomVec2
-      for (int j = 0; j < 3; j++) {
-        randomVec2[j] -= dot_product1 * randomVec1[j];
-      }
-
-      // Compute the norm of the resulting vector
-      norm2 =
-          sqrt(randomVec2[0] * randomVec2[0] + randomVec2[1] * randomVec2[1] +
-               randomVec2[2] * randomVec2[2]);
-
-      // Check if the resulting vector is not too small
-      if (norm2 >= 1e-6) {
-        validSecondVector = true;
-      }
-
-      retryCount++;
-    }
-
-    // If still no valid second vector after retries, generate an arbitrary
-    // vector perpendicular to randomVec1
-    if (!validSecondVector) {
-      if (fabs(randomVec1[0]) < fabs(randomVec1[1]) &&
-          fabs(randomVec1[0]) < fabs(randomVec1[2])) {
-        randomVec2[0] = 1.0;
-        randomVec2[1] = 0.0;
-        randomVec2[2] = 0.0;
-      } else if (fabs(randomVec1[1]) < fabs(randomVec1[2])) {
-        randomVec2[0] = 0.0;
-        randomVec2[1] = 1.0;
-        randomVec2[2] = 0.0;
-      } else {
-        randomVec2[0] = 0.0;
-        randomVec2[1] = 0.0;
-        randomVec2[2] = 1.0;
-      }
-
-      // Make it orthogonal to randomVec1
-      double dot_product1 = randomVec2[0] * randomVec1[0] +
-                            randomVec2[1] * randomVec1[1] +
-                            randomVec2[2] * randomVec1[2];
-
-      for (int j = 0; j < 3; j++) {
-        randomVec2[j] -= dot_product1 * randomVec1[j];
-      }
-
-      // Compute the norm of the resulting vector
-      norm2 =
-          sqrt(randomVec2[0] * randomVec2[0] + randomVec2[1] * randomVec2[1] +
-               randomVec2[2] * randomVec2[2]);
-    }
-
-    // Normalize second vector
-    for (int j = 0; j < 3; j++) {
-      randomVec2[j] /= norm2;
-    }
-
-    // Make third vector orthogonal to first two using Gram-Schmidt
-    bool validThirdVector = false;
-    retryCount = 0;
-    double norm3 = 0.0;
-
-    while (!validThirdVector && retryCount < maxRetries) {
-      // Generate eigenvectors with normal distributions
-      for (int j = 0; j < 3; j++) {
-        std::normal_distribution<> dv3(meanEigenvectors[j + 6],
-                                       stdEigenvectors[j + 6]);
-        randomVec3[j] = dv3(gen);
-      }
-
-      // Project randomVec3 onto randomVec1
-      double dot_product3_1 = randomVec3[0] * randomVec1[0] +
-                              randomVec3[1] * randomVec1[1] +
-                              randomVec3[2] * randomVec1[2];
-
-      // Project randomVec3 onto randomVec2
-      double dot_product3_2 = randomVec3[0] * randomVec2[0] +
-                              randomVec3[1] * randomVec2[1] +
-                              randomVec3[2] * randomVec2[2];
-
-      // Subtract both projections to make it orthogonal to both vectors
-      for (int j = 0; j < 3; j++) {
-        randomVec3[j] = randomVec3[j] - dot_product3_1 * randomVec1[j] -
-                        dot_product3_2 * randomVec2[j];
-      }
-
-      // Normalize third vector
-      norm3 =
-          sqrt(randomVec3[0] * randomVec3[0] + randomVec3[1] * randomVec3[1] +
-               randomVec3[2] * randomVec3[2]);
-
-      // Check if the resulting vector is not too small
-      if (norm3 >= 1e-6) {
-        validThirdVector = true;
-      }
-
-      retryCount++;
-    }
-
-    // If still no valid third vector after retries, generate with cross product
-    // method
-    if (!validThirdVector) {
-      randomVec3[0] =
-          randomVec1[1] * randomVec2[2] - randomVec1[2] * randomVec2[1];
-      randomVec3[1] =
-          randomVec1[2] * randomVec2[0] - randomVec1[0] * randomVec2[2];
-      randomVec3[2] =
-          randomVec1[0] * randomVec2[1] - randomVec1[1] * randomVec2[0];
-      norm3 =
-          sqrt(randomVec3[0] * randomVec3[0] + randomVec3[1] * randomVec3[1] +
-               randomVec3[2] * randomVec3[2]);
-    }
-
-    for (int j = 0; j < 3; j++) {
-      randomVec3[j] /= norm3;
+    for (int i = 0; i < 3; ++i) {
+      randomVec1[i] = Q(i, 0);
+      randomVec2[i] = Q(i, 1);
+      randomVec3[i] = Q(i, 2);
     }
 
     // Extract a soma from segmentation data
