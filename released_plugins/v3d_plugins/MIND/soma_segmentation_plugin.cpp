@@ -964,12 +964,6 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
     // Generate random PCA values based on the distribution
     double randomVec1[3], randomVec2[3], randomVec3[3];
 
-    // // Generate eigenvectors with normal distributions
-    // for (int j = 0; j < 3; j++) {
-    //   std::normal_distribution<> dv1(meanEigenvectors[j],
-    //   stdEigenvectors[j]); randomVec1[j] = dv1(gen);
-    // }
-
     Eigen::Matrix3d A;
     for (int col = 0; col < 3; ++col) {
       for (int row = 0; row < 3; ++row) {
