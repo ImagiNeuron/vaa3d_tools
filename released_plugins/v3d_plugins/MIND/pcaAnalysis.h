@@ -42,7 +42,7 @@ void savePCAResultsToCSV(const QString &filename, int somaIndex,
                          const LocationSimple &lm, double pc1, double pc2,
                          double pc3, const double *vec1, const double *vec2,
                          const double *vec3, double x_center, double y_center,
-                         double z_center, QWidget *parent, bool *saveEnabled);
+                         double z_center, QWidget *parent);
 
 /**
  * @brief draws a line to represent a PC

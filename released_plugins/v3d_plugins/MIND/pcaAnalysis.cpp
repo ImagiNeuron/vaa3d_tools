@@ -6,71 +6,40 @@ void savePCAResultsToCSV(const QString &filename, int somaIndex,
                          const LocationSimple &lm, double pc1, double pc2,
                          double pc3, const double *vec1, const double *vec2,
                          const double *vec3, double x_center, double y_center,
-                         double z_center, QWidget *parent, bool *saveEnabled) {
-  static bool shouldSave = true;  // Default to true
+                         double z_center, QWidget *parent) {
   static QString actualFilename = filename;
 
   // Ask user if they want to save only for the first soma
   if (somaIndex == 1) {
-    QMessageBox::StandardButton reply;
-    reply = QMessageBox::question(
-        parent, "Save Results",
-        "Would you like to save the PCA results to a CSV file?",
-        QMessageBox::Yes | QMessageBox::No);
+    actualFilename = filename;
 
-    shouldSave = (reply == QMessageBox::Yes);
-    if (saveEnabled) *saveEnabled = shouldSave;
-
-    if (shouldSave) {
-      // QString suggestedName = QFileInfo(filename).fileName();
-      // actualFilename = QFileDialog::getSaveFileName(
-      //     parent, "Save PCA Results", suggestedName, "CSV Files (*.csv)");
-      // if (actualFilename.isEmpty()) {
-      //   printf("Save cancelled by user.\n");
-      //   shouldSave = false;
-      //   if (saveEnabled) *saveEnabled = false;
-      //   return;
-      // }
-      // actualFilename = suggestedName;
-
-      actualFilename = filename;
-
-      // Ensure it has .csv extension
-      if (!actualFilename.endsWith(".csv", Qt::CaseInsensitive)) {
-        actualFilename += ".csv";
-      }
-
-      bool fileExists = QFile::exists(actualFilename);
-      if (fileExists) {
-        // Remove and replace existing file
-        if (QFile::remove(actualFilename)) {
-          printf("Existing file removed: %s\n",
-                 actualFilename.toStdString().c_str());
-        } else {
-          printf("Failed to remove existing file: %s\n",
-                 actualFilename.toStdString().c_str());
-          shouldSave = false;
-          if (saveEnabled) *saveEnabled = false;
-          return;
-        }
-      }
-
-      // Write header if new file
-      std::ofstream outFile(actualFilename.toStdString().c_str(),
-                            std::ios::app);
-      outFile << "SomaID,X,Y,Z,Radius,CenterMassX,CenterMassY,CenterMassZ,"
-              << "eigenvalue1,eigenvalue2,eigenvalue3,"
-              << "eigenvector1_x,eigenvector1_y,eigenvector1_z,"
-              << "eigenvector2_x,eigenvector2_y,eigenvector2_z,"
-              << "eigenvector3_x,eigenvector3_y,eigenvector3_z\n";
-      outFile.close();
-
-    } else {
-      return;  // User chose not to save
+    // Ensure it has .csv extension
+    if (!actualFilename.endsWith(".csv", Qt::CaseInsensitive)) {
+      actualFilename += ".csv";
     }
-  }
 
-  if (!shouldSave) return;  // Skip if user chose not to save
+    bool fileExists = QFile::exists(actualFilename);
+    if (fileExists) {
+      // Remove and replace existing file
+      if (QFile::remove(actualFilename)) {
+        printf("Existing file removed: %s\n",
+               actualFilename.toStdString().c_str());
+      } else {
+        printf("Failed to remove existing file: %s\n",
+               actualFilename.toStdString().c_str());
+        return;
+      }
+    }
+
+    // Write header if new file
+    std::ofstream outFile(actualFilename.toStdString().c_str(), std::ios::app);
+    outFile << "SomaID,X,Y,Z,Radius,CenterMassX,CenterMassY,CenterMassZ,"
+            << "eigenvalue1,eigenvalue2,eigenvalue3,"
+            << "eigenvector1_x,eigenvector1_y,eigenvector1_z,"
+            << "eigenvector2_x,eigenvector2_y,eigenvector2_z,"
+            << "eigenvector3_x,eigenvector3_y,eigenvector3_z\n";
+    outFile.close();
+  }
 
   std::ofstream outFile(actualFilename.toStdString().c_str(), std::ios::app);
 
@@ -114,34 +83,10 @@ void analyzeSomaPCAReturnResults(unsigned char *labeledData, V3DLONG N,
           img3d, N, M, P, x, y, z,  // Center on soma
           2 * r, 2 * r, 2 * r,      // Window size based on radius
           pc1, pc2, pc3, vec1, vec2, vec3, x_center, y_center, z_center)) {
-    // Print results for this soma
-    printf("\nSoma #%d PCA Results:\n", somaIndex);
-    printf("  Center: (%.1f, %.1f, %.1f)\n", x, y, z);
-    printf("  Radius: %.1f\n", r);
-    printf("  Center of mass: (%f, %f, %f)\n", x_center, y_center, z_center);
-    printf("  Eigenvalues:\n");
-    printf("    pc1: %f\n", pc1);
-    printf("    pc2: %f\n", pc2);
-    printf("    pc3: %f\n", pc3);
-    printf("  Principal axes:\n");
-    printf("    pc1: [%f, %f, %f]\n", vec1[0], vec1[1], vec1[2]);
-    printf("    pc2: [%f, %f, %f]\n", vec2[0], vec2[1], vec2[2]);
-    printf("    pc3: [%f, %f, %f]\n\n\n", vec3[0], vec3[1], vec3[2]);
-
     // Save to CSV with save flag
     QWidget *mainWin = QApplication::activeWindow();
-    bool saveEnabled = false;
     savePCAResultsToCSV(savePath, somaIndex, lm, pc1, pc2, pc3, vec1, vec2,
-                        vec3, x_center, y_center, z_center, mainWin,
-                        &saveEnabled);
-
-    if (somaIndex == 1) {
-      if (saveEnabled) {
-        printf("PCA results will be saved to the selected file.\n");
-      } else {
-        printf("PCA results will not be saved to file.\n");
-      }
-    }
+                        vec3, x_center, y_center, z_center, mainWin);
   } else {
     printf("\nSoma #%d PCA failed.\n", somaIndex);
   }
@@ -241,34 +186,10 @@ void analyzeSomaPCA(unsigned char *labeledData, V3DLONG N, V3DLONG M, V3DLONG P,
           img3d, N, M, P, x, y, z,  // Center on soma
           2 * r, 2 * r, 2 * r,      // Window size based on radius
           pc1, pc2, pc3, vec1, vec2, vec3, x_center, y_center, z_center)) {
-    // Print results for this soma
-    printf("\nSoma #%d PCA Results:\n", somaIndex);
-    printf("  Center: (%.1f, %.1f, %.1f)\n", x, y, z);
-    printf("  Radius: %.1f\n", r);
-    printf("  Center of mass: (%f, %f, %f)\n", x_center, y_center, z_center);
-    printf("  Eigenvalues:\n");
-    printf("    pc1: %f\n", pc1);
-    printf("    pc2: %f\n", pc2);
-    printf("    pc3: %f\n", pc3);
-    printf("  Principal axes:\n");
-    printf("    pc1: [%f, %f, %f]\n", vec1[0], vec1[1], vec1[2]);
-    printf("    pc2: [%f, %f, %f]\n", vec2[0], vec2[1], vec2[2]);
-    printf("    pc3: [%f, %f, %f]\n\n\n", vec3[0], vec3[1], vec3[2]);
-
     // Save to CSV with save flag
     QWidget *mainWin = QApplication::activeWindow();
-    bool saveEnabled = false;
     savePCAResultsToCSV(savePath, somaIndex, lm, pc1, pc2, pc3, vec1, vec2,
-                        vec3, x_center, y_center, z_center, mainWin,
-                        &saveEnabled);
-
-    if (somaIndex == 1) {
-      if (saveEnabled) {
-        printf("PCA results will be saved to the selected file.\n");
-      } else {
-        printf("PCA results will not be saved to file.\n");
-      }
-    }
+                        vec3, x_center, y_center, z_center, mainWin);
   } else {
     printf("\nSoma #%d PCA failed.\n", somaIndex);
   }
@@ -293,8 +214,7 @@ void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent) {
   }
   Image4DSimple *pcaVisualization = new Image4DSimple();
   pcaVisualization->createBlankImage(p4DImage->getXDim(), p4DImage->getYDim(),
-                                     p4DImage->getZDim(), 3,
-                                     V3D_UINT8);
+                                     p4DImage->getZDim(), 3, V3D_UINT8);
   pcaVisualization->setOriginX(p4DImage->getOriginX());
   pcaVisualization->setOriginY(p4DImage->getOriginY());
   pcaVisualization->setOriginZ(p4DImage->getOriginZ());
@@ -422,7 +342,8 @@ void drawLine(Image4DSimple *image, int channel, double *from, double *to) {
     if (x >= 0 && x < image->getXDim() && y >= 0 && y < image->getYDim() &&
         z >= 0 && z < image->getZDim()) {
       imgData[channel * image->getXDim() * image->getYDim() * image->getZDim() +
-              z * image->getXDim() * image->getYDim() + y * image->getXDim() + x] = 255;
+              z * image->getXDim() * image->getYDim() + y * image->getXDim() +
+              x] = 255;
     }
   };
 
