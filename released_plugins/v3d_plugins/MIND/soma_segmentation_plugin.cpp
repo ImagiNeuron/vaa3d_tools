@@ -19,6 +19,7 @@
 #include <QFileDialog>
 #include <QInputDialog>
 #include <QMessageBox>
+#include <QObject>
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -32,6 +33,7 @@
 #include "basic_4dimage.h"
 #include "basic_surf_objs.h"
 #include "v3d_message.h"
+#include "mainwindow.h"
 
 using namespace std;
 
@@ -127,7 +129,7 @@ MIND_4DImage *reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
 QStringList SomaSegmentation::menulist() const {
   return QStringList() << tr("Isotropic Correction") << tr("Soma Segmentation")
                        << tr("PC Analysis") << tr("Visualize PCA")
-                       << tr("Visualize Probability Model")
+                       << tr("Visualize Probability Model") << tr("Probability Model Legend")
                        << tr("Create Background") << tr("Simulate Somas")
                        << tr("about");
 }
@@ -164,6 +166,8 @@ void SomaSegmentation::domenu(const QString &menu_name,
     visualizePCA_func(callback, parent);
   } else if (menu_name == tr("Visualize Probability Model")) {
     visualizeProbabilityModel_func(callback, parent);
+  } else if (menu_name == tr("Probability Model Legend")) {
+    probabilityModelLegend_func(callback, parent);
   } else if (menu_name == tr("Create Background")) {
     create_background(callback, parent);
   } else if (menu_name == tr("Simulate Somas")) {
@@ -538,22 +542,17 @@ void pca_func(V3DPluginCallback2 &callback, QWidget *parent, input_PARA &PARA,
   }
 }
 
-std::tuple<char, char, char> colormap(double value) {
+std::tuple<unsigned char, unsigned char, unsigned char> colormap(double value) {
   // Ensure value is between 0 and 1
   value = std::clamp(value, 0.0, 1.0);
+  int index = static_cast<int>(value * (INFERNO_COLORMAP_SIZE - 1));
 
-  // Approximate viridis through polynomial fits
-  // These are simplified approximations of the actual colormap
-  double r = 0.267004 + value * (0.004974 + value * (0.9981 + value * -0.9988));
-  double g = 0.004974 + value * (0.9186 + value * (0.1718 + value * -0.4439));
-  double b = 0.329415 + value * (0.0875 + value * (-0.1234 + value * 0.1794));
+  double r = std::clamp(std::get<0>(INFERNO_COLORMAP[index]), 0.0, 1.0);
+  double g = std::clamp(std::get<1>(INFERNO_COLORMAP[index]), 0.0, 1.0);
+  double b = std::clamp(std::get<2>(INFERNO_COLORMAP[index]), 0.0, 1.0);
 
-  r = std::clamp(r, 0.0, 1.0);
-  g = std::clamp(g, 0.0, 1.0);
-  b = std::clamp(b, 0.0, 1.0);
-
-  return {static_cast<char>(r * 255), static_cast<char>(g * 255),
-          static_cast<char>(b * 255)};
+  return {static_cast<unsigned char>(r * 255), static_cast<unsigned char>(g * 255),
+          static_cast<unsigned char>(b * 255)};
 }
 
 void visualizeProbabilityModel_func(V3DPluginCallback2 &callback,
@@ -594,6 +593,37 @@ void visualizeProbabilityModel_func(V3DPluginCallback2 &callback,
 
   v3dhandle newwin = callback.newImageWindow("Probability Model");
   callback.setImage(newwin, p4DImage);
+}
+
+void probabilityModelLegend_func(V3DPluginCallback2 &callback, QWidget *parent) {
+  // Create a small image (e.g., 256x20) to represent the colormap legend
+  const int width = 256;
+  const int height = 1;
+  QImage legendImage(width, height, QImage::Format_RGB888);
+
+  // Fill the image with the colormap values
+  for (int x = 0; x < width; ++x) {
+    double value = static_cast<double>(x) / (width - 1); // Normalize to [0, 1]
+    auto [r, g, b] = colormap(value);
+    QColor color(static_cast<int>(r), static_cast<int>(g), static_cast<int>(b));
+    legendImage.setPixelColor(x, 0, color);
+  }
+
+  QDialog *subWindow = new QDialog(callback.getVaa3DMainWindow());
+  subWindow->setWindowTitle("Probability Model Colormap Legend");
+  subWindow->setWindowFlags(Qt::Window | Qt::WindowTitleHint | Qt::CustomizeWindowHint | Qt::WindowCloseButtonHint);
+
+  QLabel *label = new QLabel(subWindow);
+  label->setPixmap(QPixmap::fromImage(legendImage));
+  label->setAlignment(Qt::AlignCenter);
+  label->setScaledContents(true);
+
+  QVBoxLayout *layout = new QVBoxLayout(subWindow);
+  layout->addWidget(label);
+  subWindow->setLayout(layout);
+
+  subWindow->resize(500, 100); // Set an initial size for the sub-window
+  subWindow->show();
 }
 
 /**
