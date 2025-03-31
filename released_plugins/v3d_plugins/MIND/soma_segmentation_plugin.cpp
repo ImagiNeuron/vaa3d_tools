@@ -20,6 +20,8 @@
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QObject>
+#include <QPainter>
+#include <QFont>
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -596,33 +598,65 @@ void visualizeProbabilityModel_func(V3DPluginCallback2 &callback,
 }
 
 void probabilityModelLegend_func(V3DPluginCallback2 &callback, QWidget *parent) {
-  // Create a small image (e.g., 256x20) to represent the colormap legend
-  const int width = 256;
-  const int height = 1;
-  QImage legendImage(width, height, QImage::Format_RGB888);
+  const int inner_width = 512; // Width of the color bar
+  const int inner_height = 60;  // Height of the color bar
+  const int padding_x = 40; // Padding around the color bar
+  const int padding_y = 15;
+  const int full_width = inner_width + 2 * padding_x;
+  const int full_height = inner_height + padding_y;
 
-  // Fill the image with the colormap values
-  for (int x = 0; x < width; ++x) {
-    double value = static_cast<double>(x) / (width - 1); // Normalize to [0, 1]
-    auto [r, g, b] = colormap(value);
-    QColor color(static_cast<int>(r), static_cast<int>(g), static_cast<int>(b));
-    legendImage.setPixelColor(x, 0, color);
+  QImage legendImage(full_width, full_height, QImage::Format_ARGB32);
+  legendImage.fill(Qt::white);
+
+  // Draw the colormap in the top portion (say the top 20 pixels)
+  const int colorBarHeight = 30;
+  for (int x = padding_x; x < inner_width + padding_x; ++x) {
+      double value = double(x - padding_x) / (inner_width - 1); // [0,1]
+      auto [r, g, b] = colormap(value);
+      QColor color(static_cast<int>(r), static_cast<int>(g), static_cast<int>(b));
+  
+      // Fill a small vertical column of color
+      for (int y = 0; y < colorBarHeight; ++y) {
+          legendImage.setPixelColor(x, y, color);
+      }
   }
-
+  
+  // Create a QPainter to draw numeric ticks/labels
+  QPainter painter(&legendImage);
+  painter.setPen(Qt::black);
+  painter.setFont(QFont("Arial", 12));
+  
+  // Define which ticks to draw. Here we do 0.0, 0.25, 0.5, 0.75, 1.0
+  QList<double> ticks = {0.0, 0.25, 0.5, 0.75, 1.0};
+  for (double t : ticks)
+  {
+      int xPos = int(t * (inner_width - 1) + padding_x);
+      // Vertical position below the color bar
+      int textY = colorBarHeight + 32; 
+      // Draw the numeric label
+      QString label = QString::number(t, 'f', 2); // e.g. "0.00", "0.25", ...
+      painter.drawText(xPos - 25, textY, label);  
+      // Optionally, draw a small tick line at each label
+      painter.drawLine(xPos, colorBarHeight, xPos, colorBarHeight + 10);
+  }
+  
+  // Set up a dialog to display our legend
   QDialog *subWindow = new QDialog(callback.getVaa3DMainWindow());
-  subWindow->setWindowTitle("Probability Model Colormap Legend");
-  subWindow->setWindowFlags(Qt::Window | Qt::WindowTitleHint | Qt::CustomizeWindowHint | Qt::WindowCloseButtonHint);
+  subWindow->setWindowTitle("Colormap Legend");
+  subWindow->setWindowFlags(Qt::Window | Qt::WindowTitleHint | Qt::CustomizeWindowHint | Qt::WindowCloseButtonHint | Qt::MSWindowsFixedSizeDialogHint);
 
   QLabel *label = new QLabel(subWindow);
   label->setPixmap(QPixmap::fromImage(legendImage));
   label->setAlignment(Qt::AlignCenter);
+  // If you do not want the label to stretch, omit "setScaledContents(true)"
   label->setScaledContents(true);
-
+  
   QVBoxLayout *layout = new QVBoxLayout(subWindow);
   layout->addWidget(label);
   subWindow->setLayout(layout);
-
-  subWindow->resize(500, 100); // Set an initial size for the sub-window
+  
+  // Adjust as needed for an initial display size
+  subWindow->resize(600, 120);
   subWindow->show();
 }
 
