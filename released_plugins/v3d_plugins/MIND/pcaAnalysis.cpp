@@ -223,8 +223,10 @@ void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent) {
   pcaVisualization->setRezZ(p4DImage->getRezZ());
 
   // copy original image to channel 1
-  memcpy(pcaVisualization->getRawData(), p4DImage->getRawData(),
-         p4DImage->getTotalUnitNumber() * p4DImage->getUnitBytes());
+  const int size = p4DImage->getTotalUnitNumber() * p4DImage->getUnitBytes();
+  memcpy(pcaVisualization->getRawData(), p4DImage->getRawData(), size);
+  memcpy(pcaVisualization->getRawData() + size, p4DImage->getRawData(), size);
+  memcpy(pcaVisualization->getRawData() + 2 * size, p4DImage->getRawData(), size);
 
   // load pca data from csv
   QString filename = QFileDialog::getOpenFileName(parent, "Open PCA Results",
@@ -315,9 +317,9 @@ void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent) {
     }
 
     // Visualize
-    drawLine(pcaVisualization, 1, center, vec1Pos);
-    drawLine(pcaVisualization, 2, center, vec2Pos);
-    drawLine(pcaVisualization, 2, center, vec3Pos);
+    drawLine(pcaVisualization, 255, 0, 0, center, vec1Pos);
+    drawLine(pcaVisualization, 0, 255, 0, center, vec2Pos);
+    drawLine(pcaVisualization, 0, 255, 255, center, vec3Pos);
   }
 
   inFile.close();
@@ -327,7 +329,8 @@ void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent) {
   callback.setImage(newwin, pcaVisualization);
 }
 
-void drawLine(Image4DSimple *image, int channel, double *from, double *to) {
+void drawLine(Image4DSimple *image, unsigned char r, unsigned char g, unsigned char b, double *from, double *to)
+{
   // convert points from world space to image space
   int x1 = (int)((from[0] - image->getOriginX()) / image->getRezX());
   int y1 = (int)((from[1] - image->getOriginY()) / image->getRezY());
@@ -339,11 +342,12 @@ void drawLine(Image4DSimple *image, int channel, double *from, double *to) {
   unsigned char *imgData = image->getRawData();
 
   auto fillPixel = [&](int x, int y, int z) {
-    if (x >= 0 && x < image->getXDim() && y >= 0 && y < image->getYDim() &&
-        z >= 0 && z < image->getZDim()) {
-      imgData[channel * image->getXDim() * image->getYDim() * image->getZDim() +
-              z * image->getXDim() * image->getYDim() + y * image->getXDim() +
-              x] = 255;
+    if (x >= 0 && x < image->getXDim() && y >= 0 && y < image->getYDim() && z >= 0 && z < image->getZDim()) {
+      const int channel_size = image->getXDim() * image->getYDim() * image->getZDim();
+      const int subindex = z * image->getXDim() * image->getYDim() + y * image->getXDim() + x;
+      imgData[subindex] = r;
+      imgData[channel_size + subindex] = g;
+      imgData[2 * channel_size + subindex] = b;
     }
   };
 
