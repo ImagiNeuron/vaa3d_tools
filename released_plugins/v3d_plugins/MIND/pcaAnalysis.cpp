@@ -316,9 +316,9 @@ void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent) {
       col++;
     }
 
-    // Visualize
-    drawLine(pcaVisualization, 255, 0, 0, center, vec1Pos);
-    drawLine(pcaVisualization, 0, 255, 0, center, vec2Pos);
+    // Visualize: green longest, red second, blue (cyan for better visibility) third
+    drawLine(pcaVisualization, 0, 255, 0, center, vec1Pos);
+    drawLine(pcaVisualization, 255, 0, 0, center, vec2Pos);
     drawLine(pcaVisualization, 0, 255, 255, center, vec3Pos);
   }
 
