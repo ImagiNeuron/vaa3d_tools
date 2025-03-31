@@ -595,6 +595,9 @@ void visualizeProbabilityModel_func(V3DPluginCallback2 &callback,
 
   v3dhandle newwin = callback.newImageWindow("Probability Model");
   callback.setImage(newwin, p4DImage);
+
+  // open legend
+  probabilityModelLegend_func(callback, parent);
 }
 
 void probabilityModelLegend_func(V3DPluginCallback2 &callback, QWidget *parent) {
