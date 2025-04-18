@@ -7,7 +7,7 @@ Machine Intelligence for Neuron Detection (MIND) is a platform built with the ai
 1. `Isotropic Correction` - adjust the 3D view of images for the true dimensions of a voxel based on the microscopy technique.
 2. `Soma Segmentation` - automatically segments neuron somas that have been bounded within spheres around their center of mass with Vaa3D markers. Ouputs a visualization of the segmentation, as well as the binary segmentation file, and a probability model of Neuron Soma shape obtained through Principal Component Analysis (PCA) on the binary segmentation of somas. The PCA results are also output in a csv file.
 3. `PC Analysis` - Intensity Weighted Principal Component Analysis on the original image based on the spherical volume captured by the Vaa3D markers. Results are output in a csv file.
-4. `Visualize PCA` - Visualize the results of PCA from the `Soma Segmentation` function in 3D with accurate lengths for each soma. The longest PC is shown in green, the second longest in red, and the shortest in cyan. This function also supports visualizing the results of the `PC Analysis` function, but the lengths of the PCs have no meaning. 
+4. `Visualize PCA` - Visualize the results of PCA from the `Soma Segmentation` function in 3D with accurate lengths for each soma. The longest PC is shown in green, the second longest in red, and the shortest in cyan. This function also supports visualizing the results of the `PC Analysis` function, but the lengths of the PCs have no meaning.
 5. `Visualize Probability Model` - Visualize the probability model output by the Soma Segmenation function in 2D or 3D, as a heatmap with a legend.
 6. `Probability Model Legend` - View only the legend of the probability model.
 7. `Create Background` - Create a synthetic background for somas based on analysing an open image. Gives access to the synthetic background without having to put somas in it.
@@ -39,4 +39,4 @@ This project was primarily developed by ImagiNeuron, a group of 4 McGill Univers
 - Athmane Benarous
 - Thibaut Baguette
 
-ImagiNeuron is deeply greatful for the supervision and expertise of Dr. Amir Shmuel of the Neuro Insitute and Mcgill throughout the their project. In addition, the project's success would not have been possible without the open source community behind Vaa3D.
+ImagiNeuron is deeply greatful for the supervision and expertise of Dr. Amir Shmuel of the Neuro Insitute and McGill, throughout the project. In addition, the project's success would not have been possible without the open source community behind Vaa3D.

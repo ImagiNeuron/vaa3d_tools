@@ -272,7 +272,7 @@ int calculateOtsuThreshold(const int hist[256], int totalPixels) {
 /**
  * @brief Get blended distribution parameters for a voxel based on its
  * location
- * 
+ *
  * @param x X coordinate of the voxel
  * @param y Y coordinate of the voxel
  * @param z Z coordinate of the voxel
@@ -398,8 +398,7 @@ void overlaySimulation(V3DPluginCallback2 &callback, QWidget *parent,
  * @param bmenu - whether the function is being called from the menu
  */
 
-void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
-                        input_PARA &PARA, bool bmenu) {
+void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
   // Get current window and validate
   v3dhandle curwin = callback.currentImageWindow();
   if (!curwin) {

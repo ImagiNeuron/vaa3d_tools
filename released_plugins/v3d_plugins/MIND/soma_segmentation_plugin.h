@@ -20,12 +20,12 @@
 #include "cellSegmentation_plugin.h"
 #include "pcaAnalysis.h"
 #include "probability_model_vis.h"
+#include "soma_simulation.h"
+
 struct input_PARA {
   QString inimg_file;
   V3DLONG channel;
 };
-
-#include "soma_simulation.h"
 
 // A basic structure for a marker
 struct MyMarker {

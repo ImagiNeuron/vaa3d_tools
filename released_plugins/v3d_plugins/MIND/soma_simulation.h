@@ -9,12 +9,12 @@
 
 #include <QDir>
 #include <QFileDialog>
+#include <QInputDialog>
 #include <QLabel>
 #include <QMessageBox>
 #include <QRegularExpression>
 #include <QtCore>
 #include <QtGui>
-#include <QInputDialog>
 #include <eigen/Dense>
 #include <fstream>
 
@@ -77,8 +77,7 @@ void getBlendedDistributionParams(
     double &blendedMean, double &blendedStdDev);
 
 // Simulation of synthetic soma data
-void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent,
-                        input_PARA &PARA, bool bmenu);
+void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent);
 
 // display simulation results
 void overlaySimulation(V3DPluginCallback2 &callback, QWidget *parent,

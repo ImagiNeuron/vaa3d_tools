@@ -173,7 +173,7 @@ void SomaSegmentation::domenu(const QString &menu_name,
   } else if (menu_name == tr("Simulate Somas")) {
     bool bmenu = true;
     input_PARA PARA;
-    simulate_soma_data(callback, parent, PARA, bmenu);
+    simulate_soma_data(callback, parent);
   } else {
     v3d_msg(tr("This plugin segments individual somas using a 3D "
                "region-growing algorithm "
@@ -292,7 +292,7 @@ bool SomaSegmentation::dofunc(const QString &func_name,
     PARA.channel = (paras.size() >= k + 1) ? atoi(paras[k]) : 1;
     k++;
 
-    simulate_soma_data(callback, parent, PARA, bmenu);
+    simulate_soma_data(callback, parent);
   } else if (func_name == tr("help")) {
     printf("**** Usage of soma_segmentation ****\n");
     printf(
