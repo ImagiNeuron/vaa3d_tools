@@ -1,19 +1,18 @@
- /**
+/**
  * 2025-04-18: by ImagiNeuron: Shidan Javaheri, Siger Ma, Athmane Benarous and
  * Thibaut Baguette (McGill University)
  */
 #include "soma_simulation.h"
 
-
-
 /**
  * @brief Function to create a background image for the current image
- * 
+ *
  * @param callback - the V3D plugin callback interface
  * @param parent - the parent interface
  * @param dim_X - the X dimension of the image
  * @param dim_Y - the Y dimension of the image
  * @param dim_Z - the Z dimension of the image
+ * @return - a pointer to the background image data
  */
 unsigned char *create_background(V3DPluginCallback2 &callback, QWidget *parent,
                                  V3DLONG &dim_X, V3DLONG &dim_Y,
@@ -179,36 +178,11 @@ unsigned char *create_background(V3DPluginCallback2 &callback, QWidget *parent,
   return backgroundArray;
 }
 
-void free_mapped_arrays(unsigned char ***intensities,
-                        unsigned char ***segmentation, V3DLONG dim_Z,
-                        V3DLONG dim_Y) {
-  // Free intensities array
-  if (intensities) {
-    for (V3DLONG z = 0; z < dim_Z; z++) {
-      if (intensities[z]) {
-        for (V3DLONG y = 0; y < dim_Y; y++) {
-          if (intensities[z][y]) delete[] intensities[z][y];
-        }
-        delete[] intensities[z];
-      }
-    }
-    delete[] intensities;
-  }
-
-  // Free segmentation array
-  if (segmentation) {
-    for (V3DLONG z = 0; z < dim_Z; z++) {
-      if (segmentation[z]) {
-        for (V3DLONG y = 0; y < dim_Y; y++) {
-          if (segmentation[z][y]) delete[] segmentation[z][y];
-        }
-        delete[] segmentation[z];
-      }
-    }
-    delete[] segmentation;
-  }
-}
-
+/**
+ * @brief Create a background image based on segmentation threshold
+ * @param callback V3DPluginCallback2 reference
+ * @param parent Parent widget
+ */
 void create_background(V3DPluginCallback2 &callback, QWidget *parent) {
   // Old version that creates and displays an image directly for debugging
 
@@ -295,6 +269,24 @@ int calculateOtsuThreshold(const int hist[256], int totalPixels) {
   return threshold;
 }
 
+/**
+ * @brief Get blended distribution parameters for a voxel based on its
+ * location
+ * 
+ * @param x X coordinate of the voxel
+ * @param y Y coordinate of the voxel
+ * @param z Z coordinate of the voxel
+ * @param chunkStats 3D vector containing mean and stdDev pairs for each chunk
+ * @param chunk_X Chunk size in X dimension
+ * @param chunk_Y Chunk size in Y dimension
+ * @param chunk_Z Chunk size in Z dimension
+ * @param num_chunks_X Number of chunks in X dimension
+ * @param num_chunks_Y Number of chunks in Y dimension
+ * @param num_chunks_Z Number of chunks in Z dimension
+ * @param blendRadius Radius for blending (in chunk units)
+ * @param blendedMean Output parameter for the blended mean value
+ * @param blendedStdDev Output parameter for the blended standard deviation
+ */
 void getBlendedDistributionParams(
     V3DLONG x, V3DLONG y, V3DLONG z,
     const std::vector<std::vector<std::vector<std::pair<double, double>>>>
@@ -365,8 +357,14 @@ void getBlendedDistributionParams(
 }
 
 /**
- * @brief overlay the ground truth data on the new simulated image. Dimesnions
+ * @brief overlay the ground truth data on the new simulated image. Dimensions
  * calculated based on current image
+ *
+ * @param callback - the V3D plugin callback interface
+ * @param parent - the parent interface
+ * @param binarySegImage - the binary segmentation image
+ * @param gradientImage - the gradient image
+ * @param simulatedImage - the simulated image
  */
 void overlaySimulation(V3DPluginCallback2 &callback, QWidget *parent,
                        unsigned char *binarySegImage,

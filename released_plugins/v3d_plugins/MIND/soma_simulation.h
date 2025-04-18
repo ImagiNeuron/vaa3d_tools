@@ -45,17 +45,6 @@ unsigned char *create_background(V3DPluginCallback2 &callback, QWidget *parent,
 void create_background(V3DPluginCallback2 &callback, QWidget *parent);
 
 /**
- * @brief Free memory allocated for two 3D arrays (intensities and segmentation)
- * @param intensities 3D array of intensity values
- * @param segmentation 3D array of segmentation values
- * @param dim_Z Number of Z slices
- * @param dim_Y Number of rows
- */
-void free_mapped_arrays(unsigned char ***intensities,
-                        unsigned char ***segmentation, V3DLONG dim_Z,
-                        V3DLONG dim_Y);
-
-/**
  * @brief Calculate Otsu threshold for a histogram
  * @param hist Array of 256 histogram values
  * @param totalPixels Total number of pixels in the region

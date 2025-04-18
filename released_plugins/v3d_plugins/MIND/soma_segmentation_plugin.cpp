@@ -1,6 +1,6 @@
 /**
- * This is the main file of the MIND plugin that supports the analaysis and
- * segmentaiton of neuron somas in the brain. It contains the logic that
+ * This is the main file of the MIND plugin that supports the analysis and
+ * segmentation of neuron somas in the brain. It contains the logic that
  * controls which functions are called when the user selects a plugin option.
  *
  * This file also contains the logic for isotropic correction, and intensity
