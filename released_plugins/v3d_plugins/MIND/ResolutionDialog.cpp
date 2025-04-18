@@ -1,5 +1,12 @@
+/**
+ * 2025-04-18: by ImagiNeuron: Shidan Javaheri, Siger Ma, Athmane Benarous and
+ * Thibaut Baguette (McGill University)
+ */
 #include "ResolutionDialog.h"
 
+/**
+ * Construct a window for the user to input the dimensions of a voxel in µm
+ */
 ResolutionDialog::ResolutionDialog(QWidget *parent)
     : QDialog(parent), parent(parent) {
   QFormLayout *formLayout = new QFormLayout;
@@ -51,6 +58,11 @@ double ResolutionDialog::getYResolution() const { return ySpinBox->value(); }
 
 double ResolutionDialog::getZResolution() const { return zSpinBox->value(); }
 
+/**
+ * @brief Set the resolution of the image
+ *
+ * @param p4DImage - the image to set the resolution for
+ */
 void ResolutionDialog::setResolutionOfImage(Image4DSimple *p4DImage) {
   // Landmark info and ask for desired resolution of a image pixel along the 3
   // axes for isotropic correction
