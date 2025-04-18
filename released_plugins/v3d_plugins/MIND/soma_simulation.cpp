@@ -394,10 +394,7 @@ void overlaySimulation(V3DPluginCallback2 &callback, QWidget *parent,
  *
  * @param callback - the V3D plugin callback interface
  * @param parent - the parent interface
- * @param PARA - the input parameters
- * @param bmenu - whether the function is being called from the menu
  */
-
 void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
   // Get current window and validate
   v3dhandle curwin = callback.currentImageWindow();
