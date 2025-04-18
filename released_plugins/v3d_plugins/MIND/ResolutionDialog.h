@@ -1,10 +1,6 @@
-/* ResolutionDialog.h
- * This dialog allows the user to enter resolutions for a landmark and its image
- * to be used in the soma segmentation plugin to correct for isotropic and
- * z-thickness
- *
- * 2024-11-30 : by ImagiNeuron: Shidan Javaheri, Siger Ma, Athmane Benarous and
- * Thibaut Baguette
+ /**
+ * 2025-04-18: by ImagiNeuron: Shidan Javaheri, Siger Ma, Athmane Benarous and
+ * Thibaut Baguette (McGill University)
  */
 
 #ifndef __RESOLUTIONDIALOG_H__

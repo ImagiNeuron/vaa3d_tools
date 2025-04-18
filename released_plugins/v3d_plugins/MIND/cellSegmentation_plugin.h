@@ -1,6 +1,6 @@
 /* adapted from cellseg_quickfind - cellSegmentation.cpp
  * 2014-10-12: by Xiang Li (lindbergh.li@gmail.com);
- * 2025-02-10: By ImagiNeuron - Thibaut Baguette, Shidan Javaheri, Siger Ma and
+ * 2025-04-18: By ImagiNeuron - Thibaut Baguette, Shidan Javaheri, Siger Ma and
  * Athmane Benarous. Performs 3D flood filling on marked cells using either
  * otsu, local otsu or iterative thresholding. */
 
@@ -756,141 +756,6 @@ class cellSegmentation : public QObject {
       V3DLONG count_seedCategory = this->possVct_seed.size();
       unsigned char **masks_page =
           this->memory_allocate_uchar2D(count_exemplar, this->size_page);
-
-      // code that adds further markers and segmentations
-
-      // for (V3DLONG
-      // idx_exemplar=0;idx_exemplar<count_exemplar;idx_exemplar++)
-      // {
-      // 	memset(masks_page[idx_exemplar], const_max_voxelValue,
-      // this->size_page); 	for (V3DLONG i=0;i<this->size_page;i++)
-      // 	{
-      // 		if (this->Image1D_mask[i]<1)
-      // {masks_page[idx_exemplar][i]=0;}
-      // 	}
-      // }
-      // for (V3DLONG
-      // idx_seedCategoy=0;idx_seedCategoy<count_seedCategory;idx_seedCategoy++)
-      // {
-      // 	V3DLONG count_seed = this->possVct_seed[idx_seedCategoy].size();
-      // 	cout<<"at value: "<<(const_max_voxelValue-idx_seedCategoy)<<",
-      // totally: "<<count_seed<<" seeds;"<<endl; 	for (V3DLONG
-      // idx_seed=0;idx_seed<count_seed;idx_seed++)
-      // 	{
-      // 		V3DLONG pos_seed =
-      // this->possVct_seed[idx_seedCategoy][idx_seed]; 		for
-      // (V3DLONG idx_exemplar=0;idx_exemplar<count_exemplar;idx_exemplar++)
-      // 		{
-      // 			if (masks_page[idx_exemplar][pos_seed]<1)
-      // {continue;} 			V3DLONG value_seed =
-      // this->Image1D_page[pos_seed]; 			V3DLONG
-      // idx_exemplarMapped = mapping_exemplar[idx_exemplar];
-      // V3DLONG threshold_backgroundValue =
-      // thresholds_voxelValue[idx_exemplarMapped]; 			double
-      // threshold_valueChangeRatio =
-      // thresholds_valueChangeRatio[idx_exemplarMapped];
-      // V3DLONG threshold_regionSize =
-      // thresholds_regionSize[idx_exemplarMapped]; 			if
-      // (value_seed<threshold_backgroundValue) { break; }
-      // V3DLONG uThreshold_regionSize =
-      // uThresholds_regionSize[idx_exemplarMapped]; 			V3DLONG
-      // threshold_radius = thresholds_radius[idx_exemplarMapped];
-      // vector<V3DLONG> poss_region = this->regionGrowOnPos(pos_seed,
-      // threshold_backgroundValue, threshold_valueChangeRatio,
-      // uThreshold_regionSize, masks_page[idx_exemplar]);
-      // V3DLONG count_voxel = poss_region.size(); 			if
-      // (count_voxel>uThreshold_regionSize) {continue; }
-      // else if (count_voxel<threshold_regionSize)
-      // 			{
-      // 				for (V3DLONG
-      // idx_exemplar=0;idx_exemplar<count_exemplar;idx_exemplar++)
-      // 				{
-      // 					this->poss2Image1D(poss_region,
-      // masks_page[idx_exemplar], 0);
-      // 				}
-      // 				break;
-      // 			}
-      // 			vector<V3DLONG> boundBox_region =
-      // this->getBoundBox(poss_region); 			V3DLONG
-      // size_radius = this->getMinDimension(boundBox_region)/2;
-      // if
-      // (size_radius<(threshold_radius*this->multiplier_thresholdRegionSize))
-      // 			{
-      // 				for (V3DLONG
-      // idx_exemplar=0;idx_exemplar<count_exemplar;idx_exemplar++)
-      // 				{
-      // 					this->poss2Image1D(poss_region,
-      // masks_page[idx_exemplar], 0);
-      // 				}
-      // 				break;
-      // 			}
-      // 			else if
-      // (size_radius>(threshold_radius*this->multiplier_uThresholdRegionSize))
-      // {continue;} 			V3DLONG pos_center =
-      // this->getCenterByMass(poss_region); 			vector<V3DLONG>
-      // xyz_center = this->index2Coordinate(pos_center);
-      // V3DLONG x = V3DLONG(xyz_center[0]); V3DLONG y =
-      // V3DLONG(xyz_center[1]); V3DLONG z = V3DLONG(xyz_center[2]);
-      // vector<vector<double> > valuesVct_regionShapeStat =
-      // this->getShapeStat(x, y, z, size_radius);
-      // //consisted of 3 vectors with length 4; 			if
-      // (valuesVct_regionShapeStat.empty())
-      // 			{
-      // 				for (V3DLONG
-      // idx_exemplar=0;idx_exemplar<count_exemplar;idx_exemplar++)
-      // 				{
-      // 					this->poss2Image1D(poss_region,
-      // masks_page[idx_exemplar], 0);
-      // 				}
-      // 				break;
-      // 			}
-      // 			vector<double> values_PC1 =
-      // valuesVct_regionShapeStat[0]; vector<double> values_PC2 =
-      // valuesVct_regionShapeStat[1]; vector<double> values_PC3 =
-      // valuesVct_regionShapeStat[2]; 			bool
-      // is_passedShapeTest = true; 			for (int m=0; m<4; m++)
-      // 			{
-      // 				double value_anisotropy =
-      // valueVctVct_exemplarShapeStat[idx_exemplarMapped][0][m];
-      // if
-      // (fabs(values_PC1[m]-value_anisotropy)>(this->threshold_deltaShapeStat*value_anisotropy))
-      // 				{is_passedShapeTest = false; break;}
-      // 				value_anisotropy =
-      // valueVctVct_exemplarShapeStat[idx_exemplarMapped][1][m];
-      // if
-      // (fabs(values_PC2[m]-value_anisotropy)>(this->threshold_deltaShapeStat*value_anisotropy))
-      // 				{is_passedShapeTest = false; break;}
-      // 				value_anisotropy =
-      // valueVctVct_exemplarShapeStat[idx_exemplarMapped][2][m];
-      // if
-      // (fabs(values_PC3[m]-value_anisotropy)>(this->threshold_deltaShapeStat*value_anisotropy))
-      // 				{is_passedShapeTest = false; break;}
-      // 			}
-      // 			if (is_passedShapeTest)
-      // 			{
-      // 				this->possVct_segmentationResult.push_back(poss_region);
-      // 				this->poss_segmentationResultCenter.push_back(pos_center);
-      // 				for (V3DLONG
-      // idx_exemplar=0;idx_exemplar<count_exemplar;idx_exemplar++)
-      // 				{
-      // 					this->poss2Image1D(poss_region,
-      // masks_page[idx_exemplar], 0);
-      // 				}
-      // 				for (V3DLONG i=0;i<count_voxel;i++)
-      // 				{
-      // 					vector<V3DLONG> xyz_i =
-      // this->index2Coordinate(poss_region[i]);
-      // 					this->Image3D_page[xyz_i[2]][xyz_i[1]][xyz_i[0]]
-      // = 0;
-      // 				}
-      // 				break;
-      // 			}
-      // 		}
-      // 	}
-      // }
-
-      // leave uncommented
-      // memset(this->Image1D_mask, const_max_voxelValue, this->size_page);
 
       // merge all segmentation results into one
       this->possVct_segmentationResult = this->mergePossVector(
@@ -3143,58 +3008,6 @@ class cellSegmentation : public QObject {
     // if the segmentation is successful, display the results
     QString name_result = "Result";
     if (is_success) {
-      // visualizationImage1D(this->class_segmentationMain1.Image1D_exemplar,
-      // this->class_segmentationMain1.dim_X,
-      // this->class_segmentationMain1.dim_Y,
-      // this->class_segmentationMain1.dim_Z, 3,
-      // _V3DPluginCallback2_currentCallback, "Exemplar");
-
-      // visualization of result
-      //   visualizationImage1D(
-      //       this->class_segmentationMain1.Image1D_segmentationResult,
-      //       this->class_segmentationMain1.dim_X,
-      //       this->class_segmentationMain1.dim_Y,
-      //       this->class_segmentationMain1.dim_Z, 3,
-      //       _V3DPluginCallback2_currentCallback, name_result);
-      //   // visualizationImage1D(this->class_segmentationMain1.Image1D_mask,
-      //   // this->class_segmentationMain1.dim_X,
-      //   // this->class_segmentationMain1.dim_Y,
-      //   // this->class_segmentationMain1.dim_Z, 1,
-      //   // _V3DPluginCallback2_currentCallback, "Mask");
-      //   v3dhandleList v3dhandleList_current =
-      //       _V3DPluginCallback2_currentCallback.getImageWindowList();
-      //   V3DLONG count_v3dhandle = v3dhandleList_current.size();
-
-      //   // QString name_exemplar = "Exemplar";
-      //   for (V3DLONG i = 0; i < count_v3dhandle; i++) {
-      //     if (_V3DPluginCallback2_currentCallback
-      //             .getImageName(v3dhandleList_current[i])
-      //             .contains(this->class_segmentationMain1.name_currentWindow))
-      //             {
-      //       _V3DPluginCallback2_currentCallback.setLandmark(
-      //           v3dhandleList_current[i],
-      //           this->class_segmentationMain1.LandmarkList_segmentationResult);
-      //       _V3DPluginCallback2_currentCallback.updateImageWindow(
-      //           v3dhandleList_current[i]);
-      //       break;
-      //     }
-      //     // if
-      //     //
-      //     (_V3DPluginCallback2_currentCallback.getImageName(v3dhandleList_current[i]).contains(name_result))
-      //     //{
-      //     //_V3DPluginCallback2_currentCallback.setLandmark(v3dhandleList_current[i],
-      //     // this->class_segmentationMain1.LandmarkList_exemplar);
-      //     //_V3DPluginCallback2_currentCallback.updateImageWindow(v3dhandleList_current[i]);
-      //     //}
-      //     /*if
-      //     (_V3DPluginCallback2_currentCallback.getImageName(v3dhandleList_current[i]).contains(name_exemplar))
-      //     {
-      //             _V3DPluginCallback2_currentCallback.setLandmark(v3dhandleList_current[i],
-      //     this->class_segmentationMain1.LandmarkList_exemplar);
-      //             _V3DPluginCallback2_currentCallback.updateImageWindow(v3dhandleList_current[i]);
-      //     }*/
-      //   }
-      // temporary solution for Haru's request;
       ofstream ofstream_log;
 
       time_t rawtime;
