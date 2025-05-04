@@ -28,11 +28,11 @@
 // function to map a value between 0 and 1 to a color in the colormap
 std::tuple<unsigned char, unsigned char, unsigned char> colormap(double value);
 
-// visualize probability model of somas
+// visualize probabilistic model of somas
 void visualizeProbabilityModel_func(V3DPluginCallback2 &callback,
                                     QWidget *parent);
 
-// visualiz the legend of the probability model
+// visualiz the legend of the probabilistic model
 void probabilityModelLegend_func(V3DPluginCallback2 &callback, QWidget *parent);
 
 // colormap data

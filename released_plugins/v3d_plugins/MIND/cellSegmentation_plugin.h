@@ -816,8 +816,8 @@ class cellSegmentation : public QObject {
       memset(somaSegmentation, 0, totalVoxels * sizeof(double));
 
       // store the counts of each voxel being part of a soma
-      double *probabilityModel = new double[totalVoxels];
-      memset(probabilityModel, 0, totalVoxels * sizeof(double));
+      double *probabilisticModel = new double[totalVoxels];
+      memset(probabilisticModel, 0, totalVoxels * sizeof(double));
 
       // for each index inside the segmentedLabels vector
       int segmentationCount = 0;
@@ -850,9 +850,9 @@ class cellSegmentation : public QObject {
         // y, and z axes.
         rotateSegmentation(somaSegmentation, cubeSize, vec1, vec2, vec3);
 
-        // Accumulate the binary segmentation into the probability model.
+        // Accumulate the binary segmentation into the probabilistic model.
         for (V3DLONG i = 0; i < totalVoxels; i++) {
-          probabilityModel[i] += somaSegmentation[i];
+          probabilisticModel[i] += somaSegmentation[i];
         }
 
         // Compute the central slice index
@@ -872,9 +872,9 @@ class cellSegmentation : public QObject {
             printSomaSlice(
                 somaSegmentation + (centralSlice * cubeSize * cubeSize),
                 cubeSize, 0);
-            printf("Probability model (central slice): \n");
+            printf("Probabilistic model (central slice): \n");
             printSomaSlice(
-                probabilityModel + (centralSlice * cubeSize * cubeSize),
+                probabilisticModel + (centralSlice * cubeSize * cubeSize),
                 cubeSize);
           }
         }
@@ -883,23 +883,23 @@ class cellSegmentation : public QObject {
         memset(somaSegmentation, 0, totalVoxels * sizeof(double));
       }
 
-      // print value at the center of the probability model to see if it is
+      // print value at the center of the probabilistic model to see if it is
       // working
 
-      printf("Final probability model (central slice) \n");
-      printSomaSlice(probabilityModel + (centralSlice * cubeSize * cubeSize),
+      printf("Final probabilistic model (central slice) \n");
+      printSomaSlice(probabilisticModel + (centralSlice * cubeSize * cubeSize),
                      cubeSize);
 
       QString saveModelPath = fileName + "_probability_model.bin";
 
-      if (!saveProbabilityModel(saveModelPath.toStdString(), probabilityModel,
+      if (!saveProbabilityModel(saveModelPath.toStdString(), probabilisticModel,
                                 cubeSize, cubeSize, cubeSize)) {
-        printf("Failed to save probability model\n");
+        printf("Failed to save probabilistic model\n");
       }
 
-      // Free the allocated memory for the probability model and segmentation.
+      // Free the allocated memory for the probabilistic model and segmentation.
       delete[] somaSegmentation;
-      delete[] probabilityModel;
+      delete[] probabilisticModel;
       this->memory_free_uchar2D(masks_page, count_exemplar);
       return true;
     }
@@ -1066,10 +1066,10 @@ class cellSegmentation : public QObject {
     }
 
     /**
-     * @brief Helper function to save the probability model to a binary file.
+     * @brief Helper function to save the probabilistic model to a binary file.
      */
     static bool saveProbabilityModel(const std::string &filename,
-                                     const double *probabilityModel,
+                                     const double *probabilisticModel,
                                      V3DLONG dimX, V3DLONG dimY, V3DLONG dimZ) {
       std::ofstream outFile(filename, std::ios::binary);
 
@@ -1084,7 +1084,7 @@ class cellSegmentation : public QObject {
       outFile.write(reinterpret_cast<const char *>(&dimZ), sizeof(V3DLONG));
 
       // Write the entire array as binary.
-      outFile.write(reinterpret_cast<const char *>(probabilityModel),
+      outFile.write(reinterpret_cast<const char *>(probabilisticModel),
                     dimX * dimY * dimZ * sizeof(double));
       if (!outFile.good()) {
         std::cerr << "Error: Failed to write data to file " << filename << "."
@@ -1097,7 +1097,7 @@ class cellSegmentation : public QObject {
     }
 
     /**
-     * @brief Helper function to load a probability model from a binary file.
+     * @brief Helper function to load a probabilistic model from a binary file.
      */
     static bool loadProbabilityModel(const std::string &filename,
                                      std::vector<double> &probabilityModelOut,
@@ -3086,7 +3086,7 @@ class cellSegmentation : public QObject {
       }
       if (this->class_segmentationMain1.errorOccurred) {
         v3d_msg(QString("Some cells were not properly segmented, which may "
-                        "give a poor probability model of cell shape. Check "
+                        "give a poor probabilistic model of cell shape. Check "
                         "debuggin log for details. Plugin files saved to %1.")
                     .arg(fileName));
       } else {
