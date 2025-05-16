@@ -33,7 +33,7 @@ void visualizeProbabilityModel_func(V3DPluginCallback2 &callback,
                                     QWidget *parent) {
   // Load data
   QString filename = QFileDialog::getOpenFileName(
-      parent, "Open Probability Model", "", "Binary Files (*.bin)");
+      parent, "Open Probabilistic Model", "", "Binary Files (*.bin)");
 
   if (filename.isEmpty()) {
     printf("No file selected.\n");
@@ -65,7 +65,7 @@ void visualizeProbabilityModel_func(V3DPluginCallback2 &callback,
     pixels[i + 2 * channelSize] = b;
   }
 
-  v3dhandle newwin = callback.newImageWindow("Probability Model");
+  v3dhandle newwin = callback.newImageWindow("Probabilistic Model");
   callback.setImage(newwin, p4DImage);
 
   // open legend
@@ -73,7 +73,7 @@ void visualizeProbabilityModel_func(V3DPluginCallback2 &callback,
 }
 
 /**
- * @brief Function to create a legend for the probability model
+ * @brief Function to create a legend for the probabilistic model
  */
 void probabilityModelLegend_func(V3DPluginCallback2 &callback,
                                  QWidget *parent) {

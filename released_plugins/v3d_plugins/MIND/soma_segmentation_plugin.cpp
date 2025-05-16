@@ -128,8 +128,8 @@ MIND_4DImage *reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
 QStringList SomaSegmentation::menulist() const {
   return QStringList() << tr("Isotropic Correction") << tr("Soma Segmentation")
                        << tr("PC Analysis") << tr("Visualize PCA")
-                       << tr("Visualize Probability Model")
-                       << tr("Probability Model Legend")
+                       << tr("Visualize Probabilistic Model")
+                       << tr("Probabilistic Model Legend")
                        << tr("Create Background") << tr("Simulate Somas")
                        << tr("about");
 }
@@ -164,9 +164,9 @@ void SomaSegmentation::domenu(const QString &menu_name,
     pca_func(callback, parent, PARA, bmenu);
   } else if (menu_name == tr("Visualize PCA")) {
     visualizePCA_func(callback, parent);
-  } else if (menu_name == tr("Visualize Probability Model")) {
+  } else if (menu_name == tr("Visualize Probabilistic Model")) {
     visualizeProbabilityModel_func(callback, parent);
-  } else if (menu_name == tr("Probability Model Legend")) {
+  } else if (menu_name == tr("Probabilistic Model Legend")) {
     probabilityModelLegend_func(callback, parent);
   } else if (menu_name == tr("Create Background")) {
     create_background(callback, parent);
