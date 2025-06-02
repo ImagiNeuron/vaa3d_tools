@@ -883,15 +883,15 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
 
   QString markerFileName = outputDirPath + "/simulated_landmarks.marker";
 
-  FILE *fp = fopen(markerFileName.toStdString().c_str(), "w");
-  if (fp) {
+  FILE *markerFile = fopen(markerFileName.toStdString().c_str(), "w");
+  if (markerFile) {
     // Write header
-    fprintf(fp, "#x, y, z, radius, shape, name, comment\n");
+    fprintf(markerFile, "#x, y, z, radius, shape, name, comment\n");
 
     // Write each landmark
     for (int i = 0; i < simulatedLandmarks.size(); i++) {
       // Format: x,y,z,radius,shape,name,comment
-      fprintf(fp, "%ld,%ld,%ld,%ld,%ld,%s,%s\n",
+      fprintf(markerFile, "%ld,%ld,%ld,%ld,%ld,%s,%s\n",
               V3DLONG(simulatedLandmarks.at(i).x),
               V3DLONG(simulatedLandmarks.at(i).y),
               V3DLONG(simulatedLandmarks.at(i).z),
@@ -901,7 +901,7 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
               simulatedLandmarks.at(i).comments.c_str());
     }
 
-    fclose(fp);
+    fclose(markerFile);
   } else {
     printf("Error: Could not save marker file: %s\n",
            markerFileName.toStdString().c_str());
@@ -925,6 +925,83 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
               .arg(successfulPlacements)
               .arg(numSynthetic)
               .arg(outputDirPath));
+
+  /*
+   * Prepare and save summary of the simulation
+   */
+
+  // Calculate mean soma radius
+  double sumRadius = 0.0;
+  for (auto r : somaRadii) {
+    sumRadius += r;
+  }
+  double meanSomaRadius =
+      somaRadii.empty() ? 0.0 : sumRadius / somaRadii.size();
+
+  // Calculate mean of eigenVectors
+  std::vector<double> meanEig(9, 0.0);
+  for (size_t i = 0; i < eigenVectors.size(); i += 9) {
+    for (int j = 0; j < 9; j++) {
+      meanEig[j] += eigenVectors[i + j];
+    }
+  }
+  for (int j = 0; j < 9; j++) {
+    meanEig[j] = (numSomas > 0) ? (meanEig[j] / numSomas) : 0.0;
+  }
+
+  // Calculate overall density
+  double totalVolume = double(xDim) * double(yDim) * double(zDim);
+  double overallDensity = successfulPlacements / totalVolume;
+
+  // Calculate soma density in each of 8 subvolumes
+  V3DLONG midX = xDim / 2;
+  V3DLONG midY = yDim / 2;
+  V3DLONG midZ = zDim / 2;
+  double subVolume = (xDim / 2.0) * (yDim / 2.0) * (zDim / 2.0);
+  char *octantNames[8] = {"X- Y- Z-", "X+ Y- Z-", "X- Y+ Z-", "X+ Y+ Z-",
+                            "X- Y- Z+", "X+ Y- Z+", "X- Y+ Z+", "X+ Y+ Z+"};
+  int octantCount[8] = {0};
+  double octantDensity[8] = {0.0};
+  for (int i = 0; i < simulatedLandmarks.size(); i++) {
+    bool xHigh = (simulatedLandmarks[i].x >= midX);
+    bool yHigh = (simulatedLandmarks[i].y >= midY);
+    bool zHigh = (simulatedLandmarks[i].z >= midZ);
+    V3DLONG idx = (xHigh ? 4 : 0) + (yHigh ? 2 : 0) + (zHigh ? 1 : 0);
+    octantCount[idx]++;
+  }
+  for (int q = 0; q < 8; q++) {
+    octantDensity[q] = octantCount[q] / subVolume;
+  }
+
+  QString summaryFileName = outputDirPath + "/simulation_summary.txt";
+  FILE *summaryFile = fopen(summaryFileName.toStdString().c_str(), "w");
+  if (summaryFile) {
+    fprintf(summaryFile, "Timestamp: %s\n", timestamp.toStdString().c_str());
+    fprintf(summaryFile, "Number of Synthetic Somas Requested: %d\n",
+            numSynthetic);
+    fprintf(summaryFile, "Number of Successfully Placed Somas: %d\n",
+            successfulPlacements);
+    fprintf(summaryFile, "Overall Soma Density: %f\n", overallDensity);
+    for (int q = 0; q < 8; q++) {
+      fprintf(summaryFile, "Subvolume %s: Count = %d, Density = %f\n",
+              octantNames[q], octantCount[q], octantDensity[q]);
+    }
+    fprintf(summaryFile, "Mean Center: %.2f, %.2f, %.2f\n", meanCenter[0],
+            meanCenter[1], meanCenter[2]);
+    fprintf(summaryFile, "Std Dev Center: %.2f, %.2f, %.2f\n", stdCenter[0],
+            stdCenter[1], stdCenter[2]);
+    fprintf(summaryFile, "Mean Soma Radius: %.2f\n", meanSomaRadius);
+    fprintf(summaryFile,
+            "Mean Eigenvectors: %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, "
+            "%.2f, %.2f\n",
+            meanEig[0], meanEig[1], meanEig[2], meanEig[3], meanEig[4],
+            meanEig[5], meanEig[6], meanEig[7], meanEig[8]);
+
+    fclose(summaryFile);
+  } else {
+    printf("Could not create summary file: %s\n",
+           summaryFileName.toStdString().c_str());
+  }
 
   delete[] segData;
 

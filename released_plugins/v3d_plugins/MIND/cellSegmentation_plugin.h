@@ -3111,20 +3111,70 @@ class cellSegmentation : public QObject {
                                  Image1D_current, outSZ, 1);
       }
 
-      QString savePath = fileName + "_segmentation_summary.csv";
-      QFile summaryFile(savePath);
-      if (summaryFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        QTextStream out(&summaryFile);
-        out << "filename,number_of_segments,shape_type,segmentation_mode,median_filter_radius,marker_constraint,manual_threshold,timestamp\n";
-        QString timeStamp = QDateTime::currentDateTime().toString(Qt::ISODate);
-        out << fileName << "," 
-            << count_segments << "," 
-            << ((idx_shape == 1) ? "sphere" : "cube") << ","
-            << dialogRun1.segmentationMode << ","
-            << this->class_segmentationMain1.medianFilteringRadius << ","
-            << (this->class_segmentationMain1.applyMarkerConstraint ? "true" : "false") << ","
-            << (this->class_segmentationMain1.manualThresholding ? "true" : "false") << ","
-            << timeStamp << "\n";
+      // compute density
+      V3DLONG midX = dim_X / 2;
+      V3DLONG midY = dim_Y / 2;
+      V3DLONG midZ = dim_Z / 2;
+      V3DLONG totalVoxels = dim_X * dim_Y * dim_Z;
+      V3DLONG voxelCount = 0;
+      char *octantNames[8] = {"X- Y- Z-", "X+ Y- Z-", "X- Y+ Z-", "X+ Y+ Z-",
+                            "X- Y- Z+", "X+ Y- Z+", "X- Y+ Z+", "X+ Y+ Z+"};
+      V3DLONG octantCount[8] = {0};
+      double octantDensity[8] = {0.0};
+      double subVolume = (dim_X / 2.0) * (dim_Y / 2.0) * (dim_Z / 2.0);
+      for (V3DLONG i = 0; i < this->class_segmentationMain1.poss_segmentationResultCenter.size(); i++) {
+        V3DLONG pos = this->class_segmentationMain1.poss_segmentationResultCenter[i];
+        vector<V3DLONG> xyz = this->class_segmentationMain1.index2Coordinate(pos);
+        bool xHigh = (xyz[0] >= midX);
+        bool yHigh = (xyz[1] >= midY);
+        bool zHigh = (xyz[2] >= midZ);
+        V3DLONG idx = (xHigh ? 4 : 0) + (yHigh ? 2 : 0) + (zHigh ? 1 : 0);
+        octantCount[idx]++;
+        voxelCount++;
+      }
+      double overallDensity = static_cast<double>(voxelCount) / totalVoxels;
+      for (int q = 0; q < 8; q++) {
+        octantDensity[q] = static_cast<double>(octantCount[q]) / subVolume;
+      }
+
+      // Generate timestamp
+      QDateTime currentTime = QDateTime::currentDateTime();
+      QString timeStamp = currentTime.toString("yyyy-MM-dd hh:mm:ss");
+
+      // save segmentation summary
+      QString summaryFilePath = fileName + "_segmentation_summary.txt";
+      FILE *summaryFile = fopen(summaryFilePath.toStdString().c_str(), "w");
+      if (summaryFile) {
+        fprintf(summaryFile, "Filename: %s\n", fileName.toStdString().c_str());
+        fprintf(summaryFile, "Timestamp: %s\n",
+                timeStamp.toStdString().c_str());
+        fprintf(summaryFile, "Number of Segmented Regions: %lld\n",
+                (long long)count_segments);
+        fprintf(summaryFile, "Shape Type: %s\n",
+                ((idx_shape == 1) ? "sphere" : "cube"));
+        fprintf(summaryFile, "Segmentation Mode: %d\n",
+                dialogRun1.segmentationMode);
+        fprintf(summaryFile, "Median Filtering: %s\n",
+                this->class_segmentationMain1.applyMedianFiltering ? "true"
+                                                                   : "false");
+        fprintf(summaryFile, "Median Filter Radius: %.2f\n",
+                this->class_segmentationMain1.medianFilteringRadius);
+        fprintf(summaryFile, "Marker Constraint: %s\n",
+                this->class_segmentationMain1.applyMarkerConstraint ? "true"
+                                                                    : "false");
+        fprintf(summaryFile, "Manual Threshold: %s\n",
+                this->class_segmentationMain1.manualThresholding ? "true"
+                                                                 : "false");
+        fprintf(summaryFile, "Dimensions: %ld x %ld x %ld\n", dim_X, dim_Y,
+                dim_Z);
+        fprintf(summaryFile, "Channels: %ld\n", dim_C);
+        fprintf(summaryFile, "Overall Soma Density: %e\n", overallDensity);
+        for (int q = 0; q < 8; q++) {
+          fprintf(summaryFile, "Subvolume %s: Count = %lld, Density = %e\n",
+                  octantNames[q], (long long)octantCount[q],
+                  octantDensity[q]);
+        }
+        fclose(summaryFile);
       }
 
       if (this->class_segmentationMain1.errorOccurred) {
