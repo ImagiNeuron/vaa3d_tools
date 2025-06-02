@@ -3110,6 +3110,23 @@ class cellSegmentation : public QObject {
                                  savePath.toStdString().c_str(),
                                  Image1D_current, outSZ, 1);
       }
+
+      QString savePath = fileName + "_segmentation_summary.csv";
+      QFile summaryFile(savePath);
+      if (summaryFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QTextStream out(&summaryFile);
+        out << "filename,number_of_segments,shape_type,segmentation_mode,median_filter_radius,marker_constraint,manual_threshold,timestamp\n";
+        QString timeStamp = QDateTime::currentDateTime().toString(Qt::ISODate);
+        out << fileName << "," 
+            << count_segments << "," 
+            << ((idx_shape == 1) ? "sphere" : "cube") << ","
+            << dialogRun1.segmentationMode << ","
+            << this->class_segmentationMain1.medianFilteringRadius << ","
+            << (this->class_segmentationMain1.applyMarkerConstraint ? "true" : "false") << ","
+            << (this->class_segmentationMain1.manualThresholding ? "true" : "false") << ","
+            << timeStamp << "\n";
+      }
+
       if (this->class_segmentationMain1.errorOccurred) {
         v3d_msg(QString("Some cells were not properly segmented, which may "
                         "give a poor probabilistic model of cell shape. Check "
