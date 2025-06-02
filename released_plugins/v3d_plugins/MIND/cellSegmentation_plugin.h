@@ -988,68 +988,94 @@ class cellSegmentation : public QObject {
         offsets[i] = (i + 0.5) / samplesPerAxis;  // e.g. for 2: 0.25, 0.75
       }
 
-      // Inverse mapping: iterate over every voxel in the output (rotated)
-      // volume.
+      // Compute the rotated volume by sampling each output voxel with
+      // interpolation
       for (int z = 0; z < cubeSize; z++) {
         for (int y = 0; y < cubeSize; y++) {
           for (int x = 0; x < cubeSize; x++) {
             V3DLONG outIdx = z * cubeSize * cubeSize + y * cubeSize + x;
-            double sum = 0;
-            // Loop over sub-voxel samples.
-            for (int dz = 0; dz < samplesPerAxis; dz++) {
-              for (int dy = 0; dy < samplesPerAxis; dy++) {
-                for (int dx = 0; dx < samplesPerAxis; dx++) {
-                  // Compute sub-voxel coordinate in output volume.
-                  // Adding the sub-voxel offset to the integer coordinate.
-                  double sampleX = x + offsets[dx];
-                  double sampleY = y + offsets[dy];
-                  double sampleZ = z + offsets[dz];
+            // Use the center of the output voxel as the sample position.
+            double sampleX = x + 0.5;
+            double sampleY = y + 0.5;
+            double sampleZ = z + 0.5;
 
-                  // the rotated (output) basis. This is the vector r =
-                  // [rx,ry,rz]. We will consider the original vector in the
-                  // unrotated basis as o = [ox, oy, oz]
-                  double rx = sampleX - center;
-                  double ry = sampleY - center;
-                  double rz = sampleZ - center;
+            // Compute relative coordinate (subtracting the center)
+            // r is the rotated (output) basis, r = [rx,ry,rz].
+            // We will consider the original vector in the
+            // unrotated basis as o = [ox, oy, oz]
+            double rx = sampleX - center;
+            double ry = sampleY - center;
+            double rz = sampleZ - center;
 
-                  // The rotation matrix A has the eigenvectors as its columns
-                  // We know that o = A * r and r = A^T * o
-                  // Horizontal axis (new X axis) (first col of A): Second
-                  // longest PC Vertical axis (new Y axis) (second col of A):
-                  // Longest PC Depth axis (new Z axis) (last col of A):
-                  // Shortest PC allows a veritcal slice to show the most
-                  // information
+            // Apply the inverse rotation matrix (R) to map back to the original
+            // coordinate system.
 
-                  // multiply by the inverse of the rotation matrix
-                  double ox = R[0][0] * rx + R[0][1] * ry + R[0][2] * rz;
-                  double oy = R[1][0] * rx + R[1][1] * ry + R[1][2] * rz;
-                  double oz = R[2][0] * rx + R[2][1] * ry + R[2][2] * rz;
+            // The rotation matrix A has the eigenvectors as its columns
+            // We know that o = A * r and r = A^T * o
+            // Horizontal axis (new X axis) (first col of A): Second
+            // longest PC Vertical axis (new Y axis) (second col of A):
+            // Longest PC Depth axis (new Z axis) (last col of A):
+            // Shortest PC allows a veritcal slice to show the most
+            // information
+            double ox = R[0][0] * rx + R[0][1] * ry + R[0][2] * rz;
+            double oy = R[1][0] * rx + R[1][1] * ry + R[1][2] * rz;
+            double oz = R[2][0] * rx + R[2][1] * ry + R[2][2] * rz;
 
-                  // Convert back to original volume coordinates.
-                  int src_x = static_cast<int>(round(ox)) + center;
-                  int src_y = static_cast<int>(round(oy)) + center;
-                  int src_z = static_cast<int>(round(oz)) + center;
+            // Map back to original volume coordinates.
+            double srcX = ox + center;
+            double srcY = oy + center;
+            double srcZ = oz + center;
 
-                  // If the computed source coordinates are valid, sample the
-                  // input segmentation.
-                  if (src_x >= 0 && src_x < cubeSize && src_y >= 0 &&
-                      src_y < cubeSize && src_z >= 0 && src_z < cubeSize) {
-                    V3DLONG srcIdx =
-                        src_z * cubeSize * cubeSize + src_y * cubeSize + src_x;
-                    sum += segmentation[srcIdx];
-                  }
-                  // If out-of-bounds, we treat the sample as 0.
-                }
-              }
-            }
-            // Set the output voxel to 1 if the majority of sub-samples are 1.
-            rotated[outIdx] = sum / numSamples;
+            // Perform trilinear interpolation to get the new value.
+            rotated[outIdx] =
+                trilinearInterpolate(segmentation, srcX, srcY, srcZ, cubeSize);
           }
         }
       }
 
       // Copy the rotated volume back to the original segmentation array.
       memcpy(segmentation, rotated.data(), totalVoxels * sizeof(double));
+    }
+
+    /**
+     * @brief Helper function to perform trilinear interpolation.
+     */
+    double trilinearInterpolate(const double *volume, double x, double y,
+                                double z, int cubeSize) {
+      // find the integer coordinates of the surrounding voxels
+      int x0 = static_cast<int>(floor(x));
+      int y0 = static_cast<int>(floor(y));
+      int z0 = static_cast<int>(floor(z));
+      int x1 = x0 + 1, y1 = y0 + 1, z1 = z0 + 1;
+
+      // If the neighborhood is out-of-bounds, return 0.
+      if (x0 < 0 || x1 >= cubeSize || y0 < 0 || y1 >= cubeSize || z0 < 0 ||
+          z1 >= cubeSize)
+        return 0;
+
+      // weights for interpolation
+      double xd = x - x0;
+      double yd = y - y0;
+      double zd = z - z0;
+
+      // function to convert 3D coordinates to 1D index
+      auto idx = [cubeSize](int xi, int yi, int zi) -> int {
+        return zi * cubeSize * cubeSize + yi * cubeSize + xi;
+      };
+
+      // Perform trilinear interpolation
+      double c00 =
+          volume[idx(x0, y0, z0)] * (1 - xd) + volume[idx(x1, y0, z0)] * xd;
+      double c01 =
+          volume[idx(x0, y0, z1)] * (1 - xd) + volume[idx(x1, y0, z1)] * xd;
+      double c10 =
+          volume[idx(x0, y1, z0)] * (1 - xd) + volume[idx(x1, y1, z0)] * xd;
+      double c11 =
+          volume[idx(x0, y1, z1)] * (1 - xd) + volume[idx(x1, y1, z1)] * xd;
+
+      double c0 = c00 * (1 - yd) + c10 * yd;
+      double c1 = c01 * (1 - yd) + c11 * yd;
+      return c0 * (1 - zd) + c1 * zd;
     }
 
     /**
