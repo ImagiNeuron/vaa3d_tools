@@ -24,9 +24,9 @@
 // function to analyze a soma using PCA and return results
 void analyzeSomaPCAReturnResults(unsigned char *labeledData, V3DLONG N,
                                  V3DLONG M, V3DLONG P, const LocationSimple &lm,
-                                 int somaIndex, QString savePath, double &pc1,
-                                 double &pc2, double &pc3, double vec1[3],
-                                 double vec2[3], double vec3[3],
+                                 int somaIndex, QString savePath,
+                                 double vec1[3], double vec2[3], double vec3[3],
+                                 double &pc1, double &pc2, double &pc3,
                                  double &x_center, double &y_center,
                                  double &z_center);
 
@@ -36,10 +36,10 @@ void analyzeSomaPCA(unsigned char *labeledData, V3DLONG N, V3DLONG M, V3DLONG P,
 
 // function to save PCA results to a CSV file
 void savePCAResultsToCSV(const QString &filename, int somaIndex,
-                         const LocationSimple &lm, double pc1, double pc2,
-                         double pc3, const double *vec1, const double *vec2,
-                         const double *vec3, double x_center, double y_center,
-                         double z_center, QWidget *parent);
+                         const LocationSimple &lm, const double *vec1,
+                         const double *vec2, const double *vec3, double pc1,
+                         double pc2, double pc3, double x_center,
+                         double y_center, double z_center, QWidget *parent);
 
 // function to draw a line on the image
 void drawLine(Image4DSimple *image, unsigned char r, unsigned char g,

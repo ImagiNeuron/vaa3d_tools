@@ -496,18 +496,18 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
     //  5: CenterMassX
     //  6: CenterMassY
     //  7: CenterMassZ
-    //  8: eigenvalue1
-    //  9: eigenvalue2
-    // 10: eigenvalue3
-    // 11: eigenvector1_x
-    // 12: eigenvector1_y
-    // 13: eigenvector1_z
-    // 14: eigenvector2_x
-    // 15: eigenvector2_y
-    // 16: eigenvector2_z
-    // 17: eigenvector3_x
-    // 18: eigenvector3_y
-    // 19: eigenvector3_z
+    //  8: eigenvector1_x
+    //  9: eigenvector1_y
+    // 10: eigenvector1_z
+    // 11: eigenvector2_x
+    // 12: eigenvector2_y
+    // 13: eigenvector2_z
+    // 14: eigenvector3_x
+    // 15: eigenvector3_y
+    // 16: eigenvector3_z
+    // 17: eigenvalue1
+    // 18: eigenvalue2
+    // 19: eigenvalue3
 
     markerCoords.push_back(row[1]);  // X
     markerCoords.push_back(row[2]);  // Y
@@ -519,7 +519,7 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
     centerCoords.push_back(row[6]);  // CenterMassY
     centerCoords.push_back(row[7]);  // CenterMassZ
 
-    for (int iVec = 11; iVec < 20; iVec++) {
+    for (int iVec = 8; iVec < 17; iVec++) {
       eigenVectors.push_back(row[iVec]);
     }
 

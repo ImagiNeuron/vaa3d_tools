@@ -833,7 +833,7 @@ class cellSegmentation : public QObject {
         analyzeSomaPCAReturnResults(
             pcSegImage, this->dim_X, this->dim_Y, this->dim_Z,
             _LandmarkList_exemplar[idx_exemplar], idx_exemplar + 1, savePath,
-            pc1, pc2, pc3, vec1, vec2, vec3, x_center, y_center, z_center);
+            vec1, vec2, vec3, pc1, pc2, pc3, x_center, y_center, z_center);
 
         // for the label at idx_exemplar, get the segmentation (square around
         // marker center)
@@ -3118,13 +3118,18 @@ class cellSegmentation : public QObject {
       V3DLONG totalVoxels = dim_X * dim_Y * dim_Z;
       V3DLONG voxelCount = 0;
       char *octantNames[8] = {"X- Y- Z-", "X+ Y- Z-", "X- Y+ Z-", "X+ Y+ Z-",
-                            "X- Y- Z+", "X+ Y- Z+", "X- Y+ Z+", "X+ Y+ Z+"};
+                              "X- Y- Z+", "X+ Y- Z+", "X- Y+ Z+", "X+ Y+ Z+"};
       V3DLONG octantCount[8] = {0};
       double octantDensity[8] = {0.0};
       double subVolume = (dim_X / 2.0) * (dim_Y / 2.0) * (dim_Z / 2.0);
-      for (V3DLONG i = 0; i < this->class_segmentationMain1.poss_segmentationResultCenter.size(); i++) {
-        V3DLONG pos = this->class_segmentationMain1.poss_segmentationResultCenter[i];
-        vector<V3DLONG> xyz = this->class_segmentationMain1.index2Coordinate(pos);
+      for (V3DLONG i = 0;
+           i <
+           this->class_segmentationMain1.poss_segmentationResultCenter.size();
+           i++) {
+        V3DLONG pos =
+            this->class_segmentationMain1.poss_segmentationResultCenter[i];
+        vector<V3DLONG> xyz =
+            this->class_segmentationMain1.index2Coordinate(pos);
         bool xHigh = (xyz[0] >= midX);
         bool yHigh = (xyz[1] >= midY);
         bool zHigh = (xyz[2] >= midZ);
@@ -3171,8 +3176,7 @@ class cellSegmentation : public QObject {
         fprintf(summaryFile, "Overall Soma Density: %e\n", overallDensity);
         for (int q = 0; q < 8; q++) {
           fprintf(summaryFile, "Subvolume %s: Count = %lld, Density = %e\n",
-                  octantNames[q], (long long)octantCount[q],
-                  octantDensity[q]);
+                  octantNames[q], (long long)octantCount[q], octantDensity[q]);
         }
         fclose(summaryFile);
       }

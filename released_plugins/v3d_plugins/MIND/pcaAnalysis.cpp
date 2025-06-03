@@ -1,4 +1,4 @@
- /**
+/**
  * 2025-04-18: by ImagiNeuron: Shidan Javaheri, Siger Ma, Athmane Benarous and
  * Thibaut Baguette (McGill University)
  */
@@ -10,22 +10,22 @@
  * @param filename The name of the file to save the results to
  * @param somaIndex The index of the soma being analyzed
  * @param lm The location of the soma
- * @param pc1 The first principal component
- * @param pc2 The second principal component
- * @param pc3 The third principal component
  * @param vec1 The first eigenvector
  * @param vec2 The second eigenvector
  * @param vec3 The third eigenvector
+ * @param pc1 The first principal component
+ * @param pc2 The second principal component
+ * @param pc3 The third principal component
  * @param x_center The x-coordinate of the center of mass
  * @param y_center The y-coordinate of the center of mass
  * @param z_center The z-coordinate of the center of mass
  * @param parent The parent widget for the file dialog
  */
 void savePCAResultsToCSV(const QString &filename, int somaIndex,
-                         const LocationSimple &lm, double pc1, double pc2,
-                         double pc3, const double *vec1, const double *vec2,
-                         const double *vec3, double x_center, double y_center,
-                         double z_center, QWidget *parent) {
+                         const LocationSimple &lm, const double *vec1,
+                         const double *vec2, const double *vec3, double pc1,
+                         double pc2, double pc3, double x_center,
+                         double y_center, double z_center, QWidget *parent) {
   static QString actualFilename = filename;
 
   // Ask user if they want to save only for the first soma
@@ -53,10 +53,10 @@ void savePCAResultsToCSV(const QString &filename, int somaIndex,
     // Write header if new file
     std::ofstream outFile(actualFilename.toStdString().c_str(), std::ios::app);
     outFile << "SomaID,X,Y,Z,Radius,CenterMassX,CenterMassY,CenterMassZ,"
-            << "eigenvalue1,eigenvalue2,eigenvalue3,"
             << "eigenvector1_x,eigenvector1_y,eigenvector1_z,"
             << "eigenvector2_x,eigenvector2_y,eigenvector2_z,"
-            << "eigenvector3_x,eigenvector3_y,eigenvector3_z\n";
+            << "eigenvector3_x,eigenvector3_y,eigenvector3_z,"
+            << "eigenvalue1,eigenvalue2,eigenvalue3\n";
     outFile.close();
   }
 
@@ -65,10 +65,10 @@ void savePCAResultsToCSV(const QString &filename, int somaIndex,
   // Write data
   outFile << somaIndex << "," << lm.x << "," << lm.y << "," << lm.z << ","
           << lm.radius << "," << x_center << "," << y_center << "," << z_center
-          << "," << pc1 << "," << pc2 << "," << pc3 << "," << vec1[0] << ","
-          << vec1[1] << "," << vec1[2] << "," << vec2[0] << "," << vec2[1]
-          << "," << vec2[2] << "," << vec3[0] << "," << vec3[1] << ","
-          << vec3[2] << "\n";
+          << "," << vec1[0] << "," << vec1[1] << "," << vec1[2] << ","
+          << vec2[0] << "," << vec2[1] << "," << vec2[2] << "," << vec3[0]
+          << "," << vec3[1] << "," << vec3[2] << "," << pc1 << "," << pc2 << ","
+          << pc3 << "\n";
 
   outFile.close();
   printf("PCA results saved to file: %s\n",
@@ -85,21 +85,21 @@ void savePCAResultsToCSV(const QString &filename, int somaIndex,
  * @param lm The location of the soma
  * @param somaIndex The index of the soma being analyzed
  * @param savePath The path to save the results
- * @param pc1 The pointer to the first principal component
- * @param pc2 The pointer to the second principal component
- * @param pc3 The pointer to the third principal component
  * @param vec1 The pointer to the first eigenvector
  * @param vec2 The pointer to the second eigenvector
  * @param vec3 The pointer to the third eigenvector
+ * @param pc1 The pointer to the first principal component
+ * @param pc2 The pointer to the second principal component
+ * @param pc3 The pointer to the third principal component
  * @param x_center The pointer to the x-coordinate of the center of mass
  * @param y_center The pointer to the y-coordinate of the center of mass
  * @param z_center The pointer to the z-coordinate of the center of mass
  */
 void analyzeSomaPCAReturnResults(unsigned char *labeledData, V3DLONG N,
                                  V3DLONG M, V3DLONG P, const LocationSimple &lm,
-                                 int somaIndex, QString savePath, double &pc1,
-                                 double &pc2, double &pc3, double vec1[3],
-                                 double vec2[3], double vec3[3],
+                                 int somaIndex, QString savePath,
+                                 double vec1[3], double vec2[3], double vec3[3],
+                                 double &pc1, double &pc2, double &pc3,
                                  double &x_center, double &y_center,
                                  double &z_center) {
   // Extract soma info
@@ -124,8 +124,8 @@ void analyzeSomaPCAReturnResults(unsigned char *labeledData, V3DLONG N,
           pc1, pc2, pc3, vec1, vec2, vec3, x_center, y_center, z_center)) {
     // Save to CSV with save flag
     QWidget *mainWin = QApplication::activeWindow();
-    savePCAResultsToCSV(savePath, somaIndex, lm, pc1, pc2, pc3, vec1, vec2,
-                        vec3, x_center, y_center, z_center, mainWin);
+    savePCAResultsToCSV(savePath, somaIndex, lm, vec1, vec2, vec3, pc1, pc2,
+                        pc3, x_center, y_center, z_center, mainWin);
   } else {
     printf("\nSoma #%d PCA failed.\n", somaIndex);
   }
@@ -255,8 +255,8 @@ void analyzeSomaPCA(unsigned char *labeledData, V3DLONG N, V3DLONG M, V3DLONG P,
           pc1, pc2, pc3, vec1, vec2, vec3, x_center, y_center, z_center)) {
     // Save to CSV with save flag
     QWidget *mainWin = QApplication::activeWindow();
-    savePCAResultsToCSV(savePath, somaIndex, lm, pc1, pc2, pc3, vec1, vec2,
-                        vec3, x_center, y_center, z_center, mainWin);
+    savePCAResultsToCSV(savePath, somaIndex, lm, vec1, vec2, vec3, pc1, pc2,
+                        pc3, x_center, y_center, z_center, mainWin);
   } else {
     printf("\nSoma #%d PCA failed.\n", somaIndex);
   }
@@ -327,8 +327,8 @@ void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent) {
 
     int somaID;
     double center[3];
-    double pc1Length, pc2Length, pc3Length;
     double vec1Pos[3], vec2Pos[3], vec3Pos[3];
+    double pc1Length, pc2Length, pc3Length;
     // double radius;
 
     int col = 0;
@@ -351,40 +351,40 @@ void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent) {
           center[2] = std::stod(token);
           break;
         case 8:
-          pc1Length = 2.35 * sqrt(std::stod(token));
-          break;
-        case 9:
-          pc2Length = 2.35 * sqrt(std::stod(token));
-          break;
-        case 10:
-          pc3Length = 2.35 * sqrt(std::stod(token));
-          break;
-        case 11:
           vec1Pos[0] = pc1Length * std::stod(token) + center[0];
           break;
-        case 12:
+        case 9:
           vec1Pos[1] = pc1Length * std::stod(token) + center[1];
           break;
-        case 13:
+        case 10:
           vec1Pos[2] = pc1Length * std::stod(token) + center[2];
           break;
-        case 14:
+        case 11:
           vec2Pos[0] = pc2Length * std::stod(token) + center[0];
           break;
-        case 15:
+        case 12:
           vec2Pos[1] = pc2Length * std::stod(token) + center[1];
           break;
-        case 16:
+        case 13:
           vec2Pos[2] = pc2Length * std::stod(token) + center[2];
           break;
-        case 17:
+        case 14:
           vec3Pos[0] = pc3Length * std::stod(token) + center[0];
           break;
-        case 18:
+        case 15:
           vec3Pos[1] = pc3Length * std::stod(token) + center[1];
           break;
-        case 19:
+        case 16:
           vec3Pos[2] = pc3Length * std::stod(token) + center[2];
+          break;
+        case 17:
+          pc1Length = 2.35 * sqrt(std::stod(token));
+          break;
+        case 18:
+          pc2Length = 2.35 * sqrt(std::stod(token));
+          break;
+        case 19:
+          pc3Length = 2.35 * sqrt(std::stod(token));
           break;
       }
       col++;
