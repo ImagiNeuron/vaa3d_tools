@@ -3003,7 +3003,7 @@ class cellSegmentation : public QObject {
       // Set the manual thresholding flag from the dialog
       this->class_segmentationMain1.manualThresholding =
           dialogRun1.manualThresholding;
-      int idx_shape;  // get shape paramters;
+      int idx_shape;  // get shape parameters;
       if (dialogRun1.shape_type_selection == sphere) {
         idx_shape = 1;
       } else if (dialogRun1.shape_type_selection == cube) {
@@ -3150,15 +3150,29 @@ class cellSegmentation : public QObject {
       QString summaryFilePath = fileName + "_segmentation_summary.txt";
       FILE *summaryFile = fopen(summaryFilePath.toStdString().c_str(), "w");
       if (summaryFile) {
-        fprintf(summaryFile, "Filename: %s\n", fileName.toStdString().c_str());
+        fprintf(summaryFile, "Filename: %s\n",
+                Image4DSimple_current->getFileName());
         fprintf(summaryFile, "Timestamp: %s\n",
                 timeStamp.toStdString().c_str());
         fprintf(summaryFile, "Number of Segmented Regions: %lld\n",
                 (long long)count_segments);
         fprintf(summaryFile, "Shape Type: %s\n",
-                ((idx_shape == 1) ? "sphere" : "cube"));
-        fprintf(summaryFile, "Segmentation Mode: %d\n",
-                dialogRun1.segmentationMode);
+                ((this->class_segmentationMain1.idx_shape == 1) ? "sphere"
+                                                                : "cube"));
+        // Fix: Use a variable for segmentation mode string
+        const char *segmentationModeStr = "Unknown";
+        switch (dialogRun1.segmentationMode) {
+          case 1:
+            segmentationModeStr = "Local Otsu";
+            break;
+          case 2:
+            segmentationModeStr = "Global Otsu";
+            break;
+          case 3:
+            segmentationModeStr = "Iterative";
+            break;
+        }
+        fprintf(summaryFile, "Segmentation Mode: %s\n", segmentationModeStr);
         fprintf(summaryFile, "Median Filtering: %s\n",
                 this->class_segmentationMain1.applyMedianFiltering ? "true"
                                                                    : "false");
@@ -3170,9 +3184,9 @@ class cellSegmentation : public QObject {
         fprintf(summaryFile, "Manual Threshold: %s\n",
                 this->class_segmentationMain1.manualThresholding ? "true"
                                                                  : "false");
-        fprintf(summaryFile, "Dimensions: %ld x %ld x %ld\n", dim_X, dim_Y,
-                dim_Z);
-        fprintf(summaryFile, "Channels: %ld\n", dim_C);
+        fprintf(summaryFile, "Image Dimensions: %ld x %ld x %ld\n", dim_X,
+                dim_Y, dim_Z);
+        fprintf(summaryFile, "Image Channels: %ld\n", dim_C);
         fprintf(summaryFile, "Overall Soma Density: %e\n", overallDensity);
         for (int q = 0; q < 8; q++) {
           fprintf(summaryFile, "Subvolume %s: Count = %lld, Density = %e\n",

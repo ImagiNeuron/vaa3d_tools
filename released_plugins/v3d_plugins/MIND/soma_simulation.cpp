@@ -959,7 +959,7 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
   V3DLONG midZ = zDim / 2;
   double subVolume = (xDim / 2.0) * (yDim / 2.0) * (zDim / 2.0);
   char *octantNames[8] = {"X- Y- Z-", "X+ Y- Z-", "X- Y+ Z-", "X+ Y+ Z-",
-                            "X- Y- Z+", "X+ Y- Z+", "X- Y+ Z+", "X+ Y+ Z+"};
+                          "X- Y- Z+", "X+ Y- Z+", "X- Y+ Z+", "X+ Y+ Z+"};
   int octantCount[8] = {0};
   double octantDensity[8] = {0.0};
   for (int i = 0; i < simulatedLandmarks.size(); i++) {
@@ -976,7 +976,8 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
   QString summaryFileName = outputDirPath + "/simulation_summary.txt";
   FILE *summaryFile = fopen(summaryFileName.toStdString().c_str(), "w");
   if (summaryFile) {
-    fprintf(summaryFile, "Timestamp: %s\n", timestamp.toStdString().c_str());
+    fprintf(summaryFile, "Timestamp: %s\n",
+            currentTime.toString("yyyy-MM-dd hh:mm:ss").toStdString().c_str());
     fprintf(summaryFile, "Number of Synthetic Somas Requested: %d\n",
             numSynthetic);
     fprintf(summaryFile, "Number of Successfully Placed Somas: %d\n",
@@ -986,13 +987,14 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
       fprintf(summaryFile, "Subvolume %s: Count = %d, Density = %f\n",
               octantNames[q], octantCount[q], octantDensity[q]);
     }
-    fprintf(summaryFile, "Mean Center: %.2f, %.2f, %.2f\n", meanCenter[0],
-            meanCenter[1], meanCenter[2]);
-    fprintf(summaryFile, "Std Dev Center: %.2f, %.2f, %.2f\n", stdCenter[0],
-            stdCenter[1], stdCenter[2]);
+    fprintf(summaryFile, "Mean Soma Center (x, y, z): %.2f, %.2f, %.2f\n",
+            meanCenter[0], meanCenter[1], meanCenter[2]);
+    fprintf(summaryFile, "Std Dev Soma Center (x, y, z): %.2f, %.2f, %.2f\n",
+            stdCenter[0], stdCenter[1], stdCenter[2]);
     fprintf(summaryFile, "Mean Soma Radius: %.2f\n", meanSomaRadius);
     fprintf(summaryFile,
-            "Mean Eigenvectors: %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, "
+            "Mean Eigenvectors (v1_x, v1_y, v1_z, v2_x, v2_y, v2_z, v3_x, "
+            "v3_y, v3_z): %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, "
             "%.2f, %.2f\n",
             meanEig[0], meanEig[1], meanEig[2], meanEig[3], meanEig[4],
             meanEig[5], meanEig[6], meanEig[7], meanEig[8]);
