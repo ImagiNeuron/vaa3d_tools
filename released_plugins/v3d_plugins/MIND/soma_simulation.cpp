@@ -1004,6 +1004,7 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
   QString summaryFileName = outputDirPath + "/simulation_summary.txt";
   FILE *summaryFile = fopen(summaryFileName.toStdString().c_str(), "w");
   if (summaryFile) {
+    fprintf(summaryFile, "Filename: %s\n", imageName.toStdString().c_str());
     fprintf(summaryFile, "Timestamp: %s\n",
             currentTime.toString("yyyy-MM-dd hh:mm:ss").toStdString().c_str());
     fprintf(summaryFile, "Number of Synthetic Somas Requested: %d\n",
