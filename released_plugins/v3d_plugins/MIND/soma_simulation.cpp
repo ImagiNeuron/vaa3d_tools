@@ -625,6 +625,9 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
   // Initialize simulatedLandmarks list
   LandmarkList simulatedLandmarks;
 
+  // Initialize vector to store volumes of simulated somas
+  vector<double> simulatedSomaVolumes;
+
   // Helper function to check if two somas overlap
   auto somasOverlap = [](const LocationSimple &s1,
                          const LocationSimple &s2) -> bool {
@@ -800,10 +803,11 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
     segMain.rotateSegmentation(tempIntensity, cubeSize, randomVec1, randomVec2,
                                randomVec3);
 
-    // Place rotated synthetic soma at generated position
+    // Place rotated synthetic soma at generated position and track volume
     int centerX = V3DLONG(newSoma.x);
     int centerY = V3DLONG(newSoma.y);
     int centerZ = V3DLONG(newSoma.z);
+    double somaVolume = 0.0;
 
     // Copy rotated soma to both output images
     for (int z = 0; z < cubeSize; z++) {
@@ -830,11 +834,14 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
                       std::max(
                           0.0,
                           tempIntensity[sourceIdx]))));  // Original intensity
+              somaVolume += 1.0;
             }
           }
         }
       }
     }
+
+    simulatedSomaVolumes.push_back(somaVolume);
 
     delete[] tempSegmentation;
     delete[] tempIntensity;
@@ -938,6 +945,27 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
   double meanSomaRadius =
       somaRadii.empty() ? 0.0 : sumRadius / somaRadii.size();
 
+  // Calculate soma volume statistics
+  double meanSimulatedSomaVolume = 0.0;
+  double stdDevSimulatedSomaVolume = 0.0;
+  if (!simulatedSomaVolumes.empty()) {
+    // Calculate mean
+    double sum = 0.0;
+    for (double vol : simulatedSomaVolumes) {
+      sum += vol;
+    }
+    meanSimulatedSomaVolume = sum / simulatedSomaVolumes.size();
+
+    // Calculate standard deviation
+    double sumSquaredDiff = 0.0;
+    for (double vol : simulatedSomaVolumes) {
+      double diff = vol - meanSimulatedSomaVolume;
+      sumSquaredDiff += diff * diff;
+    }
+    stdDevSimulatedSomaVolume =
+        sqrt(sumSquaredDiff / simulatedSomaVolumes.size());
+  }
+
   // Calculate mean of eigenVectors
   std::vector<double> meanEig(9, 0.0);
   for (size_t i = 0; i < eigenVectors.size(); i += 9) {
@@ -982,6 +1010,8 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
             numSynthetic);
     fprintf(summaryFile, "Number of Successfully Placed Somas: %d\n",
             successfulPlacements);
+    fprintf(summaryFile, "Image Dimensions: X=%ld, Y=%ld, Z=%ld\n", xDim, yDim,
+            zDim);
     fprintf(summaryFile, "Overall Soma Density: %f\n", overallDensity);
     for (int q = 0; q < 8; q++) {
       fprintf(summaryFile, "Subvolume %s: Count = %d, Density = %f\n",
@@ -992,6 +1022,10 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
     fprintf(summaryFile, "Std Dev Soma Center (x, y, z): %.2f, %.2f, %.2f\n",
             stdCenter[0], stdCenter[1], stdCenter[2]);
     fprintf(summaryFile, "Mean Soma Radius: %.2f\n", meanSomaRadius);
+    fprintf(summaryFile, "Mean Soma Volume (voxels): %.2f\n",
+            meanSimulatedSomaVolume);
+    fprintf(summaryFile, "Standard Deviation of Soma Volume (voxels): %.2f\n",
+            stdDevSimulatedSomaVolume);
     fprintf(summaryFile,
             "Mean Eigenvectors (v1_x, v1_y, v1_z, v2_x, v2_y, v2_z, v3_x, "
             "v3_y, v3_z): %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, "

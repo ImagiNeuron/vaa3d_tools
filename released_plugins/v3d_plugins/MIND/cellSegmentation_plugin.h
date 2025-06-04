@@ -3142,6 +3142,33 @@ class cellSegmentation : public QObject {
         octantDensity[q] = static_cast<double>(octantCount[q]) / subVolume;
       }
 
+      // compute volume statistics
+      vector<double> somaVolumes;
+      for (V3DLONG i = 0; i < count_segments; i++) {
+        double volume = static_cast<double>(
+            this->class_segmentationMain1.possVct_segmentationResult[i].size());
+        somaVolumes.push_back(volume);
+      }
+
+      double meanVolume = 0.0;
+      double stdVolume = 0.0;
+      if (!somaVolumes.empty()) {
+        // Calculate mean
+        double sum = 0.0;
+        for (double vol : somaVolumes) {
+          sum += vol;
+        }
+        meanVolume = sum / somaVolumes.size();
+
+        // Calculate standard deviation
+        double sumSquaredDiff = 0.0;
+        for (double vol : somaVolumes) {
+          double diff = vol - meanVolume;
+          sumSquaredDiff += diff * diff;
+        }
+        stdVolume = sqrt(sumSquaredDiff / somaVolumes.size());
+      }
+
       // Generate timestamp
       QDateTime currentTime = QDateTime::currentDateTime();
       QString timeStamp = currentTime.toString("yyyy-MM-dd hh:mm:ss");
@@ -3192,6 +3219,10 @@ class cellSegmentation : public QObject {
           fprintf(summaryFile, "Subvolume %s: Count = %lld, Density = %e\n",
                   octantNames[q], (long long)octantCount[q], octantDensity[q]);
         }
+        fprintf(summaryFile, "Mean Soma Volume (voxels): %.2f\n", meanVolume);
+        fprintf(summaryFile,
+                "Standard Deviation of Soma Volume (voxels): %.2f\n",
+                stdVolume);
         fclose(summaryFile);
       }
 
