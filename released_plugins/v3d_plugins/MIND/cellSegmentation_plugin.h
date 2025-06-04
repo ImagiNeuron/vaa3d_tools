@@ -2906,6 +2906,21 @@ class cellSegmentation : public QObject {
         _V3DPluginCallback2_currentCallback.getImageName(
             v3dhandle_currentWindow);
 
+    // Extract voxel size information
+    double voxelSizeX = 1.0, voxelSizeY = 1.0, voxelSizeZ = 1.0;
+    QString voxelSizeUnit = "pixels";
+    voxelSizeX = Image4DSimple_current->getRezX();
+    voxelSizeY = Image4DSimple_current->getRezY();
+    voxelSizeZ = Image4DSimple_current->getRezZ();
+    if (voxelSizeX > 0 && voxelSizeX < 1000 && voxelSizeY > 0 &&
+        voxelSizeY < 1000 && voxelSizeZ > 0 && voxelSizeZ < 1000) {
+      voxelSizeUnit = "micrometers";  // Assume micrometers as common unit
+    } else {
+      // Reset to default if values seem invalid
+      voxelSizeX = voxelSizeY = voxelSizeZ = 1.0;
+      voxelSizeUnit = "pixels";
+    }
+
     // get name of the image
     QString fileName = Image4DSimple_current->getFileName();
 
@@ -3144,29 +3159,52 @@ class cellSegmentation : public QObject {
 
       // compute volume statistics
       vector<double> somaVolumes;
+      vector<double> somaPhysicalVolumes;
+      double voxelPhysicalVolume = voxelSizeX * voxelSizeY * voxelSizeZ;
+
       for (V3DLONG i = 0; i < count_segments; i++) {
         double volume = static_cast<double>(
             this->class_segmentationMain1.possVct_segmentationResult[i].size());
         somaVolumes.push_back(volume);
+        somaPhysicalVolumes.push_back(volume * voxelPhysicalVolume);
       }
 
       double meanVolume = 0.0;
       double stdVolume = 0.0;
+      double meanPhysicalVolume = 0.0;
+      double stdPhysicalVolume = 0.0;
+
       if (!somaVolumes.empty()) {
-        // Calculate mean
+        // Calculate mean voxel volume
         double sum = 0.0;
         for (double vol : somaVolumes) {
           sum += vol;
         }
         meanVolume = sum / somaVolumes.size();
 
-        // Calculate standard deviation
+        // Calculate standard deviation voxel volume
         double sumSquaredDiff = 0.0;
         for (double vol : somaVolumes) {
           double diff = vol - meanVolume;
           sumSquaredDiff += diff * diff;
         }
         stdVolume = sqrt(sumSquaredDiff / somaVolumes.size());
+
+        // Calculate mean physical volume
+        double physicalSum = 0.0;
+        for (double vol : somaPhysicalVolumes) {
+          physicalSum += vol;
+        }
+        meanPhysicalVolume = physicalSum / somaPhysicalVolumes.size();
+
+        // Calculate standard deviation physical volume
+        double physicalSumSquaredDiff = 0.0;
+        for (double vol : somaPhysicalVolumes) {
+          double diff = vol - meanPhysicalVolume;
+          physicalSumSquaredDiff += diff * diff;
+        }
+        stdPhysicalVolume =
+            sqrt(physicalSumSquaredDiff / somaPhysicalVolumes.size());
       }
 
       // Generate timestamp
@@ -3214,6 +3252,10 @@ class cellSegmentation : public QObject {
         fprintf(summaryFile, "Image Dimensions: %ld x %ld x %ld\n", dim_X,
                 dim_Y, dim_Z);
         fprintf(summaryFile, "Image Channels: %ld\n", dim_C);
+        fprintf(summaryFile, "Voxel Size: %.6f x %.6f x %.6f %s\n", voxelSizeX,
+                voxelSizeY, voxelSizeZ, voxelSizeUnit.toStdString().c_str());
+        fprintf(summaryFile, "Voxel Physical Volume: %.6f %s^3\n",
+                voxelPhysicalVolume, voxelSizeUnit.toStdString().c_str());
         fprintf(summaryFile, "Overall Soma Density: %e\n", overallDensity);
         for (int q = 0; q < 8; q++) {
           fprintf(summaryFile, "Subvolume %s: Count = %lld, Density = %e\n",
@@ -3223,6 +3265,11 @@ class cellSegmentation : public QObject {
         fprintf(summaryFile,
                 "Standard Deviation of Soma Volume (voxels): %.2f\n",
                 stdVolume);
+        fprintf(summaryFile, "Mean Soma Physical Volume: %.6f %s^3\n",
+                meanPhysicalVolume, voxelSizeUnit.toStdString().c_str());
+        fprintf(summaryFile,
+                "Standard Deviation of Soma Physical Volume: %.6f %s^3\n",
+                stdPhysicalVolume, voxelSizeUnit.toStdString().c_str());
         fclose(summaryFile);
       }
 
