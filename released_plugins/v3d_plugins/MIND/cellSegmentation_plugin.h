@@ -833,7 +833,7 @@ class cellSegmentation : public QObject {
         analyzeSomaPCAReturnResults(
             pcSegImage, this->dim_X, this->dim_Y, this->dim_Z,
             _LandmarkList_exemplar[idx_exemplar], idx_exemplar + 1, savePath,
-            pc1, pc2, pc3, vec1, vec2, vec3, x_center, y_center, z_center);
+            vec1, vec2, vec3, pc1, pc2, pc3, x_center, y_center, z_center);
 
         // for the label at idx_exemplar, get the segmentation (square around
         // marker center)
@@ -2906,6 +2906,21 @@ class cellSegmentation : public QObject {
         _V3DPluginCallback2_currentCallback.getImageName(
             v3dhandle_currentWindow);
 
+    // Extract voxel size information
+    double voxelSizeX = 1.0, voxelSizeY = 1.0, voxelSizeZ = 1.0;
+    QString voxelSizeUnit = "pixels";
+    voxelSizeX = Image4DSimple_current->getRezX();
+    voxelSizeY = Image4DSimple_current->getRezY();
+    voxelSizeZ = Image4DSimple_current->getRezZ();
+    if (voxelSizeX > 0 && voxelSizeX < 1000 && voxelSizeY > 0 &&
+        voxelSizeY < 1000 && voxelSizeZ > 0 && voxelSizeZ < 1000) {
+      voxelSizeUnit = "micrometers";  // Assume micrometers as common unit
+    } else {
+      // Reset to default if values seem invalid
+      voxelSizeX = voxelSizeY = voxelSizeZ = 1.0;
+      voxelSizeUnit = "pixels";
+    }
+
     // get name of the image
     QString fileName = Image4DSimple_current->getFileName();
 
@@ -3003,7 +3018,7 @@ class cellSegmentation : public QObject {
       // Set the manual thresholding flag from the dialog
       this->class_segmentationMain1.manualThresholding =
           dialogRun1.manualThresholding;
-      int idx_shape;  // get shape paramters;
+      int idx_shape;  // get shape parameters;
       if (dialogRun1.shape_type_selection == sphere) {
         idx_shape = 1;
       } else if (dialogRun1.shape_type_selection == cube) {
@@ -3110,6 +3125,154 @@ class cellSegmentation : public QObject {
                                  savePath.toStdString().c_str(),
                                  Image1D_current, outSZ, 1);
       }
+
+      // compute density
+      V3DLONG midX = dim_X / 2;
+      V3DLONG midY = dim_Y / 2;
+      V3DLONG midZ = dim_Z / 2;
+      V3DLONG totalVoxels = dim_X * dim_Y * dim_Z;
+      V3DLONG voxelCount = 0;
+      char *octantNames[8] = {"X- Y- Z-", "X+ Y- Z-", "X- Y+ Z-", "X+ Y+ Z-",
+                              "X- Y- Z+", "X+ Y- Z+", "X- Y+ Z+", "X+ Y+ Z+"};
+      V3DLONG octantCount[8] = {0};
+      double octantDensity[8] = {0.0};
+      double subVolume = (dim_X / 2.0) * (dim_Y / 2.0) * (dim_Z / 2.0);
+      for (V3DLONG i = 0;
+           i <
+           this->class_segmentationMain1.poss_segmentationResultCenter.size();
+           i++) {
+        V3DLONG pos =
+            this->class_segmentationMain1.poss_segmentationResultCenter[i];
+        vector<V3DLONG> xyz =
+            this->class_segmentationMain1.index2Coordinate(pos);
+        bool xHigh = (xyz[0] >= midX);
+        bool yHigh = (xyz[1] >= midY);
+        bool zHigh = (xyz[2] >= midZ);
+        V3DLONG idx = (xHigh ? 4 : 0) + (yHigh ? 2 : 0) + (zHigh ? 1 : 0);
+        octantCount[idx]++;
+        voxelCount++;
+      }
+      double overallDensity = static_cast<double>(voxelCount) / totalVoxels;
+      for (int q = 0; q < 8; q++) {
+        octantDensity[q] = static_cast<double>(octantCount[q]) / subVolume;
+      }
+
+      // compute volume statistics
+      vector<double> somaVolumes;
+      vector<double> somaPhysicalVolumes;
+      double voxelPhysicalVolume = voxelSizeX * voxelSizeY * voxelSizeZ;
+
+      for (V3DLONG i = 0; i < count_segments; i++) {
+        double volume = static_cast<double>(
+            this->class_segmentationMain1.possVct_segmentationResult[i].size());
+        somaVolumes.push_back(volume);
+        somaPhysicalVolumes.push_back(volume * voxelPhysicalVolume);
+      }
+
+      double meanVolume = 0.0;
+      double stdVolume = 0.0;
+      double meanPhysicalVolume = 0.0;
+      double stdPhysicalVolume = 0.0;
+
+      if (!somaVolumes.empty()) {
+        // Calculate mean voxel volume
+        double sum = 0.0;
+        for (double vol : somaVolumes) {
+          sum += vol;
+        }
+        meanVolume = sum / somaVolumes.size();
+
+        // Calculate standard deviation voxel volume
+        double sumSquaredDiff = 0.0;
+        for (double vol : somaVolumes) {
+          double diff = vol - meanVolume;
+          sumSquaredDiff += diff * diff;
+        }
+        stdVolume = sqrt(sumSquaredDiff / somaVolumes.size());
+
+        // Calculate mean physical volume
+        double physicalSum = 0.0;
+        for (double vol : somaPhysicalVolumes) {
+          physicalSum += vol;
+        }
+        meanPhysicalVolume = physicalSum / somaPhysicalVolumes.size();
+
+        // Calculate standard deviation physical volume
+        double physicalSumSquaredDiff = 0.0;
+        for (double vol : somaPhysicalVolumes) {
+          double diff = vol - meanPhysicalVolume;
+          physicalSumSquaredDiff += diff * diff;
+        }
+        stdPhysicalVolume =
+            sqrt(physicalSumSquaredDiff / somaPhysicalVolumes.size());
+      }
+
+      // Generate timestamp
+      QDateTime currentTime = QDateTime::currentDateTime();
+      QString timeStamp = currentTime.toString("yyyy-MM-dd hh:mm:ss");
+
+      // save segmentation summary
+      QString summaryFilePath = fileName + "_segmentation_summary.txt";
+      FILE *summaryFile = fopen(summaryFilePath.toStdString().c_str(), "w");
+      if (summaryFile) {
+        fprintf(summaryFile, "Filename: %s\n",
+                Image4DSimple_current->getFileName());
+        fprintf(summaryFile, "Timestamp: %s\n",
+                timeStamp.toStdString().c_str());
+        fprintf(summaryFile, "Number of Segmented Regions: %lld\n",
+                (long long)count_segments);
+        fprintf(summaryFile, "Shape Type: %s\n",
+                ((this->class_segmentationMain1.idx_shape == 1) ? "sphere"
+                                                                : "cube"));
+        // Fix: Use a variable for segmentation mode string
+        const char *segmentationModeStr = "Unknown";
+        switch (dialogRun1.segmentationMode) {
+          case 1:
+            segmentationModeStr = "Local Otsu";
+            break;
+          case 2:
+            segmentationModeStr = "Global Otsu";
+            break;
+          case 3:
+            segmentationModeStr = "Iterative";
+            break;
+        }
+        fprintf(summaryFile, "Segmentation Mode: %s\n", segmentationModeStr);
+        fprintf(summaryFile, "Median Filtering: %s\n",
+                this->class_segmentationMain1.applyMedianFiltering ? "true"
+                                                                   : "false");
+        fprintf(summaryFile, "Median Filter Radius: %.2f\n",
+                this->class_segmentationMain1.medianFilteringRadius);
+        fprintf(summaryFile, "Marker Constraint: %s\n",
+                this->class_segmentationMain1.applyMarkerConstraint ? "true"
+                                                                    : "false");
+        fprintf(summaryFile, "Manual Threshold: %s\n",
+                this->class_segmentationMain1.manualThresholding ? "true"
+                                                                 : "false");
+        fprintf(summaryFile, "Image Dimensions: %ld x %ld x %ld\n", dim_X,
+                dim_Y, dim_Z);
+        fprintf(summaryFile, "Image Channels: %ld\n", dim_C);
+        fprintf(summaryFile, "Voxel Size: %.6f x %.6f x %.6f %s\n", voxelSizeX,
+                voxelSizeY, voxelSizeZ, voxelSizeUnit.toStdString().c_str());
+        fprintf(summaryFile, "Voxel Physical Volume: %.6f %s^3\n",
+                voxelPhysicalVolume, voxelSizeUnit.toStdString().c_str());
+        fprintf(summaryFile, "Overall Soma Density: %e\n", overallDensity);
+        for (int q = 0; q < 8; q++) {
+          fprintf(summaryFile, "Subvolume %s: Count = %lld, Density = %e\n",
+                  octantNames[q], (long long)octantCount[q], octantDensity[q]);
+        }
+        fprintf(summaryFile, "Mean Soma Volume (voxels): %.2f\n", meanVolume);
+        fprintf(summaryFile,
+                "Standard Deviation of Soma Volume (voxels): %.2f\n",
+                stdVolume);
+        fprintf(summaryFile, "Mean Soma Physical Volume: %.6f %s^3\n",
+                meanPhysicalVolume, voxelSizeUnit.toStdString().c_str());
+        fprintf(summaryFile,
+                "Standard Deviation of Soma Physical Volume: %.6f %s^3\n",
+                stdPhysicalVolume, voxelSizeUnit.toStdString().c_str());
+        fclose(summaryFile);
+      }
+
       if (this->class_segmentationMain1.errorOccurred) {
         v3d_msg(QString("Some cells were not properly segmented, which may "
                         "give a poor probabilistic model of cell shape. Check "
