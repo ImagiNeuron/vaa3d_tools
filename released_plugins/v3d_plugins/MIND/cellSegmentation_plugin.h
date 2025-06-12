@@ -16,6 +16,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QCommonStyle>
+#include <QFileDialog>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QLabel>
@@ -84,6 +85,9 @@ class dialogRun : public QDialog {
   QLineEdit *
       QLineEdit_medianFilteringRadius;  // line edit for median filtering radius
   double medianFilteringRadius;         // radius for median filtering radius
+  QCheckBox
+      *QCheckBox_evaluateSegmentation;  // checkbox for evaluate segmentation
+  bool evaluateSegmentation;            // flag for evaluate segmentation
   dialogRun(V3DPluginCallback2 &V3DPluginCallback2_currentCallback,
             QWidget *QWidget_parent, int int_channelDim) {
     // channel
@@ -180,6 +184,11 @@ class dialogRun : public QDialog {
     QCheckBox_manualThresholding = new QCheckBox("Manual Thresholding", this);
     QCheckBox_manualThresholding->setChecked(false);  // default off
     hLayout_segmentationTop->addWidget(QCheckBox_manualThresholding, 0);
+    // Evaluate Segmentation Checkbox
+    QCheckBox_evaluateSegmentation =
+        new QCheckBox("Evaluate Segmentation", this);
+    QCheckBox_evaluateSegmentation->setChecked(false);  // default off
+    hLayout_segmentationTop->addWidget(QCheckBox_evaluateSegmentation, 0);
     vLayout_segmentation->addLayout(hLayout_segmentationTop);
     // Row 2: Median filtering, its radius, and marker constraint
     QHBoxLayout *hLayout_segmentationBottom = new QHBoxLayout();
@@ -286,6 +295,8 @@ class dialogRun : public QDialog {
     applyMarkerConstraint = QCheckBox_markerConstraint->isChecked();
     // Retrieve manual threshold flag:
     manualThresholding = QCheckBox_manualThresholding->isChecked();
+    // Retrieve evaluate segmentation flag:
+    evaluateSegmentation = QCheckBox_evaluateSegmentation->isChecked();
 
     if (this->QRadioButton_shape_sphere->isChecked()) {
       this->shape_type_selection = sphere;
@@ -375,7 +386,10 @@ class cellSegmentation : public QObject {
     // marker constraint check
     bool applyMarkerConstraint;
     // manual thresholding check
-    bool manualThresholding;
+    bool manualThresholding;  // evaluate segmentation check
+    bool evaluateSegmentation;
+    // callback for image operations
+    V3DPluginCallback2 *_V3DPluginCallback2_currentCallback;
 
 // vector<V3DLONG> poss_segmentationResultCenterMerged;
 #pragma endregion
@@ -383,6 +397,7 @@ class cellSegmentation : public QObject {
       is_initialized = false;
       applyMedianFiltering = true;    // default to true
       applyMarkerConstraint = false;  // default: no marker constraint
+      _V3DPluginCallback2_currentCallback = nullptr;
     }
     ~class_segmentationMain() {}
 
@@ -891,7 +906,6 @@ class cellSegmentation : public QObject {
                      cubeSize);
 
       QString saveModelPath = fileName + "_probability_model.bin";
-
       if (!saveProbabilityModel(saveModelPath.toStdString(), probabilisticModel,
                                 cubeSize, cubeSize, cubeSize)) {
         printf("Failed to save probabilistic model\n");
@@ -900,6 +914,88 @@ class cellSegmentation : public QObject {
       // Free the allocated memory for the probabilistic model and segmentation.
       delete[] somaSegmentation;
       delete[] probabilisticModel;
+
+      // Evaluate segmentation if requested
+      if (this->evaluateSegmentation &&
+          this->_V3DPluginCallback2_currentCallback) {
+        // Prompt user to select ground truth file
+        QFileDialog fileDialog;
+        fileDialog.setWindowTitle("Select Ground Truth Segmentation File");
+        fileDialog.setFileMode(QFileDialog::ExistingFile);
+        fileDialog.setNameFilter("Image files (*.tif *.tiff *.v3draw)");
+
+        if (fileDialog.exec()) {
+          QStringList selectedFiles = fileDialog.selectedFiles();
+          if (!selectedFiles.isEmpty()) {
+            QString groundTruthPath = selectedFiles.first();
+            printf("Loading ground truth data from: %s\n",
+                   groundTruthPath.toStdString()
+                       .c_str());  // Load ground truth data
+            unsigned char *groundTruthData = nullptr;
+            V3DLONG gtDims[4];
+            int datatype = 0;
+
+            // Use pointer dereference to convert pointer to reference
+            if (this->_V3DPluginCallback2_currentCallback &&
+                simple_loadimage_wrapper(
+                    *(V3DPluginCallback
+                          *)(this->_V3DPluginCallback2_currentCallback),
+                    groundTruthPath.toStdString().c_str(), groundTruthData,
+                    gtDims, datatype)) {
+              // Check if dimensions match
+              if (gtDims[0] == this->dim_X && gtDims[1] == this->dim_Y &&
+                  gtDims[2] == this->dim_Z) {
+                // Calculate Dice coefficient
+                double intersection = 0.0;
+                double segmentationVolume = 0.0;
+                double groundTruthVolume = 0.0;
+
+                for (V3DLONG i = 0; i < this->size_page; i++) {
+                  // Binary comparison
+                  if (this->binarySegImage[i] > 0) segmentationVolume += 1.0;
+                  if (groundTruthData[i] > 0) groundTruthVolume += 1.0;
+                  if (this->binarySegImage[i] > 0 && groundTruthData[i] > 0)
+                    intersection += 1.0;
+                }
+
+                double diceCoefficient = 0.0;
+                if ((segmentationVolume + groundTruthVolume) > 0) {
+                  diceCoefficient = 2.0 * intersection /
+                                    (segmentationVolume + groundTruthVolume);
+                }
+
+                // Print Dice score to CLI
+                printf("\n===== Segmentation Evaluation Results =====\n");
+                printf("Dice Coefficient: %.4f\n", diceCoefficient);
+                printf("Segmentation Volume: %.0f voxels\n",
+                       segmentationVolume);
+                printf("Ground Truth Volume: %.0f voxels\n", groundTruthVolume);
+                printf("Intersection Volume: %.0f voxels\n", intersection);
+                printf("==========================================\n\n");
+              } else {
+                printf(
+                    "Error: Ground truth dimensions (%ld, %ld, %ld) do not "
+                    "match segmentation dimensions (%ld, %ld, %ld)\n",
+                    gtDims[0], gtDims[1], gtDims[2], this->dim_X, this->dim_Y,
+                    this->dim_Z);
+              }
+
+              // Free ground truth data
+              if (groundTruthData) {
+                delete[] groundTruthData;
+              }
+            } else {
+              printf("Error: Failed to load ground truth file from %s\n",
+                     groundTruthPath.toStdString().c_str());
+            }
+          }
+        } else {
+          printf(
+              "Segmentation evaluation canceled: No ground truth file "
+              "selected\n");
+        }
+      }
+
       this->memory_free_uchar2D(masks_page, count_exemplar);
       return true;
     }
@@ -3017,7 +3113,13 @@ class cellSegmentation : public QObject {
           dialogRun1.applyMarkerConstraint;
       // Set the manual thresholding flag from the dialog
       this->class_segmentationMain1.manualThresholding =
-          dialogRun1.manualThresholding;
+          dialogRun1.manualThresholding;  // Set the evaluate segmentation flag
+                                          // from the dialog
+      this->class_segmentationMain1.evaluateSegmentation =
+          dialogRun1.evaluateSegmentation;
+      // Set the callback for image operations
+      this->class_segmentationMain1._V3DPluginCallback2_currentCallback =
+          &_V3DPluginCallback2_currentCallback;
       int idx_shape;  // get shape parameters;
       if (dialogRun1.shape_type_selection == sphere) {
         idx_shape = 1;
