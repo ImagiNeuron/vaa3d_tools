@@ -584,7 +584,37 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
          stdCenter[2]);
 
   /*
-   * Create synthetic somas and image
+   * Load probabilistic shape model data
+   */
+
+  // Find the probabilistic shape model file
+  QString ProbShapeModelFileName =
+      modifyFilePathForTeraFly(imageName) + "_probability_model.bin";
+
+  printf("\nLoading probabilistic shape model data from: %s\n",
+         ProbShapeModelFileName.toStdString().c_str());
+
+  std::vector<double> probabilisticModel;
+  V3DLONG probabilisticModelDim_X, probabilisticModelDim_Y,
+      probabilisticModelDim_Z;
+
+  // Load probabilistic model
+  if (QFile::exists(ProbShapeModelFileName)) {
+    cellSegmentation::class_segmentationMain::loadProbabilityModel(
+        ProbShapeModelFileName.toStdString().c_str(), probabilisticModel,
+        probabilisticModelDim_X, probabilisticModelDim_Y,
+        probabilisticModelDim_Z);
+    printf(
+        "Loaded probabilistic model with dimensions %ldx%ldx%ld (%zu values)\n",
+        probabilisticModelDim_X, probabilisticModelDim_Y,
+        probabilisticModelDim_Z, probabilisticModel.size());
+  } else {
+    printf("Probabilistic shape model file not found: %s\n",
+           ProbShapeModelFileName.toStdString().c_str());
+  }
+
+  /*
+   * Place synthetic somas and create image
    */
 
   // Create output image
@@ -726,6 +756,10 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
     simulatedLandmarks.append(newSoma);
     successfulPlacements++;
 
+    /*
+     * Create synthetic somas
+     */
+
     // Generate random PCA values based on the distribution
     double randomVec1[3], randomVec2[3], randomVec3[3];
 
@@ -748,8 +782,7 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
       randomVec3[i] = Q(i, 2);
     }
 
-    // Extract a soma from segmentation data
-    // Get center of mass for the selected soma
+    // Extract existing soma from segmentation data
     V3DLONG sourceCenterX =
         static_cast<V3DLONG>(centerCoords[randomSomaIndex * 3]);
     V3DLONG sourceCenterY =
@@ -757,44 +790,25 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
     V3DLONG sourceCenterZ =
         static_cast<V3DLONG>(centerCoords[randomSomaIndex * 3 + 2]);
 
+    // Get the eigenvectors for this existing soma for deformation
+    double somaEigenvector1[3], somaEigenvector2[3], somaEigenvector3[3];
+    for (int j = 0; j < 3; j++) {
+      somaEigenvector1[j] = eigenVectors[randomSomaIndex * 9 + j];
+      somaEigenvector2[j] = eigenVectors[randomSomaIndex * 9 + 3 + j];
+      somaEigenvector3[j] = eigenVectors[randomSomaIndex * 9 + 6 + j];
+    }
+
+    // Extract and deform the soma shape
     V3DLONG totalVoxels = cubeSize * cubeSize * cubeSize;
     double *tempSegmentation = new double[totalVoxels];
     double *tempIntensity = new double[totalVoxels];
-    memset(tempSegmentation, 0, totalVoxels * sizeof(double));
-    memset(tempIntensity, 0, totalVoxels * sizeof(double));
 
-    // Extract both segmentation and intensity data for the soma
-    for (int z = 0; z < cubeSize; z++) {
-      for (int y = 0; y < cubeSize; y++) {
-        for (int x = 0; x < cubeSize; x++) {
-          // Calculate positions relative to the soma's center
-          V3DLONG sourceX = sourceCenterX + x - cubeSize / 2;
-          V3DLONG sourceY = sourceCenterY + y - cubeSize / 2;
-          V3DLONG sourceZ = sourceCenterZ + z - cubeSize / 2;
-
-          // Target index in temporary buffer
-          int targetIdx = z * cubeSize * cubeSize + y * cubeSize + x;
-
-          // Check if coordinates are within the image bounds
-          if (sourceX >= 0 && sourceX < xDim && sourceY >= 0 &&
-              sourceY < yDim && sourceZ >= 0 && sourceZ < zDim) {
-            // Calculate index in the source images
-            V3DLONG sourceIdx =
-                sourceZ * xDim * yDim + sourceY * xDim + sourceX;
-
-            // Copy the segmentation value (0 or 255 for binary image)
-            tempSegmentation[targetIdx] = segData[sourceIdx] > 0 ? 1 : 0;
-
-            // Copy the original intensity value if this voxel is part of the
-            // soma
-            if (segData[sourceIdx] > 0) {
-              tempIntensity[targetIdx] =
-                  static_cast<double>(originalData[sourceIdx]);
-            }
-          }
-        }
-      }
-    }
+    extractAndDeformSomaShape(
+        segData, originalData, xDim, yDim, zDim, sourceCenterX, sourceCenterY,
+        sourceCenterZ, cubeSize, somaEigenvector1, somaEigenvector2,
+        somaEigenvector3, probabilisticModel, probabilisticModelDim_X,
+        probabilisticModelDim_Y, probabilisticModelDim_Z, radius, gen,
+        tempSegmentation, tempIntensity);
 
     // Apply random rotation to the synthetic soma
     cellSegmentation::class_segmentationMain segMain;
@@ -808,6 +822,11 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
     int centerY = V3DLONG(newSoma.y);
     int centerZ = V3DLONG(newSoma.z);
     double somaVolume = 0.0;
+
+    // Calculate synthetic intensity values based on soma properties
+    std::uniform_real_distribution<double> intensityVariation(0.8, 1.2);
+    double baseIntensity = 150.0;  // Base soma intensity
+    double intensityMultiplier = intensityVariation(gen);
 
     // Copy rotated soma to both output images
     for (int z = 0; z < cubeSize; z++) {
@@ -828,12 +847,17 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
             // Only set voxel if rotated model indicates soma presence
             if (tempSegmentation[sourceIdx] > 0) {
               outSegData[targetIdx] = 255;  // Binary segmentation
-              outIntensityData[targetIdx] =
-                  static_cast<unsigned char>(std::round(std::min(
-                      255.0,
-                      std::max(
-                          0.0,
-                          tempIntensity[sourceIdx]))));  // Original intensity
+
+              // Generate intensity value
+              double finalIntensity;
+              if (tempIntensity[sourceIdx] > 0) {
+                finalIntensity = tempIntensity[sourceIdx] * intensityMultiplier;
+              } else {
+                finalIntensity = baseIntensity * intensityMultiplier;
+              }
+
+              outIntensityData[targetIdx] = static_cast<unsigned char>(
+                  std::round(std::min(255.0, std::max(0.0, finalIntensity))));
               somaVolume += 1.0;
             }
           }
@@ -845,6 +869,11 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
 
     delete[] tempSegmentation;
     delete[] tempIntensity;
+
+    printf(
+        "Generated synthetic soma %d with %.0f voxels at position (%.1f, %.1f, "
+        "%.1f)\n",
+        i + 1, somaVolume, newSoma.x, newSoma.y, newSoma.z);
   }
 
   /*
@@ -1072,4 +1101,164 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
   // callback.setImage(intensityWin, &outIntensityImage);
   // callback.setImageName(intensityWin, outIntensityFileName);
   // callback.updateImageWindow(intensityWin);
+}
+
+/**
+ * @brief Extract and deform an existing soma shape using probabilistic model
+ * and eigenvector fields
+ *
+ * @param segData The segmentation data
+ * @param xDim Width of the image
+ * @param yDim Height of the image
+ * @param zDim Depth of the image
+ * @param sourceCenterX X coordinate of the soma center
+ * @param sourceCenterY Y coordinate of the soma center
+ * @param sourceCenterZ Z coordinate of the soma center
+ * @param cubeSize Size of the extraction cube
+ * @param somaEigenvector1 First eigenvector of the soma for deformation
+ * @param somaEigenvector2 Second eigenvector of the soma for deformation
+ * @param somaEigenvector3 Third eigenvector of the soma for deformation
+ * @param probabilisticModel The probabilistic model data
+ * @param probabilisticModelDim_X Width of the probabilistic model
+ * @param probabilisticModelDim_Y Height of the probabilistic model
+ * @param probabilisticModelDim_Z Depth of the probabilistic model
+ * @param radius Radius of the soma
+ * @param gen Random number generator
+ * @return A vector of voxel positions representing the deformed soma shape
+ */
+void extractAndDeformSomaShape(
+    unsigned char *segData, unsigned char *originalData, V3DLONG xDim,
+    V3DLONG yDim, V3DLONG zDim, V3DLONG sourceCenterX, V3DLONG sourceCenterY,
+    V3DLONG sourceCenterZ, V3DLONG cubeSize, const double somaEigenvector1[3],
+    const double somaEigenvector2[3], const double somaEigenvector3[3],
+    const std::vector<double> &probabilisticModel,
+    V3DLONG probabilisticModelDim_X, V3DLONG probabilisticModelDim_Y,
+    V3DLONG probabilisticModelDim_Z, double radius, std::mt19937 &gen,
+    double *tempSegmentation, double *tempIntensity) {
+  V3DLONG totalVoxels = cubeSize * cubeSize * cubeSize;
+  std::fill(tempSegmentation, tempSegmentation + totalVoxels, 0.0);
+  std::fill(tempIntensity, tempIntensity + totalVoxels, 0.0);
+
+  if (!probabilisticModel.empty()) {
+    printf(
+        "Extracting and deforming soma shape using probabilistic model and "
+        "soma eigenvectors\n");
+
+    double deformationStrength = 0.2;
+    std::normal_distribution<double> normalDist(0.0, deformationStrength);
+    std::uniform_real_distribution<double> uniformDist(0.0, 1.0);
+
+    for (int z = 0; z < cubeSize; z++) {
+      for (int y = 0; y < cubeSize; y++) {
+        for (int x = 0; x < cubeSize; x++) {
+          V3DLONG sourceX = sourceCenterX + x - cubeSize / 2;
+          V3DLONG sourceY = sourceCenterY + y - cubeSize / 2;
+          V3DLONG sourceZ = sourceCenterZ + z - cubeSize / 2;
+
+          if (sourceX >= 0 && sourceX < xDim && sourceY >= 0 &&
+              sourceY < yDim && sourceZ >= 0 && sourceZ < zDim) {
+            V3DLONG sourceIdx =
+                sourceZ * xDim * yDim + sourceY * xDim + sourceX;
+
+            if (segData[sourceIdx] > 0) {
+              // Calculate relative position from center
+              double origX = x - cubeSize / 2;
+              double origY = y - cubeSize / 2;
+              double origZ = z - cubeSize / 2;
+
+              // Calculate distance from center for radial modulation
+              double distance =
+                  sqrt(origX * origX + origY * origY + origZ * origZ);
+
+              // Apply soma eigenvector-based deformation
+              double deformX = normalDist(gen) * somaEigenvector1[0] +
+                               normalDist(gen) * somaEigenvector2[0] +
+                               normalDist(gen) * somaEigenvector3[0];
+              double deformY = normalDist(gen) * somaEigenvector1[1] +
+                               normalDist(gen) * somaEigenvector2[1] +
+                               normalDist(gen) * somaEigenvector3[1];
+              double deformZ = normalDist(gen) * somaEigenvector1[2] +
+                               normalDist(gen) * somaEigenvector2[2] +
+                               normalDist(gen) * somaEigenvector3[2];
+
+              // Scale deformation based on distance from center (less
+              // deformation at edges)
+              double radialFactor = std::max(0.1, 1.0 - distance / radius);
+              deformX *= radialFactor;
+              deformY *= radialFactor;
+              deformZ *= radialFactor;
+
+              // Sample from probabilistic model to determine if this voxel
+              // should be kept, convert position to model coordinates
+              int modelX =
+                  static_cast<int>(origX + probabilisticModelDim_X / 2);
+              int modelY =
+                  static_cast<int>(origY + probabilisticModelDim_Y / 2);
+              int modelZ =
+                  static_cast<int>(origZ + probabilisticModelDim_Z / 2);
+
+              double probability = 0.8;
+              if (modelX >= 0 && modelX < probabilisticModelDim_X &&
+                  modelY >= 0 && modelY < probabilisticModelDim_Y &&
+                  modelZ >= 0 && modelZ < probabilisticModelDim_Z) {
+                V3DLONG modelIdx =
+                    modelZ * probabilisticModelDim_Y * probabilisticModelDim_X +
+                    modelY * probabilisticModelDim_X + modelX;
+                probability = probabilisticModel[modelIdx];
+                // Bias towards keeping voxels from extracted shape
+                probability = std::max(0.5, probability);
+              }
+
+              // Keep voxel if probability is high enough
+              if (uniformDist(gen) < probability) {
+                // Apply deformation to final position
+                int finalX = static_cast<int>(std::round(origX + deformX)) +
+                             cubeSize / 2;
+                int finalY = static_cast<int>(std::round(origY + deformY)) +
+                             cubeSize / 2;
+                int finalZ = static_cast<int>(std::round(origZ + deformZ)) +
+                             cubeSize / 2;
+
+                // Check bounds and place in arrays
+                if (finalX >= 0 && finalX < cubeSize && finalY >= 0 &&
+                    finalY < cubeSize && finalZ >= 0 && finalZ < cubeSize) {
+                  V3DLONG targetIdx =
+                      finalZ * cubeSize * cubeSize + finalY * cubeSize + finalX;
+                  tempSegmentation[targetIdx] = 255.0;
+                  tempIntensity[targetIdx] =
+                      static_cast<double>(originalData[sourceIdx]);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+  } else {
+    // Fallback: direct extraction without deformation
+    printf("Extracting soma shape without deformation\n");
+    for (int z = 0; z < cubeSize; z++) {
+      for (int y = 0; y < cubeSize; y++) {
+        for (int x = 0; x < cubeSize; x++) {
+          V3DLONG sourceX = sourceCenterX + x - cubeSize / 2;
+          V3DLONG sourceY = sourceCenterY + y - cubeSize / 2;
+          V3DLONG sourceZ = sourceCenterZ + z - cubeSize / 2;
+
+          if (sourceX >= 0 && sourceX < xDim && sourceY >= 0 &&
+              sourceY < yDim && sourceZ >= 0 && sourceZ < zDim) {
+            V3DLONG sourceIdx =
+                sourceZ * xDim * yDim + sourceY * xDim + sourceX;
+
+            if (segData[sourceIdx] > 0) {
+              V3DLONG targetIdx = z * cubeSize * cubeSize + y * cubeSize + x;
+              tempSegmentation[targetIdx] = 255.0;
+              tempIntensity[targetIdx] =
+                  static_cast<double>(originalData[sourceIdx]);
+            }
+          }
+        }
+      }
+    }
+  }
 }

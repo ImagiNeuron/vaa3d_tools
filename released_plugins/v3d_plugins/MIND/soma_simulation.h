@@ -7,18 +7,25 @@
 
 #include <v3d_interface.h>
 
+#include <QDateTime>
 #include <QDir>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QInputDialog>
 #include <QLabel>
 #include <QMessageBox>
 #include <QRegularExpression>
-#include <QtCore>
 #include <QtGui>
+#include <algorithm>
+#include <cmath>
 #include <eigen/Dense>
 #include <fstream>
+#include <memory>
+#include <random>
+#include <vector>
 
 #include "basic_4dimage.h"
+#include "cellSegmentation_plugin.h"
 #include "compute_win_pca_wp.h"
 #include "soma_segmentation_plugin.h"
 
@@ -84,5 +91,16 @@ void overlaySimulation(V3DPluginCallback2 &callback, QWidget *parent,
                        unsigned char *binarySegImage,
                        unsigned char *gradientImage,
                        unsigned char *simulatedImage);
+
+// Extract and deform an existing soma shape
+void extractAndDeformSomaShape(
+    unsigned char *segData, unsigned char *originalData, V3DLONG xDim,
+    V3DLONG yDim, V3DLONG zDim, V3DLONG sourceCenterX, V3DLONG sourceCenterY,
+    V3DLONG sourceCenterZ, V3DLONG cubeSize, const double somaEigenvector1[3],
+    const double somaEigenvector2[3], const double somaEigenvector3[3],
+    const std::vector<double> &probabilisticModel,
+    V3DLONG probabilisticModelDim_X, V3DLONG probabilisticModelDim_Y,
+    V3DLONG probabilisticModelDim_Z, double radius, std::mt19937 &gen,
+    double *tempSegmentation, double *tempIntensity);
 
 #endif  // __MIND_SOMA_SIMULATION_H__
