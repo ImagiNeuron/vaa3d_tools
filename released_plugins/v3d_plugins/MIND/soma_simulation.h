@@ -7,14 +7,21 @@
 
 #include <v3d_interface.h>
 
+#include <QCheckBox>
 #include <QDateTime>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QDir>
+#include <QDoubleSpinBox>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFormLayout>
 #include <QInputDialog>
 #include <QLabel>
 #include <QMessageBox>
 #include <QRegularExpression>
+#include <QSpinBox>
+#include <QTabWidget>
 #include <QtGui>
 #include <algorithm>
 #include <cmath>
@@ -37,11 +44,14 @@
  * @param dim_X Output parameter for X dimension
  * @param dim_Y Output parameter for Y dimension
  * @param dim_Z Output parameter for Z dimension
+ * @param backgroundFactor Factor for chunk size calculation (default 4.0)
+ * @param blendRadius Radius for blending between chunks (default 1.0)
  * @return 1D array of background image
  */
 unsigned char *create_background(V3DPluginCallback2 &callback, QWidget *parent,
-                                 V3DLONG &dim_X, V3DLONG &dim_Y,
-                                 V3DLONG &dim_Z);
+                                 V3DLONG &dim_X, V3DLONG &dim_Y, V3DLONG &dim_Z,
+                                 double backgroundFactor = 4.0,
+                                 double blendRadius = 1.0);
 
 /**
  * @brief Create a background image based on segmentation threshold
@@ -101,6 +111,42 @@ void extractAndDeformSomaShape(
     const std::vector<double> &probabilisticModel,
     V3DLONG probabilisticModelDim_X, V3DLONG probabilisticModelDim_Y,
     V3DLONG probabilisticModelDim_Z, double radius, std::mt19937 &gen,
-    double *tempSegmentation, double *tempIntensity);
+    double *tempSegmentation, double *tempIntensity, double deformationStrength,
+    double radialFactorMin, double probabilityBias);
+
+/**
+ * @brief Dialog for configuring soma simulation parameters
+ */
+class SimulationParametersDialog : public QDialog {
+  Q_OBJECT
+
+ public:
+  // Shape and positioning parameters
+  QSpinBox *numSomasSpinBox;
+  QDoubleSpinBox *radiusScaleSpinBox;
+  QDoubleSpinBox *positionNoiseSpinBox;
+  QDoubleSpinBox *boundaryMarginSpinBox;
+  QSpinBox *maxPlacementAttemptsSpinBox;
+
+  // Deformation parameters
+  QDoubleSpinBox *deformationStrengthSpinBox;
+  QDoubleSpinBox *radialFactorMinSpinBox;
+  QDoubleSpinBox *probabilityBiasSpinBox;
+
+  // Intensity parameters
+  QDoubleSpinBox *baseIntensitySpinBox;
+  QDoubleSpinBox *intensityVariationMinSpinBox;
+  QDoubleSpinBox *intensityVariationMaxSpinBox;
+
+  // Background parameters
+  QDoubleSpinBox *backgroundFactorSpinBox;
+  QDoubleSpinBox *blendRadiusSpinBox;
+
+  // Random seed
+  QSpinBox *randomSeedSpinBox;
+  QCheckBox *useRandomSeedCheckBox;
+
+  SimulationParametersDialog(QWidget *parent = nullptr);
+};
 
 #endif  // __MIND_SOMA_SIMULATION_H__

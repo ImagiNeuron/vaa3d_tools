@@ -15,8 +15,8 @@
  * @return - a pointer to the background image data
  */
 unsigned char *create_background(V3DPluginCallback2 &callback, QWidget *parent,
-                                 V3DLONG &dim_X, V3DLONG &dim_Y,
-                                 V3DLONG &dim_Z) {
+                                 V3DLONG &dim_X, V3DLONG &dim_Y, V3DLONG &dim_Z,
+                                 double backgroundFactor, double blendRadius) {
   // Get current image
   v3dhandle curwin = callback.currentImageWindow();
   if (!curwin) {
@@ -36,12 +36,10 @@ unsigned char *create_background(V3DPluginCallback2 &callback, QWidget *parent,
   dim_Z = p4DImage->getZDim();
   V3DLONG totalSize = dim_X * dim_Y * dim_Z;
   unsigned char *originalData = p4DImage->getRawData();
-
   // Calculate chunk dimensions (ensure at least 1)
-  V3DLONG factor = 4;
-  V3DLONG chunk_X = std::max(1L, dim_X / factor);
-  V3DLONG chunk_Y = std::max(1L, dim_Y / factor);
-  V3DLONG chunk_Z = std::max(1L, dim_Z / factor);
+  V3DLONG chunk_X = std::max(1L, (V3DLONG)(dim_X / backgroundFactor));
+  V3DLONG chunk_Y = std::max(1L, (V3DLONG)(dim_Y / backgroundFactor));
+  V3DLONG chunk_Z = std::max(1L, (V3DLONG)(dim_Z / backgroundFactor));
 
   // Calculate number of chunks in each dimension
   V3DLONG num_chunks_X = (dim_X + chunk_X - 1) / chunk_X;
@@ -136,10 +134,6 @@ unsigned char *create_background(V3DPluginCallback2 &callback, QWidget *parent,
     }
   }
 
-  // Define blending parameters - use a smaller radius for more localized
-  // blending
-  double blendRadius = 1.0;
-
   // Generate background values with blending between chunks
   for (V3DLONG z = 0; z < dim_Z; z++) {
     for (V3DLONG y = 0; y < dim_Y; y++) {
@@ -171,10 +165,10 @@ unsigned char *create_background(V3DPluginCallback2 &callback, QWidget *parent,
       }
     }
   }
-
   printf(
-      "Background generation complete with smooth blending (radius = %.1f).\n",
-      blendRadius);
+      "Background generation complete with smooth blending (factor = %.1f, "
+      "radius = %.1f).\n",
+      backgroundFactor, blendRadius);
   return backgroundArray;
 }
 
@@ -185,11 +179,10 @@ unsigned char *create_background(V3DPluginCallback2 &callback, QWidget *parent,
  */
 void create_background(V3DPluginCallback2 &callback, QWidget *parent) {
   // Old version that creates and displays an image directly for debugging
-
   // Call the new version to get the background intensities
   V3DLONG dimX, dimY, dimZ;
   unsigned char *backgroundIntensities =
-      create_background(callback, parent, dimX, dimY, dimZ);
+      create_background(callback, parent, dimX, dimY, dimZ, 4.0, 1.0);
 
   if (!backgroundIntensities) {
     v3d_msg("Failed to generate background intensities.", parent);
@@ -390,6 +383,211 @@ void overlaySimulation(V3DPluginCallback2 &callback, QWidget *parent,
 }
 
 /**
+ * @brief Dialog for configuring soma simulation parameters
+ */
+SimulationParametersDialog::SimulationParametersDialog(QWidget *parent)
+    : QDialog(parent) {
+  setWindowTitle("Soma Simulation Parameters");
+  setModal(true);
+  resize(400, 600);
+
+  // Tabbed interface layout
+  QVBoxLayout *mainLayout = new QVBoxLayout(this);
+  QTabWidget *tabWidget = new QTabWidget();
+  QWidget *basicTab = new QWidget();
+  QFormLayout *basicLayout = new QFormLayout(basicTab);
+
+  // Basic parameters tab
+  numSomasSpinBox = new QSpinBox();
+  numSomasSpinBox->setRange(1, 1000);
+  numSomasSpinBox->setValue(20);
+  basicLayout->addRow("Number of synthetic somas:", numSomasSpinBox);
+  radiusScaleSpinBox = new QDoubleSpinBox();
+  radiusScaleSpinBox->setRange(0.1, 5.0);
+  radiusScaleSpinBox->setSingleStep(0.1);
+  radiusScaleSpinBox->setValue(2.5);
+  QString radiusScaleTooltip =
+      "Scale factor for cube size extraction relative to soma radius.\nHigher "
+      "values capture more surrounding tissue for deformation.";
+  radiusScaleSpinBox->setToolTip(radiusScaleTooltip);
+  QLabel *radiusScaleLabel = new QLabel("Radius scale factor: (?)");
+  radiusScaleLabel->setToolTip(radiusScaleTooltip);
+  basicLayout->addRow(radiusScaleLabel, radiusScaleSpinBox);
+  positionNoiseSpinBox = new QDoubleSpinBox();
+  positionNoiseSpinBox->setRange(0.0, 3.0);
+  positionNoiseSpinBox->setSingleStep(0.1);
+  positionNoiseSpinBox->setValue(1.0);
+  QString positionNoiseTooltip =
+      "Multiplier for position variability based on statistical "
+      "distribution.\n1.0 = normal variation, >1.0 = more spread, <1.0 = less "
+      "spread.";
+  positionNoiseSpinBox->setToolTip(positionNoiseTooltip);
+  QLabel *positionNoiseLabel = new QLabel("Position noise multiplier: (?)");
+  positionNoiseLabel->setToolTip(positionNoiseTooltip);
+  basicLayout->addRow(positionNoiseLabel, positionNoiseSpinBox);
+  boundaryMarginSpinBox = new QDoubleSpinBox();
+  boundaryMarginSpinBox->setRange(0.5, 3.0);
+  boundaryMarginSpinBox->setSingleStep(0.1);
+  boundaryMarginSpinBox->setValue(1.0);
+  QString boundaryMarginTooltip =
+      "Safety margin from image edges for soma placement.\nPrevents somas from "
+      "being cut off at boundaries.";
+  boundaryMarginSpinBox->setToolTip(boundaryMarginTooltip);
+  QLabel *boundaryMarginLabel = new QLabel("Boundary margin multiplier: (?)");
+  boundaryMarginLabel->setToolTip(boundaryMarginTooltip);
+  basicLayout->addRow(boundaryMarginLabel, boundaryMarginSpinBox);
+  maxPlacementAttemptsSpinBox = new QSpinBox();
+  maxPlacementAttemptsSpinBox->setRange(10, 1000);
+  maxPlacementAttemptsSpinBox->setValue(100);
+  QString maxAttemptsTooltip =
+      "Maximum tries to find non-overlapping positions for each "
+      "soma.\nIncrease for dense packing, decrease for faster processing.";
+  maxPlacementAttemptsSpinBox->setToolTip(maxAttemptsTooltip);
+  QLabel *maxAttemptsLabel = new QLabel("Max placement attempts: (?)");
+  maxAttemptsLabel->setToolTip(maxAttemptsTooltip);
+  basicLayout->addRow(maxAttemptsLabel, maxPlacementAttemptsSpinBox);
+
+  tabWidget->addTab(basicTab, "Basic");
+
+  // Shape deformation tab
+  QWidget *deformTab = new QWidget();
+  QFormLayout *deformLayout = new QFormLayout(deformTab);
+  deformationStrengthSpinBox = new QDoubleSpinBox();
+  deformationStrengthSpinBox->setRange(0.0, 1.0);
+  deformationStrengthSpinBox->setSingleStep(0.05);
+  deformationStrengthSpinBox->setValue(0.2);
+  QString deformationTooltip =
+      "Controls how much soma shapes are deformed from the original.\n0.0 = no "
+      "deformation, 1.0 = maximum deformation.";
+  deformationStrengthSpinBox->setToolTip(deformationTooltip);
+  QLabel *deformationLabel = new QLabel("Deformation strength: (?)");
+  deformationLabel->setToolTip(deformationTooltip);
+  deformLayout->addRow(deformationLabel, deformationStrengthSpinBox);
+  radialFactorMinSpinBox = new QDoubleSpinBox();
+  radialFactorMinSpinBox->setRange(0.0, 1.0);
+  radialFactorMinSpinBox->setSingleStep(0.05);
+  radialFactorMinSpinBox->setValue(0.1);
+  QString radialFactorTooltip =
+      "Minimum threshold for radial distance in probabilistic model.\nControls "
+      "shape boundary sharpness during deformation.";
+  radialFactorMinSpinBox->setToolTip(radialFactorTooltip);
+  QLabel *radialFactorLabel = new QLabel("Radial factor minimum: (?)");
+  radialFactorLabel->setToolTip(radialFactorTooltip);
+  deformLayout->addRow(radialFactorLabel, radialFactorMinSpinBox);
+  probabilityBiasSpinBox = new QDoubleSpinBox();
+  probabilityBiasSpinBox->setRange(0.0, 1.0);
+  probabilityBiasSpinBox->setSingleStep(0.05);
+  probabilityBiasSpinBox->setValue(0.5);
+  QString probabilityBiasTooltip =
+      "Threshold for probabilistic model inclusion.\nHigher values create "
+      "smaller/denser somas, lower values create larger/sparser somas.";
+  probabilityBiasSpinBox->setToolTip(probabilityBiasTooltip);
+  QLabel *probabilityBiasLabel = new QLabel("Probability bias: (?)");
+  probabilityBiasLabel->setToolTip(probabilityBiasTooltip);
+  deformLayout->addRow(probabilityBiasLabel, probabilityBiasSpinBox);
+
+  tabWidget->addTab(deformTab, "Shape");
+
+  // Intensity parameters tab
+  QWidget *intensityTab = new QWidget();
+  QFormLayout *intensityLayout = new QFormLayout(intensityTab);
+
+  baseIntensitySpinBox = new QDoubleSpinBox();
+  baseIntensitySpinBox->setRange(50.0, 255.0);
+  baseIntensitySpinBox->setSingleStep(5.0);
+  baseIntensitySpinBox->setValue(150.0);
+  intensityLayout->addRow("Base soma intensity:", baseIntensitySpinBox);
+  intensityVariationMinSpinBox = new QDoubleSpinBox();
+  intensityVariationMinSpinBox->setRange(0.1, 2.0);
+  intensityVariationMinSpinBox->setSingleStep(0.1);
+  intensityVariationMinSpinBox->setValue(0.8);
+  QString intensityVarMinTooltip =
+      "Minimum multiplier for base intensity variation.\nCreates natural "
+      "brightness differences between somas.";
+  intensityVariationMinSpinBox->setToolTip(intensityVarMinTooltip);
+  QLabel *intensityVarMinLabel = new QLabel("Intensity variation min: (?)");
+  intensityVarMinLabel->setToolTip(intensityVarMinTooltip);
+  intensityLayout->addRow(intensityVarMinLabel, intensityVariationMinSpinBox);
+  intensityVariationMaxSpinBox = new QDoubleSpinBox();
+  intensityVariationMaxSpinBox->setRange(0.1, 2.0);
+  intensityVariationMaxSpinBox->setSingleStep(0.1);
+  intensityVariationMaxSpinBox->setValue(1.2);
+  QString intensityVarMaxTooltip =
+      "Maximum multiplier for base intensity variation.\nWider range creates "
+      "more diverse soma brightness.";
+  intensityVariationMaxSpinBox->setToolTip(intensityVarMaxTooltip);
+  QLabel *intensityVarMaxLabel = new QLabel("Intensity variation max: (?)");
+  intensityVarMaxLabel->setToolTip(intensityVarMaxTooltip);
+  intensityLayout->addRow(intensityVarMaxLabel, intensityVariationMaxSpinBox);
+
+  tabWidget->addTab(intensityTab, "Intensity");
+
+  // Background parameters tab
+  QWidget *backgroundTab = new QWidget();
+  QFormLayout *backgroundLayout = new QFormLayout(backgroundTab);
+  backgroundFactorSpinBox = new QDoubleSpinBox();
+  backgroundFactorSpinBox->setRange(2.0, 10.0);
+  backgroundFactorSpinBox->setSingleStep(0.5);
+  backgroundFactorSpinBox->setValue(4.0);
+  QString backgroundFactorTooltip =
+      "Image subdivision factor for background generation.\nHigher values "
+      "create finer background texture variations.";
+  backgroundFactorSpinBox->setToolTip(backgroundFactorTooltip);
+  QLabel *backgroundFactorLabel = new QLabel("Background chunk factor: (?)");
+  backgroundFactorLabel->setToolTip(backgroundFactorTooltip);
+  backgroundLayout->addRow(backgroundFactorLabel, backgroundFactorSpinBox);
+  blendRadiusSpinBox = new QDoubleSpinBox();
+  blendRadiusSpinBox->setRange(0.5, 5.0);
+  blendRadiusSpinBox->setSingleStep(0.1);
+  blendRadiusSpinBox->setValue(1.0);
+  QString blendRadiusTooltip =
+      "Smoothing radius for background transitions between chunks.\nHigher "
+      "values create smoother background gradients.";
+  blendRadiusSpinBox->setToolTip(blendRadiusTooltip);
+  QLabel *blendRadiusLabel = new QLabel("Background blend radius: (?)");
+  blendRadiusLabel->setToolTip(blendRadiusTooltip);
+  backgroundLayout->addRow(blendRadiusLabel, blendRadiusSpinBox);
+
+  tabWidget->addTab(backgroundTab, "Background");
+
+  // Random seed tab
+  QWidget *seedTab = new QWidget();
+  QFormLayout *seedLayout = new QFormLayout(seedTab);
+  useRandomSeedCheckBox = new QCheckBox();
+  useRandomSeedCheckBox->setChecked(false);
+  QString useRandomSeedTooltip =
+      "Enable to use a fixed seed for reproducible results.\nDisabled uses "
+      "random seed for different results each time.";
+  useRandomSeedCheckBox->setToolTip(useRandomSeedTooltip);
+  QLabel *useRandomSeedLabel = new QLabel("Use fixed random seed: (?)");
+  useRandomSeedLabel->setToolTip(useRandomSeedTooltip);
+  seedLayout->addRow(useRandomSeedLabel, useRandomSeedCheckBox);
+  randomSeedSpinBox = new QSpinBox();
+  randomSeedSpinBox->setRange(0, 999999);
+  randomSeedSpinBox->setValue(12345);
+  randomSeedSpinBox->setEnabled(false);
+  randomSeedSpinBox->setToolTip(
+      "Seed value for random number generation.\nSame seed produces identical "
+      "simulation results.");
+  seedLayout->addRow("Random seed:", randomSeedSpinBox);
+
+  // Connect checkbox to enable/disable seed input
+  connect(useRandomSeedCheckBox, &QCheckBox::toggled, randomSeedSpinBox,
+          &QSpinBox::setEnabled);
+
+  tabWidget->addTab(seedTab, "Random");
+
+  mainLayout->addWidget(tabWidget);
+
+  // Button box for dialog actions
+  QDialogButtonBox *buttonBox =
+      new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+  connect(buttonBox, &QDialogButtonBox::accepted, this, &QDialog::accept);
+  connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
+  mainLayout->addWidget(buttonBox);
+}
+
+/**
  * @brief Function to simulate synthetic soma data
  *
  * @param callback - the V3D plugin callback interface
@@ -409,13 +607,40 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
     return;
   }
 
+  // Show parameter dialog
+  SimulationParametersDialog paramDialog(parent);
+  if (paramDialog.exec() != QDialog::Accepted) {
+    return;
+  }
+
+  // Get parameter values from dialog
+  int numSynthetic = paramDialog.numSomasSpinBox->value();
+  double radiusScale = paramDialog.radiusScaleSpinBox->value();
+  double positionNoise = paramDialog.positionNoiseSpinBox->value();
+  double boundaryMarginMultiplier = paramDialog.boundaryMarginSpinBox->value();
+  int maxPlacementAttempts = paramDialog.maxPlacementAttemptsSpinBox->value();
+  double deformationStrength = paramDialog.deformationStrengthSpinBox->value();
+  double radialFactorMin = paramDialog.radialFactorMinSpinBox->value();
+  double probabilityBias = paramDialog.probabilityBiasSpinBox->value();
+  double baseIntensity = paramDialog.baseIntensitySpinBox->value();
+  double intensityVarMin = paramDialog.intensityVariationMinSpinBox->value();
+  double intensityVarMax = paramDialog.intensityVariationMaxSpinBox->value();
+  double backgroundFactor = paramDialog.backgroundFactorSpinBox->value();
+  double blendRadius = paramDialog.blendRadiusSpinBox->value();
+  bool useFixedSeed = paramDialog.useRandomSeedCheckBox->isChecked();
+  int randomSeed = paramDialog.randomSeedSpinBox->value();
+
   // Get dimensions of current image
   V3DLONG xDim = p4DImage->getXDim();
   V3DLONG yDim = p4DImage->getYDim();
   V3DLONG zDim = p4DImage->getZDim();
 
-  printf("\nStarting soma simulation...\n");
+  printf("\nStarting soma simulation with custom parameters...\n");
   printf("Image dimensions: X=%ld, Y=%ld, Z=%ld\n", xDim, yDim, zDim);
+  printf("Number of synthetic somas: %d\n", numSynthetic);
+  printf("Radius scale factor: %.2f\n", radiusScale);
+  printf("Deformation strength: %.2f\n", deformationStrength);
+  printf("Base intensity: %.1f\n", baseIntensity);
 
   // Get the current image name and path
   QString imageName = callback.getImageName(curwin);
@@ -561,9 +786,9 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
       meanEigenvectors[j] += eigenVectors[i + j];
     }
   }
-
   for (int j = 0; j < 9; j++) {
-    meanEigenvectors[j] /= numSomas;
+    meanEigenvectors[j] =
+        (numSomas > 0) ? (meanEigenvectors[j] / numSomas) : 0.0;
   }
 
   // Calculate standard deviations
@@ -621,31 +846,20 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
   V3DLONG totalSize = xDim * yDim * zDim;
   unsigned char *outSegData = new unsigned char[totalSize];
   memset(outSegData, 0, totalSize);
-
   // Create output image with original intensity values
-  unsigned char *outIntensityData =
-      create_background(callback, parent, xDim, yDim, zDim);
+  unsigned char *outIntensityData = create_background(
+      callback, parent, xDim, yDim, zDim, backgroundFactor, blendRadius);
 
   // Generate random positions and place synthetic somas
   std::random_device rd;
-  std::mt19937 gen(rd());
+  std::mt19937 gen;
 
-  // Ask user for the number of synthetic somas to generate
-  bool ok;
-  int numSynthetic =
-      QInputDialog::getInt(parent, "Synthetic Soma Generation",
-                           "Enter the number of synthetic somas to generate:",
-                           20,    // Default value
-                           1,     // Minimum value
-                           1000,  // Maximum value
-                           1,     // Step
-                           &ok);
-
-  if (!ok) {
-    // User canceled the dialog
-    printf("Synthetic soma generation canceled.");
-    delete[] segData;
-    return;
+  if (useFixedSeed) {
+    gen.seed(randomSeed);
+    printf("Using fixed random seed: %d\n", randomSeed);
+  } else {
+    gen.seed(rd());
+    printf("Using random seed from device\n");
   }
 
   printf("\nGenerating %d synthetic somas...\n", numSynthetic);
@@ -679,15 +893,17 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
     // Get the radius and calculate appropriate cube size
     double radius = somaRadii[randomSomaIndex];
     V3DLONG cubeSize = static_cast<V3DLONG>(
-        2.5 * radius);  // Use 2.5x radius to ensure we capture the whole soma
+        radiusScale * radius);  // Use radius scale to capture the whole soma
 
     // Make sure cubeSize is odd for centering purposes
     if (cubeSize % 2 == 0) cubeSize += 1;
 
-    // Set boundary margin based on the cube size
-    int boundaryMargin = cubeSize / 2;
+    // Set boundary margin based on the cube size and multiplier
+    int boundaryMargin =
+        static_cast<int>(boundaryMarginMultiplier * cubeSize / 2);
 
-    // Generate random position using normal distribution
+    // Generate random position using normal distribution with configurable
+    // noise
     LocationSimple newSoma;
     newSoma.radius = round(radius);
     newSoma.name = qPrintable(QString("Sim_%1").arg(i + 1));
@@ -695,16 +911,16 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
     newSoma.shape = pxSphere;
 
     bool validPosition = false;
-    int maxAttempts = 100;
     int attempts = 0;
 
-    while (!validPosition && attempts < maxAttempts) {
+    while (!validPosition && attempts < maxPlacementAttempts) {
       attempts++;
       validPosition = true;
 
-      // Generate new potential position
+      // Generate new potential position with configurable noise
       for (int j = 0; j < 3; j++) {
-        std::normal_distribution<> d(meanCenter[j], stdCenter[j]);
+        std::normal_distribution<> d(meanCenter[j],
+                                     stdCenter[j] * positionNoise);
         double coord = round(d(gen));
 
         // Store coordinate in new soma
@@ -748,7 +964,7 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
       printf(
           "Failed to find valid non-overlapping position for soma %d after %d "
           "attempts\n",
-          i + 1, maxAttempts);
+          i + 1, maxPlacementAttempts);
       continue;
     }
 
@@ -808,7 +1024,8 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
         sourceCenterZ, cubeSize, somaEigenvector1, somaEigenvector2,
         somaEigenvector3, probabilisticModel, probabilisticModelDim_X,
         probabilisticModelDim_Y, probabilisticModelDim_Z, radius, gen,
-        tempSegmentation, tempIntensity);
+        tempSegmentation, tempIntensity, deformationStrength, radialFactorMin,
+        probabilityBias);
 
     // Apply random rotation to the synthetic soma
     cellSegmentation::class_segmentationMain segMain;
@@ -823,9 +1040,9 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
     int centerZ = V3DLONG(newSoma.z);
     double somaVolume = 0.0;
 
-    // Calculate synthetic intensity values based on soma properties
-    std::uniform_real_distribution<double> intensityVariation(0.8, 1.2);
-    double baseIntensity = 150.0;  // Base soma intensity
+    // Calculate synthetic intensity values with configurable parameters
+    std::uniform_real_distribution<double> intensityVariation(intensityVarMin,
+                                                              intensityVarMax);
     double intensityMultiplier = intensityVariation(gen);
 
     // Copy rotated soma to both output images
@@ -1042,6 +1259,29 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
             successfulPlacements);
     fprintf(summaryFile, "Image Dimensions: X=%ld, Y=%ld, Z=%ld\n", xDim, yDim,
             zDim);
+
+    // Add simulation parameters to summary
+    fprintf(summaryFile, "\n=== Simulation Parameters ===\n");
+    fprintf(summaryFile, "Radius Scale Factor: %.2f\n", radiusScale);
+    fprintf(summaryFile, "Position Noise Multiplier: %.2f\n", positionNoise);
+    fprintf(summaryFile, "Boundary Margin Multiplier: %.2f\n",
+            boundaryMarginMultiplier);
+    fprintf(summaryFile, "Max Placement Attempts: %d\n", maxPlacementAttempts);
+    fprintf(summaryFile, "Deformation Strength: %.2f\n", deformationStrength);
+    fprintf(summaryFile, "Radial Factor Minimum: %.2f\n", radialFactorMin);
+    fprintf(summaryFile, "Probability Bias: %.2f\n", probabilityBias);
+    fprintf(summaryFile, "Base Intensity: %.1f\n", baseIntensity);
+    fprintf(summaryFile, "Intensity Variation Range: %.2f - %.2f\n",
+            intensityVarMin, intensityVarMax);
+    fprintf(summaryFile, "Background Factor: %.1f\n", backgroundFactor);
+    fprintf(summaryFile, "Background Blend Radius: %.2f\n", blendRadius);
+    fprintf(summaryFile, "Fixed Random Seed: %s\n",
+            useFixedSeed ? "true" : "false");
+    if (useFixedSeed) {
+      fprintf(summaryFile, "Random Seed Value: %d\n", randomSeed);
+    }
+    fprintf(summaryFile, "===============================\n\n");
+
     fprintf(summaryFile, "Overall Soma Density: %f\n", overallDensity);
     for (int q = 0; q < 8; q++) {
       fprintf(summaryFile, "Subvolume %s: Count = %d, Density = %f\n",
@@ -1108,6 +1348,7 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
  * and eigenvector fields
  *
  * @param segData The segmentation data
+ * @param originalData The original image data for intensity
  * @param xDim Width of the image
  * @param yDim Height of the image
  * @param zDim Depth of the image
@@ -1124,6 +1365,11 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
  * @param probabilisticModelDim_Z Depth of the probabilistic model
  * @param radius Radius of the soma
  * @param gen Random number generator
+ * @param tempSegmentation Temporary array for storing segmentation results
+ * @param tempIntensity Temporary array for storing intensity results
+ * @param deformationStrength Strength of the deformation applied
+ * @param radialFactorMin Minimum radial factor for edge deformation
+ * @param probabilityBias Bias value for probability thresholding
  * @return A vector of voxel positions representing the deformed soma shape
  */
 void extractAndDeformSomaShape(
@@ -1134,7 +1380,9 @@ void extractAndDeformSomaShape(
     const std::vector<double> &probabilisticModel,
     V3DLONG probabilisticModelDim_X, V3DLONG probabilisticModelDim_Y,
     V3DLONG probabilisticModelDim_Z, double radius, std::mt19937 &gen,
-    double *tempSegmentation, double *tempIntensity) {
+    double *tempSegmentation, double *tempIntensity,
+    double deformationStrength = 0.2, double radialFactorMin = 0.1,
+    double probabilityBias = 0.5) {
   V3DLONG totalVoxels = cubeSize * cubeSize * cubeSize;
   std::fill(tempSegmentation, tempSegmentation + totalVoxels, 0.0);
   std::fill(tempIntensity, tempIntensity + totalVoxels, 0.0);
@@ -1142,9 +1390,9 @@ void extractAndDeformSomaShape(
   if (!probabilisticModel.empty()) {
     printf(
         "Extracting and deforming soma shape using probabilistic model and "
-        "soma eigenvectors\n");
+        "soma eigenvectors (deformation=%.2f, radialMin=%.2f, probBias=%.2f)\n",
+        deformationStrength, radialFactorMin, probabilityBias);
 
-    double deformationStrength = 0.2;
     std::normal_distribution<double> normalDist(0.0, deformationStrength);
     std::uniform_real_distribution<double> uniformDist(0.0, 1.0);
 
@@ -1183,7 +1431,8 @@ void extractAndDeformSomaShape(
 
               // Scale deformation based on distance from center (less
               // deformation at edges)
-              double radialFactor = std::max(0.1, 1.0 - distance / radius);
+              double radialFactor =
+                  std::max(radialFactorMin, 1.0 - distance / radius);
               deformX *= radialFactor;
               deformY *= radialFactor;
               deformZ *= radialFactor;
@@ -1206,7 +1455,7 @@ void extractAndDeformSomaShape(
                     modelY * probabilisticModelDim_X + modelX;
                 probability = probabilisticModel[modelIdx];
                 // Bias towards keeping voxels from extracted shape
-                probability = std::max(0.5, probability);
+                probability = std::max(probabilityBias, probability);
               }
 
               // Keep voxel if probability is high enough
