@@ -389,7 +389,7 @@ SimulationParametersDialog::SimulationParametersDialog(QWidget *parent)
     : QDialog(parent) {
   setWindowTitle("Soma Simulation Parameters");
   setModal(true);
-  resize(400, 600);
+  resize(400, 250);
 
   // Tabbed interface layout
   QVBoxLayout *mainLayout = new QVBoxLayout(this);
