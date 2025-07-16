@@ -446,7 +446,6 @@ SimulationParametersDialog::SimulationParametersDialog(QWidget *parent)
   QLabel *maxAttemptsLabel = new QLabel("Max placement attempts: (?)");
   maxAttemptsLabel->setToolTip(maxAttemptsTooltip);
   basicLayout->addRow(maxAttemptsLabel, maxPlacementAttemptsSpinBox);
-
   tabWidget->addTab(basicTab, "Basic");
 
   // Shape deformation tab
@@ -485,42 +484,7 @@ SimulationParametersDialog::SimulationParametersDialog(QWidget *parent)
   QLabel *probabilityBiasLabel = new QLabel("Probability bias: (?)");
   probabilityBiasLabel->setToolTip(probabilityBiasTooltip);
   deformLayout->addRow(probabilityBiasLabel, probabilityBiasSpinBox);
-
   tabWidget->addTab(deformTab, "Shape");
-
-  // Intensity parameters tab
-  QWidget *intensityTab = new QWidget();
-  QFormLayout *intensityLayout = new QFormLayout(intensityTab);
-
-  baseIntensitySpinBox = new QDoubleSpinBox();
-  baseIntensitySpinBox->setRange(50.0, 255.0);
-  baseIntensitySpinBox->setSingleStep(5.0);
-  baseIntensitySpinBox->setValue(150.0);
-  intensityLayout->addRow("Base soma intensity:", baseIntensitySpinBox);
-  intensityVariationMinSpinBox = new QDoubleSpinBox();
-  intensityVariationMinSpinBox->setRange(0.1, 2.0);
-  intensityVariationMinSpinBox->setSingleStep(0.1);
-  intensityVariationMinSpinBox->setValue(0.8);
-  QString intensityVarMinTooltip =
-      "Minimum multiplier for base intensity variation.\nCreates natural "
-      "brightness differences between somas.";
-  intensityVariationMinSpinBox->setToolTip(intensityVarMinTooltip);
-  QLabel *intensityVarMinLabel = new QLabel("Intensity variation min: (?)");
-  intensityVarMinLabel->setToolTip(intensityVarMinTooltip);
-  intensityLayout->addRow(intensityVarMinLabel, intensityVariationMinSpinBox);
-  intensityVariationMaxSpinBox = new QDoubleSpinBox();
-  intensityVariationMaxSpinBox->setRange(0.1, 2.0);
-  intensityVariationMaxSpinBox->setSingleStep(0.1);
-  intensityVariationMaxSpinBox->setValue(1.2);
-  QString intensityVarMaxTooltip =
-      "Maximum multiplier for base intensity variation.\nWider range creates "
-      "more diverse soma brightness.";
-  intensityVariationMaxSpinBox->setToolTip(intensityVarMaxTooltip);
-  QLabel *intensityVarMaxLabel = new QLabel("Intensity variation max: (?)");
-  intensityVarMaxLabel->setToolTip(intensityVarMaxTooltip);
-  intensityLayout->addRow(intensityVarMaxLabel, intensityVariationMaxSpinBox);
-
-  tabWidget->addTab(intensityTab, "Intensity");
 
   // Background parameters tab
   QWidget *backgroundTab = new QWidget();
@@ -547,7 +511,6 @@ SimulationParametersDialog::SimulationParametersDialog(QWidget *parent)
   QLabel *blendRadiusLabel = new QLabel("Background blend radius: (?)");
   blendRadiusLabel->setToolTip(blendRadiusTooltip);
   backgroundLayout->addRow(blendRadiusLabel, blendRadiusSpinBox);
-
   tabWidget->addTab(backgroundTab, "Background");
 
   // Random seed tab
@@ -570,11 +533,9 @@ SimulationParametersDialog::SimulationParametersDialog(QWidget *parent)
       "Seed value for random number generation.\nSame seed produces identical "
       "simulation results.");
   seedLayout->addRow("Random seed:", randomSeedSpinBox);
-
-  // Connect checkbox to enable/disable seed input
-  connect(useRandomSeedCheckBox, &QCheckBox::toggled, randomSeedSpinBox,
-          &QSpinBox::setEnabled);
-
+  connect(
+      useRandomSeedCheckBox, &QCheckBox::toggled, randomSeedSpinBox,
+      &QSpinBox::setEnabled);  // Connect checkbox to enable/disable seed input
   tabWidget->addTab(seedTab, "Random");
 
   mainLayout->addWidget(tabWidget);
@@ -622,9 +583,6 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
   double deformationStrength = paramDialog.deformationStrengthSpinBox->value();
   double radialFactorMin = paramDialog.radialFactorMinSpinBox->value();
   double probabilityBias = paramDialog.probabilityBiasSpinBox->value();
-  double baseIntensity = paramDialog.baseIntensitySpinBox->value();
-  double intensityVarMin = paramDialog.intensityVariationMinSpinBox->value();
-  double intensityVarMax = paramDialog.intensityVariationMaxSpinBox->value();
   double backgroundFactor = paramDialog.backgroundFactorSpinBox->value();
   double blendRadius = paramDialog.blendRadiusSpinBox->value();
   bool useFixedSeed = paramDialog.useRandomSeedCheckBox->isChecked();
@@ -640,7 +598,6 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
   printf("Number of synthetic somas: %d\n", numSynthetic);
   printf("Radius scale factor: %.2f\n", radiusScale);
   printf("Deformation strength: %.2f\n", deformationStrength);
-  printf("Base intensity: %.1f\n", baseIntensity);
 
   // Get the current image name and path
   QString imageName = callback.getImageName(curwin);
@@ -1034,16 +991,49 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
     segMain.rotateSegmentation(tempIntensity, cubeSize, randomVec1, randomVec2,
                                randomVec3);
 
+    // Calculate intensity statistics from the extracted soma
+    double somaIntensitySum = 0.0;
+    double somaIntensityMin = 255.0;
+    double somaIntensityMax = 0.0;
+    int somaVoxelCount = 0;
+
+    for (int z = 0; z < cubeSize; z++) {
+      for (int y = 0; y < cubeSize; y++) {
+        for (int x = 0; x < cubeSize; x++) {
+          int idx = z * cubeSize * cubeSize + y * cubeSize + x;
+          if (tempSegmentation[idx] > 0 && tempIntensity[idx] > 0) {
+            somaIntensitySum += tempIntensity[idx];
+            somaIntensityMin = std::min(somaIntensityMin, tempIntensity[idx]);
+            somaIntensityMax = std::max(somaIntensityMax, tempIntensity[idx]);
+            somaVoxelCount++;
+          }
+        }
+      }
+    }
+
+    // Calculate base intensity and variation range from the extracted soma
+    double extractedBaseIntensity =
+        (somaVoxelCount > 0) ? (somaIntensitySum / somaVoxelCount) : 100.0;
+    double extractedIntensityRange =
+        (somaVoxelCount > 0) ? (somaIntensityMax - somaIntensityMin) : 50.0;
+
+    // Apply some variation to the base intensity (±10% of the range)
+    double intensityVariationAmount = extractedIntensityRange * 0.1;
+    std::uniform_real_distribution<double> intensityVariation(
+        -intensityVariationAmount, intensityVariationAmount);
+    double intensityOffset = intensityVariation(gen);
+
+    printf(
+        "Soma %d: Base intensity=%.1f, Range=%.1f (%.1f-%.1f), "
+        "Variation=%.1f\n",
+        i + 1, extractedBaseIntensity, extractedIntensityRange,
+        somaIntensityMin, somaIntensityMax, intensityOffset);
+
     // Place rotated synthetic soma at generated position and track volume
     int centerX = V3DLONG(newSoma.x);
     int centerY = V3DLONG(newSoma.y);
     int centerZ = V3DLONG(newSoma.z);
     double somaVolume = 0.0;
-
-    // Calculate synthetic intensity values with configurable parameters
-    std::uniform_real_distribution<double> intensityVariation(intensityVarMin,
-                                                              intensityVarMax);
-    double intensityMultiplier = intensityVariation(gen);
 
     // Copy rotated soma to both output images
     for (int z = 0; z < cubeSize; z++) {
@@ -1068,9 +1058,11 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
               // Generate intensity value
               double finalIntensity;
               if (tempIntensity[sourceIdx] > 0) {
-                finalIntensity = tempIntensity[sourceIdx] * intensityMultiplier;
+                // Use the actual extracted intensity with variation
+                finalIntensity = tempIntensity[sourceIdx] + intensityOffset;
               } else {
-                finalIntensity = baseIntensity * intensityMultiplier;
+                // Fallback to base intensity if no intensity data available
+                finalIntensity = extractedBaseIntensity + intensityOffset;
               }
 
               outIntensityData[targetIdx] = static_cast<unsigned char>(
@@ -1270,9 +1262,6 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
     fprintf(summaryFile, "Deformation Strength: %.2f\n", deformationStrength);
     fprintf(summaryFile, "Radial Factor Minimum: %.2f\n", radialFactorMin);
     fprintf(summaryFile, "Probability Bias: %.2f\n", probabilityBias);
-    fprintf(summaryFile, "Base Intensity: %.1f\n", baseIntensity);
-    fprintf(summaryFile, "Intensity Variation Range: %.2f - %.2f\n",
-            intensityVarMin, intensityVarMax);
     fprintf(summaryFile, "Background Factor: %.1f\n", backgroundFactor);
     fprintf(summaryFile, "Background Blend Radius: %.2f\n", blendRadius);
     fprintf(summaryFile, "Fixed Random Seed: %s\n",

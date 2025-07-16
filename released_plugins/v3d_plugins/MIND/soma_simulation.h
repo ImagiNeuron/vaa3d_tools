@@ -133,11 +133,6 @@ class SimulationParametersDialog : public QDialog {
   QDoubleSpinBox *radialFactorMinSpinBox;
   QDoubleSpinBox *probabilityBiasSpinBox;
 
-  // Intensity parameters
-  QDoubleSpinBox *baseIntensitySpinBox;
-  QDoubleSpinBox *intensityVariationMinSpinBox;
-  QDoubleSpinBox *intensityVariationMaxSpinBox;
-
   // Background parameters
   QDoubleSpinBox *backgroundFactorSpinBox;
   QDoubleSpinBox *blendRadiusSpinBox;
