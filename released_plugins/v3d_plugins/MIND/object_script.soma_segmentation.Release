@@ -33,3 +33,4 @@ release/newmat9.o
 release/moc_soma_segmentation_plugin.o
 release/moc_ResolutionDialog.o
 release/moc_cellSegmentation_plugin.o
+release/moc_soma_simulation.o

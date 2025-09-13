@@ -7,18 +7,32 @@
 
 #include <v3d_interface.h>
 
+#include <QCheckBox>
+#include <QDateTime>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QDir>
+#include <QDoubleSpinBox>
 #include <QFileDialog>
+#include <QFileInfo>
+#include <QFormLayout>
 #include <QInputDialog>
 #include <QLabel>
 #include <QMessageBox>
 #include <QRegularExpression>
-#include <QtCore>
+#include <QSpinBox>
+#include <QTabWidget>
 #include <QtGui>
+#include <algorithm>
+#include <cmath>
 #include <eigen/Dense>
 #include <fstream>
+#include <memory>
+#include <random>
+#include <vector>
 
 #include "basic_4dimage.h"
+#include "cellSegmentation_plugin.h"
 #include "compute_win_pca_wp.h"
 #include "soma_segmentation_plugin.h"
 
@@ -30,11 +44,14 @@
  * @param dim_X Output parameter for X dimension
  * @param dim_Y Output parameter for Y dimension
  * @param dim_Z Output parameter for Z dimension
+ * @param backgroundFactor Factor for chunk size calculation (default 4.0)
+ * @param blendRadius Radius for blending between chunks (default 1.0)
  * @return 1D array of background image
  */
 unsigned char *create_background(V3DPluginCallback2 &callback, QWidget *parent,
-                                 V3DLONG &dim_X, V3DLONG &dim_Y,
-                                 V3DLONG &dim_Z);
+                                 V3DLONG &dim_X, V3DLONG &dim_Y, V3DLONG &dim_Z,
+                                 double backgroundFactor = 4.0,
+                                 double blendRadius = 1.0);
 
 /**
  * @brief Create a background image based on segmentation threshold
@@ -84,5 +101,47 @@ void overlaySimulation(V3DPluginCallback2 &callback, QWidget *parent,
                        unsigned char *binarySegImage,
                        unsigned char *gradientImage,
                        unsigned char *simulatedImage);
+
+// Extract and deform an existing soma shape
+void extractAndDeformSomaShape(
+    unsigned char *segData, unsigned char *originalData, V3DLONG xDim,
+    V3DLONG yDim, V3DLONG zDim, V3DLONG sourceCenterX, V3DLONG sourceCenterY,
+    V3DLONG sourceCenterZ, V3DLONG cubeSize, const double somaEigenvector1[3],
+    const double somaEigenvector2[3], const double somaEigenvector3[3],
+    const std::vector<double> &probabilisticModel,
+    V3DLONG probabilisticModelDim_X, V3DLONG probabilisticModelDim_Y,
+    V3DLONG probabilisticModelDim_Z, double radius, std::mt19937 &gen,
+    double *tempSegmentation, double *tempIntensity, double deformationStrength,
+    double radialFactorMin, double probabilityBias);
+
+/**
+ * @brief Dialog for configuring soma simulation parameters
+ */
+class SimulationParametersDialog : public QDialog {
+  Q_OBJECT
+
+ public:
+  // Shape and positioning parameters
+  QSpinBox *numSomasSpinBox;
+  QDoubleSpinBox *radiusScaleSpinBox;
+  QDoubleSpinBox *positionNoiseSpinBox;
+  QDoubleSpinBox *boundaryMarginSpinBox;
+  QSpinBox *maxPlacementAttemptsSpinBox;
+
+  // Deformation parameters
+  QDoubleSpinBox *deformationStrengthSpinBox;
+  QDoubleSpinBox *radialFactorMinSpinBox;
+  QDoubleSpinBox *probabilityBiasSpinBox;
+
+  // Background parameters
+  QDoubleSpinBox *backgroundFactorSpinBox;
+  QDoubleSpinBox *blendRadiusSpinBox;
+
+  // Random seed
+  QSpinBox *randomSeedSpinBox;
+  QCheckBox *useRandomSeedCheckBox;
+
+  SimulationParametersDialog(QWidget *parent = nullptr);
+};
 
 #endif  // __MIND_SOMA_SIMULATION_H__
