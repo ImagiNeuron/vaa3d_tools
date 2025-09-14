@@ -991,6 +991,9 @@ void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent) {
     segMain.rotateSegmentation(tempIntensity, cubeSize, randomVec1, randomVec2,
                                randomVec3);
 
+    // Apply morphological closing to the synthetic segmentation
+    segMain.morphologicalClosing3D(tempSegmentation, cubeSize);
+
     // Calculate intensity statistics from the extracted soma
     double somaIntensitySum = 0.0;
     double somaIntensityMin = 255.0;
@@ -1385,6 +1388,17 @@ void extractAndDeformSomaShape(
     std::normal_distribution<double> normalDist(0.0, deformationStrength);
     std::uniform_real_distribution<double> uniformDist(0.0, 1.0);
 
+    // Apply soma eigenvector-based deformation
+    double deformX = normalDist(gen) * somaEigenvector1[0] +
+                     normalDist(gen) * somaEigenvector2[0] +
+                     normalDist(gen) * somaEigenvector3[0];
+    double deformY = normalDist(gen) * somaEigenvector1[1] +
+                     normalDist(gen) * somaEigenvector2[1] +
+                     normalDist(gen) * somaEigenvector3[1];
+    double deformZ = normalDist(gen) * somaEigenvector1[2] +
+                     normalDist(gen) * somaEigenvector2[2] +
+                     normalDist(gen) * somaEigenvector3[2];
+
     for (int z = 0; z < cubeSize; z++) {
       for (int y = 0; y < cubeSize; y++) {
         for (int x = 0; x < cubeSize; x++) {
@@ -1407,24 +1421,13 @@ void extractAndDeformSomaShape(
               double distance =
                   sqrt(origX * origX + origY * origY + origZ * origZ);
 
-              // Apply soma eigenvector-based deformation
-              double deformX = normalDist(gen) * somaEigenvector1[0] +
-                               normalDist(gen) * somaEigenvector2[0] +
-                               normalDist(gen) * somaEigenvector3[0];
-              double deformY = normalDist(gen) * somaEigenvector1[1] +
-                               normalDist(gen) * somaEigenvector2[1] +
-                               normalDist(gen) * somaEigenvector3[1];
-              double deformZ = normalDist(gen) * somaEigenvector1[2] +
-                               normalDist(gen) * somaEigenvector2[2] +
-                               normalDist(gen) * somaEigenvector3[2];
-
               // Scale deformation based on distance from center (less
               // deformation at edges)
               double radialFactor =
                   std::max(radialFactorMin, 1.0 - distance / radius);
-              deformX *= radialFactor;
-              deformY *= radialFactor;
-              deformZ *= radialFactor;
+              double scaledDeformX = deformX * radialFactor;
+              double scaledDeformY = deformY * radialFactor;
+              double scaledDeformZ = deformZ * radialFactor;
 
               // Sample from probabilistic model to determine if this voxel
               // should be kept, convert position to model coordinates
@@ -1450,12 +1453,15 @@ void extractAndDeformSomaShape(
               // Keep voxel if probability is high enough
               if (uniformDist(gen) < probability) {
                 // Apply deformation to final position
-                int finalX = static_cast<int>(std::round(origX + deformX)) +
-                             cubeSize / 2;
-                int finalY = static_cast<int>(std::round(origY + deformY)) +
-                             cubeSize / 2;
-                int finalZ = static_cast<int>(std::round(origZ + deformZ)) +
-                             cubeSize / 2;
+                int finalX =
+                    static_cast<int>(std::round(origX + scaledDeformX)) +
+                    cubeSize / 2;
+                int finalY =
+                    static_cast<int>(std::round(origY + scaledDeformY)) +
+                    cubeSize / 2;
+                int finalZ =
+                    static_cast<int>(std::round(origZ + scaledDeformZ)) +
+                    cubeSize / 2;
 
                 // Check bounds and place in arrays
                 if (finalX >= 0 && finalX < cubeSize && finalY >= 0 &&

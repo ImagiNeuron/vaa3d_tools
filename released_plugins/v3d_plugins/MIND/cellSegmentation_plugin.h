@@ -1092,6 +1092,64 @@ class cellSegmentation : public QObject {
     }
 
     /**
+     * @brief Helper function to do 3D morphological closing on binary
+     * segmentation
+     */
+    void morphologicalClosing3D(double *segmentation, V3DLONG cubeSize,
+                                int kernelSize = 3) {
+      // Z axis (XY slices)
+      for (int z = 0; z < cubeSize; ++z) {
+        cv::Mat slice(cubeSize, cubeSize, CV_8UC1);
+        for (int y = 0; y < cubeSize; ++y)
+          for (int x = 0; x < cubeSize; ++x)
+            slice.at<uchar>(y, x) =
+                segmentation[z * cubeSize * cubeSize + y * cubeSize + x];
+        cv::Mat closed;
+        cv::morphologyEx(slice, closed, cv::MORPH_CLOSE,
+                         cv::getStructuringElement(
+                             cv::MORPH_RECT, cv::Size(kernelSize, kernelSize)));
+        for (int y = 0; y < cubeSize; ++y)
+          for (int x = 0; x < cubeSize; ++x)
+            segmentation[z * cubeSize * cubeSize + y * cubeSize + x] =
+                closed.at<uchar>(y, x);
+      }
+
+      // Y axis (XZ slices)
+      for (int y = 0; y < cubeSize; ++y) {
+        cv::Mat slice(cubeSize, cubeSize, CV_8UC1);
+        for (int z = 0; z < cubeSize; ++z)
+          for (int x = 0; x < cubeSize; ++x)
+            slice.at<uchar>(z, x) =
+                segmentation[z * cubeSize * cubeSize + y * cubeSize + x];
+        cv::Mat closed;
+        cv::morphologyEx(slice, closed, cv::MORPH_CLOSE,
+                         cv::getStructuringElement(
+                             cv::MORPH_RECT, cv::Size(kernelSize, kernelSize)));
+        for (int z = 0; z < cubeSize; ++z)
+          for (int x = 0; x < cubeSize; ++x)
+            segmentation[z * cubeSize * cubeSize + y * cubeSize + x] =
+                closed.at<uchar>(z, x);
+      }
+
+      // X axis (YZ slices)
+      for (int x = 0; x < cubeSize; ++x) {
+        cv::Mat slice(cubeSize, cubeSize, CV_8UC1);
+        for (int z = 0; z < cubeSize; ++z)
+          for (int y = 0; y < cubeSize; ++y)
+            slice.at<uchar>(z, y) =
+                segmentation[z * cubeSize * cubeSize + y * cubeSize + x];
+        cv::Mat closed;
+        cv::morphologyEx(slice, closed, cv::MORPH_CLOSE,
+                         cv::getStructuringElement(
+                             cv::MORPH_RECT, cv::Size(kernelSize, kernelSize)));
+        for (int z = 0; z < cubeSize; ++z)
+          for (int y = 0; y < cubeSize; ++y)
+            segmentation[z * cubeSize * cubeSize + y * cubeSize + x] =
+                closed.at<uchar>(z, y);
+      }
+    }
+
+    /**
      * @brief Helper function to save the probabilistic model to a binary file.
      */
     static bool saveProbabilityModel(const std::string &filename,
