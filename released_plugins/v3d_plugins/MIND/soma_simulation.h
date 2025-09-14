@@ -30,6 +30,8 @@
 #include <memory>
 #include <random>
 #include <vector>
+#include <opencv2/imgproc.hpp>
+#include <opencv2/core.hpp>
 
 #include "basic_4dimage.h"
 #include "cellSegmentation_plugin.h"
