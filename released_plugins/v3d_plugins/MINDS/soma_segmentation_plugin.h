@@ -34,14 +34,14 @@ struct MyMarker {
 };
 
 // A basic 4D image container
-struct MIND_4DImage {
-  unsigned char *data;
+struct MINDS_4DImage {
+  unsigned char* data;
   V3DLONG xdim, ydim, zdim, cdim;
 
-  MIND_4DImage();
-  MIND_4DImage(const MIND_4DImage &other);
-  MIND_4DImage &operator=(const MIND_4DImage &other);
-  ~MIND_4DImage();
+  MINDS_4DImage();
+  MINDS_4DImage(const MINDS_4DImage& other);
+  MINDS_4DImage& operator=(const MINDS_4DImage& other);
+  ~MINDS_4DImage();
 };
 
 // Plugin class
@@ -54,28 +54,29 @@ class SomaSegmentation : public QObject, public V3DPluginInterface2_1 {
   float getPluginVersion() const { return 1.2f; }
 
   QStringList menulist() const;
-  void domenu(const QString &menu_name, V3DPluginCallback2 &callback,
-              QWidget *parent);
+  void domenu(const QString& menu_name, V3DPluginCallback2& callback,
+              QWidget* parent);
 
   QStringList funclist() const;
-  bool dofunc(const QString &func_name, const V3DPluginArgList &input,
-              V3DPluginArgList &output, V3DPluginCallback2 &callback,
-              QWidget *parent);
+  bool dofunc(const QString& func_name, const V3DPluginArgList& input,
+              V3DPluginArgList& output, V3DPluginCallback2& callback,
+              QWidget* parent);
 };
 
 // Main reconstruction function (invoked from menu or command-line)
 
-MIND_4DImage *reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
-                                  input_PARA &PARA, bool bmenu);
+MINDS_4DImage* reconstruction_func(V3DPluginCallback2& callback,
+                                   QWidget* parent, input_PARA& PARA,
+                                   bool bmenu);
 
 // Isotropic correction function
 
-void isotropic_correction_func(V3DPluginCallback2 &callback, QWidget *parent,
-                               input_PARA &PARA, bool bmenu);
+void isotropic_correction_func(V3DPluginCallback2& callback, QWidget* parent,
+                               input_PARA& PARA, bool bmenu);
 
 // PCA function
 
-void pca_func(V3DPluginCallback2 &callback, QWidget *parent, input_PARA &PARA,
+void pca_func(V3DPluginCallback2& callback, QWidget* parent, input_PARA& PARA,
               bool bmenu);
 
 #endif  // __SOMA_SEGMENTATION_PLUGIN_H__

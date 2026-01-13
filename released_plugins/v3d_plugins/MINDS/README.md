@@ -1,8 +1,8 @@
-# Machine Intelligence for Neuron Detection
+# Machine Intelligence for Neuron Detection and Segmentation
 
 ## Introduction
 
-Machine Intelligence for Neuron Detection (MIND) is a platform built with the aim of facilitating deep learning pipelines to automatically segment neuron somas in large scale images of the brain. Its capabilities and how to use the functions are clearly documented on its [wiki page](https://github.com/ImagiNeuron/vaa3d_tools/wiki). They include the following functions:
+Machine Intelligence for Neuron Detection and Segmentation (MINDS) is a platform built with the aim of facilitating deep learning pipelines to automatically segment neuron somas in large scale images of the brain. Its capabilities and how to use the functions are clearly documented on its [wiki page](https://github.com/ImagiNeuron/vaa3d_tools/wiki). They include the following functions:
 
 1. `Isotropic Correction` - Adjust the 3D view of images for the true dimensions of a voxel based on the microscopy technique.
 2. `Soma Segmentation` - Automatically segments neuron somas that have been bounded within spheres around their center of mass with Vaa3D markers. Outputs a visualization of the segmentation, as well as the binary segmentation file, and a probabilistic model of Neuron Soma shape obtained through Principal Component Analysis (PCA) on the binary segmentation of somas. The PCA results are also output in a CSV file.
@@ -28,7 +28,7 @@ The initial code for this plugin was generated with the `_Vaa3D_plugin_creator` 
 
 ### Build Files
 
-- All build files in this repository, including the .pro files and the Makefile, were created by the `_Vaa3D_plugin_creator` plugin. We made minor modifications to them to adjust them for the tools we are using, but nothing significant. To build our plugin, simply run the `compile_mind.bat` script under the `\vaa3d_tools\released_plugins` folder.
+- All build files in this repository, including the .pro files and the Makefile, were created by the `_Vaa3D_plugin_creator` plugin. We made minor modifications to them to adjust them for the tools we are using, but nothing significant. To build the MINDS plugin, use the compile script under `\vaa3d_tools\released_plugins` (rename your old `compile_mind.bat` to `compile_minds.bat` to keep the naming consistent).
 
 ## Contributions
 

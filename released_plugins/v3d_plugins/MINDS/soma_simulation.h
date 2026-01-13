@@ -2,8 +2,8 @@
  * 2025-04-18: by ImagiNeuron: Shidan Javaheri, Siger Ma, Athmane Benarous and
  * Thibaut Baguette (McGill University)
  */
-#ifndef __MIND_SOMA_SIMULATION_H__
-#define __MIND_SOMA_SIMULATION_H__
+#ifndef __MINDS_SOMA_SIMULATION_H__
+#define __MINDS_SOMA_SIMULATION_H__
 
 #include <v3d_interface.h>
 
@@ -32,9 +32,9 @@
  * @param dim_Z Output parameter for Z dimension
  * @return 1D array of background image
  */
-unsigned char *create_background(V3DPluginCallback2 &callback, QWidget *parent,
-                                 V3DLONG &dim_X, V3DLONG &dim_Y,
-                                 V3DLONG &dim_Z);
+unsigned char* create_background(V3DPluginCallback2& callback, QWidget* parent,
+                                 V3DLONG& dim_X, V3DLONG& dim_Y,
+                                 V3DLONG& dim_Z);
 
 /**
  * @brief Create a background image based on segmentation threshold
@@ -42,7 +42,7 @@ unsigned char *create_background(V3DPluginCallback2 &callback, QWidget *parent,
  * @param parent Parent widget
  * @deprecated Use the version that returns unsigned char*** instead
  */
-void create_background(V3DPluginCallback2 &callback, QWidget *parent);
+void create_background(V3DPluginCallback2& callback, QWidget* parent);
 
 /**
  * @brief Calculate Otsu threshold for a histogram
@@ -70,19 +70,19 @@ int calculateOtsuThreshold(const int hist[256], int totalPixels);
  */
 void getBlendedDistributionParams(
     V3DLONG x, V3DLONG y, V3DLONG z,
-    const std::vector<std::vector<std::vector<std::pair<double, double>>>>
-        &chunkStats,
+    const std::vector<std::vector<std::vector<std::pair<double, double>>>>&
+        chunkStats,
     V3DLONG chunk_X, V3DLONG chunk_Y, V3DLONG chunk_Z, V3DLONG num_chunks_X,
     V3DLONG num_chunks_Y, V3DLONG num_chunks_Z, double blendRadius,
-    double &blendedMean, double &blendedStdDev);
+    double& blendedMean, double& blendedStdDev);
 
 // Simulation of synthetic soma data
-void simulate_soma_data(V3DPluginCallback2 &callback, QWidget *parent);
+void simulate_soma_data(V3DPluginCallback2& callback, QWidget* parent);
 
 // display simulation results
-void overlaySimulation(V3DPluginCallback2 &callback, QWidget *parent,
-                       unsigned char *binarySegImage,
-                       unsigned char *gradientImage,
-                       unsigned char *simulatedImage);
+void overlaySimulation(V3DPluginCallback2& callback, QWidget* parent,
+                       unsigned char* binarySegImage,
+                       unsigned char* gradientImage,
+                       unsigned char* simulatedImage);
 
-#endif  // __MIND_SOMA_SIMULATION_H__
+#endif  // __MINDS_SOMA_SIMULATION_H__

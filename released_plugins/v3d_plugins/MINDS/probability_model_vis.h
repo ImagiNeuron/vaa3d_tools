@@ -2,8 +2,8 @@
  * 2025-04-18: by ImagiNeuron: Shidan Javaheri, Siger Ma, Athmane Benarous and
  * Thibaut Baguette (McGill University)
  */
-#ifndef __MIND_PROBABILITY_MODEL_VIS_H__
-#define __MIND_PROBABILITY_MODEL_VIS_H__
+#ifndef __MINDS_PROBABILITY_MODEL_VIS_H__
+#define __MINDS_PROBABILITY_MODEL_VIS_H__
 
 #include <v3d_interface.h>
 
@@ -29,11 +29,11 @@
 std::tuple<unsigned char, unsigned char, unsigned char> colormap(double value);
 
 // visualize probabilistic model of somas
-void visualizeProbabilityModel_func(V3DPluginCallback2 &callback,
-                                    QWidget *parent);
+void visualizeProbabilityModel_func(V3DPluginCallback2& callback,
+                                    QWidget* parent);
 
 // visualiz the legend of the probabilistic model
-void probabilityModelLegend_func(V3DPluginCallback2 &callback, QWidget *parent);
+void probabilityModelLegend_func(V3DPluginCallback2& callback, QWidget* parent);
 
 // colormap data
 const int INFERNO_COLORMAP_SIZE = 256;
@@ -168,4 +168,4 @@ const std::tuple<double, double, double>
         {0.971162, 0.985282, 0.602154}, {0.976511, 0.989753, 0.616760},
         {0.982257, 0.994109, 0.631017}, {0.988362, 0.998364, 0.644924}};
 
-#endif  // __MIND_PROBABILITY_MODEL_VIS_H__
+#endif  // __MINDS_PROBABILITY_MODEL_VIS_H__

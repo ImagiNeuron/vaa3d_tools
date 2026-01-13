@@ -1,4 +1,4 @@
-:: build the MIND plugin in the v3d_plugins directory
+:: build the MINDS plugin in the v3d_plugins directory
 :: (window version) by Athmane Benarous
 :: 2024-11-16
 :: Best add release argument to make release\v3d.exe can recognize plugin
@@ -7,8 +7,8 @@
 set PATH=%PATH%;
 cd v3d_plugins
 
-:: Automatically set the directory name to MIND
-set DIR_NAME=MIND
+:: Automatically set the directory name to MINDS
+set DIR_NAME=MINDS
 
 :: Check if the directory exists
 if not exist %DIR_NAME% (

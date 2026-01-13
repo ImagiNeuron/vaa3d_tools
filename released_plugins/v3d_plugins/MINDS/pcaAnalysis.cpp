@@ -21,11 +21,11 @@
  * @param z_center The z-coordinate of the center of mass
  * @param parent The parent widget for the file dialog
  */
-void savePCAResultsToCSV(const QString &filename, int somaIndex,
-                         const LocationSimple &lm, const double *vec1,
-                         const double *vec2, const double *vec3, double pc1,
+void savePCAResultsToCSV(const QString& filename, int somaIndex,
+                         const LocationSimple& lm, const double* vec1,
+                         const double* vec2, const double* vec3, double pc1,
                          double pc2, double pc3, double x_center,
-                         double y_center, double z_center, QWidget *parent) {
+                         double y_center, double z_center, QWidget* parent) {
   static QString actualFilename = filename;
 
   // Ask user if they want to save only for the first soma
@@ -95,13 +95,13 @@ void savePCAResultsToCSV(const QString &filename, int somaIndex,
  * @param y_center The pointer to the y-coordinate of the center of mass
  * @param z_center The pointer to the z-coordinate of the center of mass
  */
-void analyzeSomaPCAReturnResults(unsigned char *labeledData, V3DLONG N,
-                                 V3DLONG M, V3DLONG P, const LocationSimple &lm,
+void analyzeSomaPCAReturnResults(unsigned char* labeledData, V3DLONG N,
+                                 V3DLONG M, V3DLONG P, const LocationSimple& lm,
                                  int somaIndex, QString savePath,
                                  double vec1[3], double vec2[3], double vec3[3],
-                                 double &pc1, double &pc2, double &pc3,
-                                 double &x_center, double &y_center,
-                                 double &z_center) {
+                                 double& pc1, double& pc2, double& pc3,
+                                 double& x_center, double& y_center,
+                                 double& z_center) {
   // Extract soma info
   float x = lm.x;
   float y = lm.y;
@@ -109,9 +109,9 @@ void analyzeSomaPCAReturnResults(unsigned char *labeledData, V3DLONG N,
   float r = lm.radius > 0 ? lm.radius : 5.0f;
 
   // Create 3D array wrapper for the data
-  unsigned char ***img3d = new unsigned char **[P];
+  unsigned char*** img3d = new unsigned char**[P];
   for (V3DLONG k = 0; k < P; k++) {
-    img3d[k] = new unsigned char *[M];
+    img3d[k] = new unsigned char*[M];
     for (V3DLONG j = 0; j < M; j++) {
       img3d[k][j] = labeledData + (k * M * N + j * N);
     }
@@ -123,7 +123,7 @@ void analyzeSomaPCAReturnResults(unsigned char *labeledData, V3DLONG N,
           2 * r, 2 * r, 2 * r,      // Window size based on radius
           pc1, pc2, pc3, vec1, vec2, vec3, x_center, y_center, z_center)) {
     // Save to CSV with save flag
-    QWidget *mainWin = QApplication::activeWindow();
+    QWidget* mainWin = QApplication::activeWindow();
     savePCAResultsToCSV(savePath, somaIndex, lm, vec1, vec2, vec3, pc1, pc2,
                         pc3, x_center, y_center, z_center, mainWin);
   } else {
@@ -143,13 +143,13 @@ void analyzeSomaPCAReturnResults(unsigned char *labeledData, V3DLONG N,
  * @param fileName The original file name
  * @return The modified file path
  */
-QString modifyFilePathForTeraFly(const QString &fileName) {
+QString modifyFilePathForTeraFly(const QString& fileName) {
   QString modifiedFilePath = fileName;
 
   // we are using terafly if the fileName starts with ID
   if (modifiedFilePath.startsWith("ID")) {
-    // check if the MIND folder already exists, if not, create it
-    QDir dir("MIND");
+    // check if the MINDS folder already exists, if not, create it
+    QDir dir("MINDS");
     if (!dir.exists()) {
       dir.mkpath(".");
     }
@@ -159,12 +159,12 @@ QString modifyFilePathForTeraFly(const QString &fileName) {
     modifiedFilePath.replace("1 channels_processed", "");
 
     // check if folder for this image exists
-    QDir dir2("MIND/" + modifiedFilePath);
+    QDir dir2("MINDS/" + modifiedFilePath);
     if (!dir2.exists()) {
       dir2.mkpath(".");
     }
 
-    modifiedFilePath = QDir::currentPath() + "/MIND/" + modifiedFilePath + "/";
+    modifiedFilePath = QDir::currentPath() + "/MINDS/" + modifiedFilePath + "/";
   } else {
     // if not using terafly, just remove the file extension
     modifiedFilePath = modifiedFilePath.split(".")[0];
@@ -183,9 +183,9 @@ QString modifyFilePathForTeraFly(const QString &fileName) {
  * @param callback The V3D plugin callback interface
  * @param parent The parent interface
  */
-void loadSegmentationFile(const QString &imageName, unsigned char *&segData,
-                          V3DLONG sz[4], int &datatype,
-                          V3DPluginCallback2 &callback, QWidget *parent) {
+void loadSegmentationFile(const QString& imageName, unsigned char*& segData,
+                          V3DLONG sz[4], int& datatype,
+                          V3DPluginCallback2& callback, QWidget* parent) {
   // Construct segmentation filename (try different options)
   QString segFileName =
       modifyFilePathForTeraFly(imageName) + "_binary_segmentation.tif";
@@ -226,8 +226,8 @@ void loadSegmentationFile(const QString &imageName, unsigned char *&segData,
  * @param somaIndex The index of the soma being analyzed
  * @param savePath The path to save the results
  */
-void analyzeSomaPCA(unsigned char *labeledData, V3DLONG N, V3DLONG M, V3DLONG P,
-                    const LocationSimple &lm, int somaIndex, QString savePath) {
+void analyzeSomaPCA(unsigned char* labeledData, V3DLONG N, V3DLONG M, V3DLONG P,
+                    const LocationSimple& lm, int somaIndex, QString savePath) {
   // Extract soma info
   float x = lm.x;
   float y = lm.y;
@@ -235,9 +235,9 @@ void analyzeSomaPCA(unsigned char *labeledData, V3DLONG N, V3DLONG M, V3DLONG P,
   float r = lm.radius > 0 ? lm.radius : 5.0f;
 
   // Create 3D array wrapper for the data
-  unsigned char ***img3d = new unsigned char **[P];
+  unsigned char*** img3d = new unsigned char**[P];
   for (V3DLONG k = 0; k < P; k++) {
-    img3d[k] = new unsigned char *[M];
+    img3d[k] = new unsigned char*[M];
     for (V3DLONG j = 0; j < M; j++) {
       img3d[k][j] = labeledData + (k * M * N + j * N);
     }
@@ -254,7 +254,7 @@ void analyzeSomaPCA(unsigned char *labeledData, V3DLONG N, V3DLONG M, V3DLONG P,
           2 * r, 2 * r, 2 * r,      // Window size based on radius
           pc1, pc2, pc3, vec1, vec2, vec3, x_center, y_center, z_center)) {
     // Save to CSV with save flag
-    QWidget *mainWin = QApplication::activeWindow();
+    QWidget* mainWin = QApplication::activeWindow();
     savePCAResultsToCSV(savePath, somaIndex, lm, vec1, vec2, vec3, pc1, pc2,
                         pc3, x_center, y_center, z_center, mainWin);
   } else {
@@ -274,18 +274,18 @@ void analyzeSomaPCA(unsigned char *labeledData, V3DLONG N, V3DLONG M, V3DLONG P,
  * @param callback The V3D plugin callback interface
  * @param parent The parent interface
  */
-void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent) {
+void visualizePCA_func(V3DPluginCallback2& callback, QWidget* parent) {
   v3dhandle curwin = callback.currentImageWindow();
   if (!curwin) {
     v3d_msg("No image opened.", parent);
     return;
   }
-  Image4DSimple *p4DImage = callback.getImage(curwin);
+  Image4DSimple* p4DImage = callback.getImage(curwin);
   if (!p4DImage) {
     v3d_msg("No image opened.", parent);
     return;
   }
-  Image4DSimple *pcaVisualization = new Image4DSimple();
+  Image4DSimple* pcaVisualization = new Image4DSimple();
   pcaVisualization->createBlankImage(p4DImage->getXDim(), p4DImage->getYDim(),
                                      p4DImage->getZDim(), 3, V3D_UINT8);
   pcaVisualization->setOriginX(p4DImage->getOriginX());
@@ -414,8 +414,8 @@ void visualizePCA_func(V3DPluginCallback2 &callback, QWidget *parent) {
  * @param from - starting point of the line
  * @param to - ending point of the line
  */
-void drawLine(Image4DSimple *image, unsigned char r, unsigned char g,
-              unsigned char b, double *from, double *to) {
+void drawLine(Image4DSimple* image, unsigned char r, unsigned char g,
+              unsigned char b, double* from, double* to) {
   // convert points from world space to image space
   int x1 = (int)((from[0] - image->getOriginX()) / image->getRezX());
   int y1 = (int)((from[1] - image->getOriginY()) / image->getRezY());
@@ -424,7 +424,7 @@ void drawLine(Image4DSimple *image, unsigned char r, unsigned char g,
   int y2 = (int)((to[1] - image->getOriginY()) / image->getRezY());
   int z2 = (int)((to[2] - image->getOriginZ()) / image->getRezZ());
 
-  unsigned char *imgData = image->getRawData();
+  unsigned char* imgData = image->getRawData();
 
   auto fillPixel = [&](int x, int y, int z) {
     if (x >= 0 && x < image->getXDim() && y >= 0 && y < image->getYDim() &&

@@ -1,5 +1,5 @@
 /**
- * This is the main file of the MIND plugin that supports the analysis and
+ * This is the main file of the MINDS plugin that supports the analysis and
  * segmentation of neuron somas in the brain. It contains the logic that
  * controls which functions are called when the user selects a plugin option.
  *
@@ -46,9 +46,10 @@ using namespace std;
  * @param PARA - the input parameters
  * @param bmenu - whether the function is being called from the menu
  */
-MIND_4DImage *reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
-                                  input_PARA &PARA, bool bmenu) {
-  unsigned char *data1d = 0;
+MINDS_4DImage* reconstruction_func(V3DPluginCallback2& callback,
+                                   QWidget* parent, input_PARA& PARA,
+                                   bool bmenu) {
+  unsigned char* data1d = 0;
   V3DLONG N, M, P, sc, c;
   V3DLONG in_sz[4];
   if (bmenu) {
@@ -58,7 +59,7 @@ MIND_4DImage *reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
           0, "", "You don't have any image open in the main window.");
       return nullptr;
     }
-    Image4DSimple *p4DImage = callback.getImage(curwin);
+    Image4DSimple* p4DImage = callback.getImage(curwin);
     if (!p4DImage) {
       QMessageBox::information(0, "",
                                "The image pointer is invalid. Ensure your data "
@@ -108,7 +109,7 @@ MIND_4DImage *reconstruction_func(V3DPluginCallback2 &callback, QWidget *parent,
     v3d_msg("No image window is currently open.", bmenu);
     return nullptr;
   }
-  Image4DSimple *p4DImage = callback.getImage(curwin);
+  Image4DSimple* p4DImage = callback.getImage(curwin);
   if (!p4DImage) {
     v3d_msg("Invalid image pointer.", bmenu);
     return nullptr;
@@ -147,8 +148,8 @@ QStringList SomaSegmentation::funclist() const {
  * @param callback - the V3D plugin callback interface
  * @param parent - the parent interface
  */
-void SomaSegmentation::domenu(const QString &menu_name,
-                              V3DPluginCallback2 &callback, QWidget *parent) {
+void SomaSegmentation::domenu(const QString& menu_name,
+                              V3DPluginCallback2& callback, QWidget* parent) {
   if (menu_name == tr("Soma Segmentation")) {
     bool bmenu = true;
     input_PARA PARA;
@@ -197,20 +198,20 @@ void SomaSegmentation::domenu(const QString &menu_name,
  * @param parent - the parent interface
  * @return true if the function was successful, false otherwise
  */
-bool SomaSegmentation::dofunc(const QString &func_name,
-                              const V3DPluginArgList &input,
-                              V3DPluginArgList &output,
-                              V3DPluginCallback2 &callback, QWidget *parent) {
+bool SomaSegmentation::dofunc(const QString& func_name,
+                              const V3DPluginArgList& input,
+                              V3DPluginArgList& output,
+                              V3DPluginCallback2& callback, QWidget* parent) {
   if (func_name == tr("segment_somas")) {
     bool bmenu = false;
     input_PARA PARA;
 
-    vector<char *> *pinfiles =
-        (input.size() >= 1) ? (vector<char *> *)input[0].p : 0;
-    vector<char *> *pparas =
-        (input.size() >= 2) ? (vector<char *> *)input[1].p : 0;
-    vector<char *> infiles = (pinfiles != 0) ? *pinfiles : vector<char *>();
-    vector<char *> paras = (pparas != 0) ? *pparas : vector<char *>();
+    vector<char*>* pinfiles =
+        (input.size() >= 1) ? (vector<char*>*)input[0].p : 0;
+    vector<char*>* pparas =
+        (input.size() >= 2) ? (vector<char*>*)input[1].p : 0;
+    vector<char*> infiles = (pinfiles != 0) ? *pinfiles : vector<char*>();
+    vector<char*> paras = (pparas != 0) ? *pparas : vector<char*>();
 
     if (infiles.empty()) {
       fprintf(stderr, "Need input image.\n");
@@ -228,12 +229,12 @@ bool SomaSegmentation::dofunc(const QString &func_name,
     bool bmenu = false;
     input_PARA PARA;
 
-    vector<char *> *pinfiles =
-        (input.size() >= 1) ? (vector<char *> *)input[0].p : 0;
-    vector<char *> *pparas =
-        (input.size() >= 2) ? (vector<char *> *)input[1].p : 0;
-    vector<char *> infiles = (pinfiles != 0) ? *pinfiles : vector<char *>();
-    vector<char *> paras = (pparas != 0) ? *pparas : vector<char *>();
+    vector<char*>* pinfiles =
+        (input.size() >= 1) ? (vector<char*>*)input[0].p : 0;
+    vector<char*>* pparas =
+        (input.size() >= 2) ? (vector<char*>*)input[1].p : 0;
+    vector<char*> infiles = (pinfiles != 0) ? *pinfiles : vector<char*>();
+    vector<char*> paras = (pparas != 0) ? *pparas : vector<char*>();
 
     if (infiles.empty()) {
       fprintf(stderr, "Need input image.\n");
@@ -251,12 +252,12 @@ bool SomaSegmentation::dofunc(const QString &func_name,
     bool bmenu = false;
     input_PARA PARA;
 
-    vector<char *> *pinfiles =
-        (input.size() >= 1) ? (vector<char *> *)input[0].p : 0;
-    vector<char *> *pparas =
-        (input.size() >= 2) ? (vector<char *> *)input[1].p : 0;
-    vector<char *> infiles = (pinfiles != 0) ? *pinfiles : vector<char *>();
-    vector<char *> paras = (pparas != 0) ? *pparas : vector<char *>();
+    vector<char*>* pinfiles =
+        (input.size() >= 1) ? (vector<char*>*)input[0].p : 0;
+    vector<char*>* pparas =
+        (input.size() >= 2) ? (vector<char*>*)input[1].p : 0;
+    vector<char*> infiles = (pinfiles != 0) ? *pinfiles : vector<char*>();
+    vector<char*> paras = (pparas != 0) ? *pparas : vector<char*>();
 
     if (infiles.empty()) {
       fprintf(stderr, "Need input image.\n");
@@ -274,12 +275,12 @@ bool SomaSegmentation::dofunc(const QString &func_name,
     bool bmenu = false;
     input_PARA PARA;
 
-    vector<char *> *pinfiles =
-        (input.size() >= 1) ? (vector<char *> *)input[0].p : 0;
-    vector<char *> *pparas =
-        (input.size() >= 2) ? (vector<char *> *)input[1].p : 0;
-    vector<char *> infiles = (pinfiles != 0) ? *pinfiles : vector<char *>();
-    vector<char *> paras = (pparas != 0) ? *pparas : vector<char *>();
+    vector<char*>* pinfiles =
+        (input.size() >= 1) ? (vector<char*>*)input[0].p : 0;
+    vector<char*>* pparas =
+        (input.size() >= 2) ? (vector<char*>*)input[1].p : 0;
+    vector<char*> infiles = (pinfiles != 0) ? *pinfiles : vector<char*>();
+    vector<char*> paras = (pparas != 0) ? *pparas : vector<char*>();
 
     if (infiles.empty()) {
       fprintf(stderr, "Need input image.\n");
@@ -312,12 +313,12 @@ bool SomaSegmentation::dofunc(const QString &func_name,
 }
 
 ////////////////////////////////////////////////////////////////////////
-// Implementation of MIND_4DImage methods
+// Implementation of MINDS_4DImage methods
 
-MIND_4DImage::MIND_4DImage()
+MINDS_4DImage::MINDS_4DImage()
     : data(nullptr), xdim(0), ydim(0), zdim(0), cdim(0) {}
 
-MIND_4DImage::MIND_4DImage(const MIND_4DImage &other) {
+MINDS_4DImage::MINDS_4DImage(const MINDS_4DImage& other) {
   xdim = other.xdim;
   ydim = other.ydim;
   zdim = other.zdim;
@@ -330,7 +331,7 @@ MIND_4DImage::MIND_4DImage(const MIND_4DImage &other) {
   }
 }
 
-MIND_4DImage &MIND_4DImage::operator=(const MIND_4DImage &other) {
+MINDS_4DImage& MINDS_4DImage::operator=(const MINDS_4DImage& other) {
   if (this == &other) return *this;
   delete[] data;
   xdim = other.xdim;
@@ -346,7 +347,7 @@ MIND_4DImage &MIND_4DImage::operator=(const MIND_4DImage &other) {
   return *this;
 }
 
-MIND_4DImage::~MIND_4DImage() { delete[] data; }
+MINDS_4DImage::~MINDS_4DImage() { delete[] data; }
 
 /**
  * @brief Function to correct isotropic resolution of an image
@@ -356,9 +357,9 @@ MIND_4DImage::~MIND_4DImage() { delete[] data; }
  * @param PARA - the input parameters
  * @param bmenu - whether the function is being called from the menu
  */
-void isotropic_correction_func(V3DPluginCallback2 &callback, QWidget *parent,
-                               input_PARA &PARA, bool bmenu) {
-  unsigned char *data1d = 0;
+void isotropic_correction_func(V3DPluginCallback2& callback, QWidget* parent,
+                               input_PARA& PARA, bool bmenu) {
+  unsigned char* data1d = 0;
   V3DLONG N, M, P, sc, c;
   V3DLONG in_sz[4];
 
@@ -370,7 +371,7 @@ void isotropic_correction_func(V3DPluginCallback2 &callback, QWidget *parent,
       return;
     }
 
-    Image4DSimple *p4DImage = callback.getImage(curwin);
+    Image4DSimple* p4DImage = callback.getImage(curwin);
 
     if (!p4DImage) {
       QMessageBox::information(0, "",
@@ -426,7 +427,7 @@ void isotropic_correction_func(V3DPluginCallback2 &callback, QWidget *parent,
 
   // get current window, image
   v3dhandle curwin = callback.currentImageWindow();
-  Image4DSimple *p4DImage = callback.getImage(curwin);
+  Image4DSimple* p4DImage = callback.getImage(curwin);
 
   // Ask for desired resolution of a image pixel along the 3
   // axes for isotropic correction and set resolution of the image
@@ -439,12 +440,12 @@ void isotropic_correction_func(V3DPluginCallback2 &callback, QWidget *parent,
 /**************************************
  * PC Analysis for each soma
  **************************************/
-void pca_func(V3DPluginCallback2 &callback, QWidget *parent, input_PARA &PARA,
+void pca_func(V3DPluginCallback2& callback, QWidget* parent, input_PARA& PARA,
               bool bmenu) {
   /*************************************
    * Load Image
    *************************************/
-  unsigned char *data1d = 0;
+  unsigned char* data1d = 0;
   V3DLONG N, M, P, sc, c;
   V3DLONG in_sz[4];
 
@@ -456,7 +457,7 @@ void pca_func(V3DPluginCallback2 &callback, QWidget *parent, input_PARA &PARA,
       return;
     }
 
-    Image4DSimple *p4DImage = callback.getImage(curwin);
+    Image4DSimple* p4DImage = callback.getImage(curwin);
     if (!p4DImage) {
       QMessageBox::information(0, "", "Invalid image pointer.");
       return;

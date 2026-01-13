@@ -56,5 +56,5 @@ SOURCES += $$VAA3DPATH/v3d_main/jba/newmat11/nm_misc.cpp
 SOURCES += $$VAA3DPATH/v3d_main/jba/newmat11/newmatrm.cpp
 SOURCES += $$VAA3DPATH/v3d_main/jba/newmat11/newmat9.cpp
 
-TARGET = $$qtLibraryTarget(soma_segmentation)
-DESTDIR = $$VAA3DPATH/bin/plugins/MIND/soma_segmentation/
+TARGET = $$qtLibraryTarget(MINDS)
+DESTDIR = $$VAA3DPATH/bin/plugins/MINDS/
